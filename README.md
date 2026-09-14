@@ -36,18 +36,23 @@ Keep server-only helpers in `server/`; browser code belongs in `src/`.
 
 Further documentation: [project review](docs/PROJECT_REVIEW.md) and [Supabase handoff](docs/SUPABASE_HANDOFF.md).
 
+## Deployment
+
+Пошаговая инструкция: [DEPLOYMENT_RU.md](docs/DEPLOYMENT_RU.md).
+
 ## Requirements
 
-- Node.js 22.12+
-- npm
+- Node.js 22.22.2+ (22.x) or 24.15.0+ (24.x)
+- npm 12.0.2
 - Vercel CLI for full local API testing
 
-Vite 8 supports Node 20.19+ / 22.12+, but this project standardizes on Node 22.12+ so the frontend and current server dependencies share one runtime baseline.
+The runtime range matches the pinned npm installer used in CI and Vercel.
 
 ## Setup
 
 ```bash
-npm install
+npm install --global npm@12.0.2
+npm ci
 cp .env.example .env.local
 ```
 
@@ -154,7 +159,7 @@ npm run lint
 npm run build
 ```
 
-A `package-lock.json` should be committed after a successful `npm install`. Top-level dependency versions are pinned in `package.json`; the lockfile is still required to pin transitive dependencies.
+`package-lock.json` is committed. Use `npm ci` for reproducible installations. GitHub Actions runs the verification commands on pushes and pull requests.
 
 ## Supabase verification
 

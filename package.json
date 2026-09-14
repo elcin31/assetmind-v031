@@ -1,18 +1,4 @@
 {
-  "name": "assetmind-v2",
-  "private": true,
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc -b",
-    "verify": "npm run typecheck && npm test && npm run lint && npm run build"
-  },
   "dependencies": {
     "@supabase/supabase-js": "2.49.1",
     "react": "19.2.8",
@@ -30,6 +16,22 @@
     "vitest": "4.1.11"
   },
   "engines": {
-    "node": ">=22.12.0 <25"
-  }
+    "node": "^22.22.2 || ^24.15.0"
+  },
+  "name": "assetmind-v2",
+  "packageManager": "npm@12.0.2",
+  "private": true,
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "dev": "vite",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "smoke": "node scripts/smoke.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b",
+    "verify": "npm run typecheck && npm test && npm run lint && npm run build"
+  },
+  "type": "module",
+  "version": "0.1.0"
 }
