@@ -71,7 +71,7 @@ describe('calculatePositions', () => {
   it('invalid SELL is flagged', () => {
     const { hadInvalidSell, positions } = calculatePositions([
       tx('AAPL', 'BUY', 5, 100),
-      tx('AAPL', 'SELL', 10, 120),
+      tx('AAPL', 'SELL', 10, 120, '2026-01-02T00:00:00Z'),
     ]);
     expect(hadInvalidSell).toBe(true);
     // Position remains the original 5 because invalid sell is skipped
@@ -82,7 +82,7 @@ describe('calculatePositions', () => {
     const { positions } = calculatePositions([
       tx('AAPL', 'BUY', 10, 200),
       tx('NVDA', 'BUY', 4, 500),
-      tx('AAPL', 'SELL', 2, 210),
+      tx('AAPL', 'SELL', 2, 210, '2026-01-02T00:00:00Z'),
     ]);
     const aapl = positions.find((p) => p.symbol === 'AAPL')!;
     const nvda = positions.find((p) => p.symbol === 'NVDA')!;
