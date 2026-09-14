@@ -14,6 +14,28 @@ Browser → Vercel Serverless API → Supabase / Finnhub
 - The invite code is treated as a bearer credential and is sent in the `Authorization` header, not in URLs.
 - `portfolioValue` is the marked-to-market value of **open holdings**, not a cash-inclusive account balance.
 
+## Project structure
+
+| Directory | Contents |
+|-----------|----------|
+| `src/` | React entry point, app and shared styles |
+| `src/pages/` | Invite and portfolio screens |
+| `src/components/` | Portfolio cards, holdings, search and transaction form |
+| `src/math/` | Positions, P&L, returns and risk calculations |
+| `src/types/` | Shared TypeScript types |
+| `src/utils/` | Formatting helpers |
+| `api/` | Vercel API routes; transaction endpoint in `api/portfolio/` |
+| `server/` | Server-only authentication, Supabase and market-data helpers |
+| `tests/` | Financial calculation tests |
+| `supabase/` | Database schema and hardening SQL |
+| `public/` | Static images and icons served by Vite |
+| `docs/` | Project review and Supabase handoff |
+
+Build configuration, `index.html`, `package.json` and environment examples stay at the repository root.
+Keep server-only helpers in `server/`; browser code belongs in `src/`.
+
+Further documentation: [project review](docs/PROJECT_REVIEW.md) and [Supabase handoff](docs/SUPABASE_HANDOFF.md).
+
 ## Requirements
 
 - Node.js 22.12+
