@@ -194,7 +194,9 @@ export function LoginScreen({
     <main className="login-shell">
       <section className="login-card" aria-labelledby="login-title">
         <div className="login-brand" aria-label="AssetMind">
-          <span className="login-brand-mark" aria-hidden="true">A</span>
+          <span className="login-brand-mark" aria-hidden="true">
+            <img src="/favicon.svg" alt="" width="28" height="28" />
+          </span>
           <span className="login-brand-name">ASSETMIND</span>
           <span className="login-brand-subtitle">Investment Intelligence</span>
         </div>
@@ -301,6 +303,7 @@ export function LoginScreen({
                     }}
                     aria-label={`Digit ${index + 1} of ${OTP_LENGTH}`}
                     aria-invalid={otpInvalid}
+                    aria-describedby={error ? 'login-error' : undefined}
                     disabled={busy}
                   />
                 ))}
