@@ -3,7 +3,7 @@ import './index.css';
 import type { PortfolioSnapshot, Quote, HistoryBar } from './types';
 import { PortfolioScreen } from './pages/PortfolioScreen';
 import { AuthLoadingScreen, LoginScreen } from './pages/LoginScreen';
-import { useAuth } from './auth/AuthProvider';
+import { useAuth } from './auth/AuthContext';
 import { buildPortfolioValueSeries } from './math/returns';
 import { annualizedVolatility } from './math/volatility';
 import { calculateSharpe } from './math/sharpe';
