@@ -107,10 +107,10 @@ export function TransactionForm({
 
   return (
     <div className="card">
-      <h2>New transaction</h2>
+      <h2>Новая сделка</h2>
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="transaction-symbol">Symbol</label>
+          <label htmlFor="transaction-symbol">Тикер</label>
           <input
             id="transaction-symbol"
             className="input"
@@ -127,7 +127,7 @@ export function TransactionForm({
         </div>
 
         <div className="form-group">
-          <span className="form-label">Type</span>
+          <span className="form-label">Операция</span>
           <div className="tabs" role="group" aria-label="Transaction type">
             <button
               type="button"
@@ -149,7 +149,7 @@ export function TransactionForm({
         </div>
 
         <div className="form-group">
-          <label htmlFor="transaction-quantity">Quantity</label>
+          <label htmlFor="transaction-quantity">Количество</label>
           <input
             id="transaction-quantity"
             className="input"
@@ -165,7 +165,7 @@ export function TransactionForm({
         </div>
 
         <div className="form-group">
-          <label htmlFor="transaction-price">Price ({currency})</label>
+          <label htmlFor="transaction-price">Цена ({currency})</label>
           <input
             id="transaction-price"
             className="input"
@@ -181,7 +181,7 @@ export function TransactionForm({
         </div>
 
         <div className="form-group">
-          <label htmlFor="transaction-date">Date / time</label>
+          <label htmlFor="transaction-date">Дата и время</label>
           <input
             id="transaction-date"
             className="input"
@@ -193,7 +193,7 @@ export function TransactionForm({
         </div>
 
         <button type="submit" className="btn btn-primary" disabled={submitting}>
-          {submitting ? 'Saving…' : `Submit ${type}`}
+          {submitting ? 'Сохраняем…' : (type === 'BUY' ? 'Добавить покупку' : 'Добавить продажу')}
         </button>
       </form>
     </div>

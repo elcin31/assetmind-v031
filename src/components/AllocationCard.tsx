@@ -19,15 +19,15 @@ export function AllocationCard({
   if (allocation.length === 0) {
     return (
       <div className="card">
-        <h2>Allocation</h2>
-        <p className="empty">No positions yet</p>
+        <h2>Распределение</h2>
+        <p className="empty">Нет данных для рыночного распределения. Нужны открытые позиции и котировки.</p>
       </div>
     );
   }
 
   return (
     <div className="card">
-      <h2>Allocation</h2>
+      <h2>Распределение</h2>
       <div className="alloc-bar">
         {allocation.map((a, i) => (
           <div

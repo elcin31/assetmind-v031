@@ -40,14 +40,16 @@ export default function App() {
           if (Array.isArray(data.bars) && data.bars.every((b: HistoryBar) => typeof b.date === 'string' && Number.isFinite(b.close) && b.close > 0)) history.set(symbol, data.bars);
         } catch { /* Optional history data. */ }
       })()]));
+      let historySeries: PortfolioSnapshot['history'];
       if (base.positions.length) {
         const series = buildPortfolioValueSeries(base.positions, history);
         if (series.available) {
+          historySeries = { dates: series.dates, values: series.values, dailyReturns: series.dailyReturns };
           const volatility = annualizedVolatility(series.dailyReturns);
           risk = { available: volatility !== null, volatility, sharpe: calculateSharpe(series.dailyReturns, volatility, 0), reason: volatility === null ? 'insufficient_history' : undefined };
         }
       }
-      if (run === generation.current) setSnapshot({ ...data, ...enrichPositionsWithQuotes(data.transactions, quotes), risk });
+      if (run === generation.current) setSnapshot({ ...data, ...enrichPositionsWithQuotes(data.transactions, quotes), risk, history: historySeries });
     } catch (err) {
       if (run === generation.current) { setSnapshot(null); setError(err instanceof Error ? err.message : 'Could not read portfolio'); }
     } finally { if (run === generation.current) setLoading(false); }
@@ -62,11 +64,12 @@ export default function App() {
   }, [loadPortfolio]);
 
   return <div className="app">
-    <section className="card">
-      <p>Saved in this browser only. Export a backup before clearing site data or changing devices.</p>
+    <details className="backup-panel">
+      <summary>Данные и резервные копии <span>На этом устройстве</span></summary>
+      <p>Данные хранятся в этом браузере. Сохраните копию перед очисткой данных или переходом на другое устройство.</p>
       <div className="backup-actions">
-        <button className="btn btn-ghost" onClick={() => { try { exportPortfolio(); } catch { setError('Could not export browser data.'); } }}>Export backup</button>
-        <button className="btn btn-ghost" onClick={() => fileInput.current?.click()}>Import backup</button>
+        <button className="btn btn-ghost" onClick={() => { try { exportPortfolio(); } catch { setError('Could not export browser data.'); } }}>Экспорт JSON</button>
+        <button className="btn btn-ghost" onClick={() => fileInput.current?.click()}>Импорт JSON</button>
       </div>
       <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="Import portfolio backup" onChange={async event => {
         const file = event.target.files?.[0]; event.target.value = '';
@@ -76,7 +79,7 @@ export default function App() {
           await importPortfolio(await file.text());
         } catch (err) { setError(err instanceof Error ? err.message : 'Import failed'); }
       }} />
-    </section>
+    </details>
     {snapshot ? <PortfolioScreen snapshot={snapshot} onRefresh={loadPortfolio} loading={loading} setError={setError} error={error} /> :
       <main className="card"><h1>AssetMind</h1>{error ? <p role="alert">{error}</p> : <p>Loading portfolio…</p>}<button className="btn btn-primary" onClick={loadPortfolio}>Retry</button></main>}
   </div>;

@@ -56,6 +56,7 @@ export interface HistoryBar {
 }
 
 export interface PortfolioSnapshot {
+  history?: { dates: string[]; values: number[]; dailyReturns: number[] };
   portfolio: Portfolio;
   transactions: Transaction[];
   positions: Position[];

@@ -36,3 +36,7 @@ The financial model has no FX conversion or cash ledger. Portfolios default to U
 - `supabase/`: legacy SQL; not used by the app.
 
 Deployment: [Russian instructions](docs/DEPLOYMENT_RU.md).
+
+## Portfolio laboratory
+
+The responsive workspace includes a synchronized laboratory: cost or market weights, HHI, effective position count, per-asset/all-asset shock scenarios, historical daily VaR/ES at 95%, maximum drawdown, annualized volatility and adjustable-risk-free-rate Sharpe. Historical metrics require at least 21 common price observations, and model today's holdings rather than actual account NAV. Cost scenarios are explicitly hypothetical; incomplete quotes never produce full-market weights. Formula panels explain inputs and assumptions.

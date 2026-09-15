@@ -26,21 +26,21 @@ export function HoldingsList({
   if (positions.length === 0) {
     return (
       <div className="card">
-        <h2>Holdings</h2>
-        <p className="empty">No open positions. Add a BUY transaction to get started.</p>
+        <h2>Открытые позиции</h2>
+        <p className="empty">Пока нет открытых позиций. Добавьте первую покупку в разделе «Сделки».</p>
       </div>
     );
   }
 
   return (
     <div className="card">
-      <h2>Holdings</h2>
+      <h2>Открытые позиции</h2>
       {positions.map((p) => (
         <div className="holding" key={p.symbol}>
           <div>
             <div className="holding-symbol">{p.symbol}</div>
             <div className="holding-meta">
-              {fmt(p.quantity, 4)} × {formatCurrency(p.marketPrice, currency)} · avg{' '}
+              {fmt(p.quantity, 4)} × {formatCurrency(p.marketPrice, currency)} · средняя{' '}
               {formatCurrency(p.averageCost, currency)}
             </div>
           </div>

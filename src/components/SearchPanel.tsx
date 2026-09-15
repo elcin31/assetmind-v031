@@ -22,12 +22,12 @@ export function SearchPanel({ onSelect }: Props) {
   }, [query]);
 
   return <div className="card">
-    <h2>Search asset</h2>
+    <h2>Найти актив</h2>
     <input className="input" type="search" placeholder="Palantir, PLTR, AAPL, …" value={q}
       onChange={e => { setQ(e.target.value); setRemote(null); }} autoComplete="off" aria-label="Search asset" />
-    {loading && <p className="empty compact-empty" role="status">Checking more assets…</p>}
-    {current?.offline && <p className="empty compact-empty" role="status">Showing the built-in catalog. Extended search is temporarily unavailable.</p>}
-    {query && !loading && results.length === 0 && <p className="empty compact-empty">No matches. You can enter a ticker and price in the transaction form below.</p>}
+    {loading && <p className="empty compact-empty" role="status">Ищем дополнительные активы…</p>}
+    {current?.offline && <p className="empty compact-empty" role="status">Показан встроенный каталог. Расширенный поиск временно недоступен.</p>}
+    {query && !loading && results.length === 0 && <p className="empty compact-empty">Не найдено. Введите тикер и цену в форме сделки.</p>}
     {results.length > 0 && <ul className="search-results">
       {results.map(r => <li key={r.symbol}><button type="button" onClick={() => onSelect(r)}>
         <span className="sym">{r.symbol}</span><span className="name">{r.name}</span>
