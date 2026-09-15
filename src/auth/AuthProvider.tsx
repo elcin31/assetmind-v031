@@ -53,6 +53,11 @@ function recoveryWasRequested(): boolean {
   return query.get('mode') === 'recovery' || query.has('error_code') || hash.get('type') === 'recovery' || hash.has('error_code');
 }
 
+function recoveryTokenIsPresent(): boolean {
+  const hash = authHashParams();
+  return hash.get('type') === 'recovery' && hash.has('access_token');
+}
+
 function recoveryLinkHasError(): boolean {
   if (typeof window === 'undefined') return false;
   const query = new URLSearchParams(window.location.search);
@@ -89,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let active = true;
     const recoveryRequested = recoveryWasRequested();
+    const recoveryTokenPresent = recoveryTokenIsPresent();
     const recoveryErrored = recoveryLinkHasError();
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
@@ -112,11 +118,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (recoveryErrored || (recoveryRequested && !data.session)) {
           setRecoveryMode(false);
           setStartupError('This password recovery link is invalid or expired. Request a new one.');
-        } else if (recoveryRequested && data.session) {
-          // Handles both implicit-token and PKCE recovery callbacks, including the case
-          // where Supabase restored the session before this component subscribed.
+        } else if (recoveryTokenPresent && data.session) {
           setRecoveryMode(true);
-          setStartupError(null);
         }
       }
       cleanAuthUrl();
