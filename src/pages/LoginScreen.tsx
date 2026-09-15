@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { useAuth } from '../auth/AuthProvider';
+import { useAuth } from '../auth/AuthContext';
 import './LoginScreen.css';
 
 type LoginMode = 'signin' | 'signup' | 'forgot';
