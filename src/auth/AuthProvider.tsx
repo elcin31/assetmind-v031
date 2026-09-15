@@ -1,27 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
+import { AuthContext } from './AuthContext';
+import type { AuthContextValue, SignUpResult } from './AuthContext';
 import { supabase, supabaseConfigurationError } from './supabase';
-
-interface SignUpResult {
-  requiresEmailConfirmation: boolean;
-}
-
-interface AuthContextValue {
-  user: User | null;
-  session: Session | null;
-  loading: boolean;
-  recoveryMode: boolean;
-  configurationError: string | null;
-  startupError: string | null;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<SignUpResult>;
-  signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>;
-  updatePassword: (password: string) => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
 
 function friendlyAuthError(error: unknown, fallback: string): string {
   const value = error as { code?: string; message?: string } | null;
@@ -91,15 +73,12 @@ function cleanAuthUrl() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => supabase !== null);
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [startupError, setStartupError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
+    if (!supabase) return;
 
     let active = true;
     const recoveryRequested = recoveryWasRequested();
@@ -211,10 +190,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }), [loading, recoveryMode, session, signIn, signOut, signUp, startupError, resetPassword, updatePassword]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthContextValue {
-  const value = useContext(AuthContext);
-  if (!value) throw new Error('useAuth must be used inside AuthProvider.');
-  return value;
 }
