@@ -41,20 +41,28 @@ function requireSupabase() {
   return supabase;
 }
 
+function authHashParams(): URLSearchParams {
+  if (typeof window === 'undefined' || !window.location.hash) return new URLSearchParams();
+  return new URLSearchParams(window.location.hash.slice(1));
+}
+
 function recoveryWasRequested(): boolean {
   if (typeof window === 'undefined') return false;
-  const params = new URLSearchParams(window.location.search);
-  return params.get('mode') === 'recovery' || params.has('error_code') || window.location.hash.includes('type=recovery');
+  const query = new URLSearchParams(window.location.search);
+  const hash = authHashParams();
+  return query.get('mode') === 'recovery' || query.has('error_code') || hash.get('type') === 'recovery' || hash.has('error_code');
 }
 
 function recoveryTokenIsPresent(): boolean {
-  return typeof window !== 'undefined' && window.location.hash.includes('type=recovery');
+  const hash = authHashParams();
+  return hash.get('type') === 'recovery' && hash.has('access_token');
 }
 
 function recoveryLinkHasError(): boolean {
   if (typeof window === 'undefined') return false;
-  const params = new URLSearchParams(window.location.search);
-  return params.has('error') || params.has('error_code');
+  const query = new URLSearchParams(window.location.search);
+  const hash = authHashParams();
+  return query.has('error') || query.has('error_code') || hash.has('error') || hash.has('error_code');
 }
 
 function cleanAuthUrl() {
