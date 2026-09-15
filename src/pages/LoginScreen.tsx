@@ -1,194 +1,153 @@
-import { useMemo, useRef, useState } from 'react';
-import type { FormEvent, KeyboardEvent } from 'react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
+import { useAuth } from '../auth/AuthProvider';
 import './LoginScreen.css';
 
-type OAuthProvider = 'apple' | 'google';
-type AuthPhase = 'email' | 'otp' | 'success';
+type LoginMode = 'signin' | 'signup' | 'forgot';
 
-export interface LoginScreenProps {
-  onRequestOtp?: (email: string) => Promise<void>;
-  onVerifyOtp?: (email: string, code: string) => Promise<void>;
-  onResendOtp?: (email: string) => Promise<void>;
-  onOAuth?: (provider: OAuthProvider) => Promise<void>;
-  onSuccess?: () => void;
-}
-
-const OTP_LENGTH = 6;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
 
-function providerLabel(provider: OAuthProvider) {
-  return provider === 'apple' ? 'Apple' : 'Google';
+function messageFromError(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
 }
 
-export function LoginScreen({
-  onRequestOtp,
-  onVerifyOtp,
-  onResendOtp,
-  onOAuth,
-  onSuccess,
-}: LoginScreenProps) {
-  const [phase, setPhase] = useState<AuthPhase>('email');
+export function AuthLoadingScreen() {
+  return (
+    <main className="login-shell login-loading-shell" aria-busy="true" aria-label="Checking session">
+      <div className="login-loading-card" role="status" aria-live="polite">
+        <span className="login-brand-mark" aria-hidden="true">
+          <img src="/favicon.svg" alt="" width="28" height="28" />
+        </span>
+        <span className="login-brand-name">ASSETMIND</span>
+        <span className="login-loader" aria-hidden="true" />
+        <span className="login-loading-text">Securing your session…</span>
+      </div>
+    </main>
+  );
+}
+
+export function LoginScreen() {
+  const {
+    recoveryMode,
+    configurationError,
+    startupError,
+    signIn,
+    signUp,
+    resetPassword,
+    updatePassword,
+  } = useAuth();
+  const [mode, setMode] = useState<LoginMode>('signin');
   const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState(() => Array<string>(OTP_LENGTH).fill(''));
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [emailInvalid, setEmailInvalid] = useState(false);
-  const [otpInvalid, setOtpInvalid] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [resending, setResending] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
-  const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const normalizedEmail = useMemo(() => email.trim(), [email]);
-  const otpCode = useMemo(() => otp.join(''), [otp]);
-  const busy = loading || resending || oauthLoading !== null;
+  const normalizedEmail = email.trim();
+  const activeMode = recoveryMode ? 'recovery' : mode;
+  const disabled = busy || Boolean(configurationError);
 
-  const handleEmailSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const resetFeedback = () => {
     setError(null);
-    setEmailInvalid(false);
+    setNotice(null);
+  };
 
+  const switchMode = (nextMode: LoginMode) => {
+    setMode(nextMode);
+    setPassword('');
+    setConfirmPassword('');
+    setShowPassword(false);
+    resetFeedback();
+  };
+
+  const validateEmail = () => {
     if (!EMAIL_PATTERN.test(normalizedEmail)) {
-      setEmailInvalid(true);
       setError('Enter a valid email address.');
-      return;
+      return false;
     }
-
-    if (!onRequestOtp) {
-      setError('Email sign-in is not connected yet.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await onRequestOtp(normalizedEmail);
-      setOtp(Array<string>(OTP_LENGTH).fill(''));
-      setOtpInvalid(false);
-      setPhase('otp');
-      requestAnimationFrame(() => otpRefs.current[0]?.focus());
-    } catch {
-      setError('We could not send a code. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    return true;
   };
 
-  const handleOAuth = async (provider: OAuthProvider) => {
-    setError(null);
-
-    if (!onOAuth) {
-      setError(`${providerLabel(provider)} sign-in is not connected yet.`);
-      return;
+  const validateNewPassword = () => {
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return false;
     }
-
-    setOauthLoading(provider);
-    try {
-      await onOAuth(provider);
-    } catch {
-      setError(`${providerLabel(provider)} sign-in could not be started. Please try again.`);
-    } finally {
-      setOauthLoading(null);
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return false;
     }
+    return true;
   };
 
-  const writeOtpDigits = (startIndex: number, rawValue: string) => {
-    const digits = rawValue.replace(/\D/g, '').slice(0, OTP_LENGTH - startIndex);
-    if (!digits) {
-      setOtp((current) => {
-        const next = [...current];
-        next[startIndex] = '';
-        return next;
-      });
-      return;
-    }
-
-    setOtp((current) => {
-      const next = [...current];
-      digits.split('').forEach((digit, offset) => {
-        next[startIndex + offset] = digit;
-      });
-      return next;
-    });
-    setOtpInvalid(false);
-    setError(null);
-
-    const nextIndex = Math.min(startIndex + digits.length, OTP_LENGTH - 1);
-    otpRefs.current[nextIndex]?.focus();
-  };
-
-  const handleOtpKeyDown = (event: KeyboardEvent<HTMLInputElement>, index: number) => {
-    if (event.key === 'Backspace' && !otp[index] && index > 0) {
-      otpRefs.current[index - 1]?.focus();
-      return;
-    }
-
-    if (event.key === 'ArrowLeft' && index > 0) {
-      event.preventDefault();
-      otpRefs.current[index - 1]?.focus();
-      return;
-    }
-
-    if (event.key === 'ArrowRight' && index < OTP_LENGTH - 1) {
-      event.preventDefault();
-      otpRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError(null);
-    setOtpInvalid(false);
+    resetFeedback();
 
-    if (otpCode.length !== OTP_LENGTH) {
-      setOtpInvalid(true);
-      setError('Enter the 6-digit code.');
+    if (activeMode === 'recovery') {
+      if (!validateNewPassword()) return;
+      setBusy(true);
+      try {
+        await updatePassword(password);
+      } catch (authError) {
+        setError(messageFromError(authError, 'Could not update your password.'));
+      } finally {
+        setBusy(false);
+      }
       return;
     }
 
-    if (!onVerifyOtp) {
-      setError('Code verification is not connected yet.');
+    if (!validateEmail()) return;
+
+    if (activeMode === 'forgot') {
+      setBusy(true);
+      try {
+        await resetPassword(normalizedEmail);
+        setNotice('Check your email for a password reset link.');
+      } catch (authError) {
+        setError(messageFromError(authError, 'Could not send the recovery email.'));
+      } finally {
+        setBusy(false);
+      }
       return;
     }
 
-    setLoading(true);
+    if (activeMode === 'signup' && !validateNewPassword()) return;
+    if (activeMode === 'signin' && !password) {
+      setError('Enter your password.');
+      return;
+    }
+
+    setBusy(true);
     try {
-      await onVerifyOtp(normalizedEmail, otpCode);
-      setPhase('success');
-      onSuccess?.();
-    } catch {
-      setOtpInvalid(true);
-      setError('That code could not be verified. Try again.');
+      if (activeMode === 'signup') {
+        const result = await signUp(normalizedEmail, password);
+        if (result.requiresEmailConfirmation) {
+          setMode('signin');
+          setPassword('');
+          setConfirmPassword('');
+          setNotice('Check your email to confirm your account.');
+        }
+      } else {
+        await signIn(normalizedEmail, password);
+      }
+    } catch (authError) {
+      setError(messageFromError(authError, activeMode === 'signup' ? 'Could not create the account.' : 'Could not sign in.'));
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
 
-  const handleResend = async () => {
-    setError(null);
-    setOtpInvalid(false);
-
-    if (!onResendOtp) {
-      setError('Resending is not connected yet.');
-      return;
-    }
-
-    setResending(true);
-    try {
-      await onResendOtp(normalizedEmail);
-      setOtp(Array<string>(OTP_LENGTH).fill(''));
-      requestAnimationFrame(() => otpRefs.current[0]?.focus());
-    } catch {
-      setError('We could not resend the code. Please try again.');
-    } finally {
-      setResending(false);
-    }
-  };
-
-  const backToEmail = () => {
-    setPhase('email');
-    setOtp(Array<string>(OTP_LENGTH).fill(''));
-    setOtpInvalid(false);
-    setError(null);
-  };
+  const heading = activeMode === 'signup'
+    ? 'Create account'
+    : activeMode === 'forgot'
+      ? 'Reset password'
+      : activeMode === 'recovery'
+        ? 'Choose a new password'
+        : 'Sign in';
 
   return (
     <main className="login-shell">
@@ -201,144 +160,111 @@ export function LoginScreen({
           <span className="login-brand-subtitle">Investment Intelligence</span>
         </div>
 
-        {phase === 'email' && (
-          <div className="login-panel login-panel-enter">
-            <h1 id="login-title" className="login-heading">Sign in</h1>
+        <div className="login-panel login-panel-enter">
+          <h1 id="login-title" className="login-heading">{heading}</h1>
 
-            <div className="login-provider-stack" aria-label="Social sign in">
-              <button
-                type="button"
-                className="login-provider login-provider-apple"
-                onClick={() => void handleOAuth('apple')}
-                disabled={busy}
-                aria-busy={oauthLoading === 'apple'}
-              >
-                <span className="login-provider-icon login-provider-icon-apple" aria-hidden="true"></span>
-                <span>{oauthLoading === 'apple' ? 'Connecting…' : 'Continue with Apple'}</span>
-              </button>
+          {activeMode === 'forgot' && (
+            <p className="login-intro">Enter the email connected to your account.</p>
+          )}
+          {activeMode === 'recovery' && (
+            <p className="login-intro">Set a new password for your AssetMind account.</p>
+          )}
 
-              <button
-                type="button"
-                className="login-provider login-provider-google"
-                onClick={() => void handleOAuth('google')}
-                disabled={busy}
-                aria-busy={oauthLoading === 'google'}
-              >
-                <span className="login-provider-icon login-provider-icon-google" aria-hidden="true">G</span>
-                <span>{oauthLoading === 'google' ? 'Connecting…' : 'Continue with Google'}</span>
-              </button>
-            </div>
-
-            <div className="login-divider" aria-hidden="true"><span>or</span></div>
-
-            <form className="login-form" onSubmit={(event) => void handleEmailSubmit(event)} noValidate>
+          <form className="login-form" onSubmit={(event) => void handleSubmit(event)} noValidate>
+            {activeMode !== 'recovery' && (
               <div className="login-field">
                 <label htmlFor="login-email">Email</label>
                 <input
                   id="login-email"
-                  className={`login-input${emailInvalid ? ' login-input-invalid' : ''}`}
+                  className="login-input"
                   type="email"
                   inputMode="email"
                   autoComplete="email"
                   autoCapitalize="none"
                   spellCheck={false}
                   value={email}
-                  onChange={(event) => {
-                    setEmail(event.target.value);
-                    setEmailInvalid(false);
-                    setError(null);
-                  }}
-                  aria-invalid={emailInvalid}
-                  aria-describedby={error ? 'login-error' : undefined}
+                  onChange={(event) => { setEmail(event.target.value); resetFeedback(); }}
                   placeholder="Email"
-                  disabled={busy}
+                  disabled={disabled}
+                  required
                 />
               </div>
+            )}
 
-              <button
-                type="submit"
-                className="login-continue"
-                disabled={busy || !normalizedEmail}
-                aria-busy={loading}
-              >
-                {loading ? <span className="login-spinner" aria-hidden="true" /> : null}
-                <span>{loading ? 'Sending code…' : 'Continue'}</span>
-              </button>
-            </form>
-
-            <p className="login-password-note">No passwords.</p>
-          </div>
-        )}
-
-        {phase === 'otp' && (
-          <div className="login-panel login-panel-enter">
-            <button type="button" className="login-back" onClick={backToEmail} disabled={busy} aria-label="Back to email">
-              <span aria-hidden="true">‹</span>
-              <span>Back</span>
-            </button>
-
-            <div className="login-otp-copy">
-              <h1 id="login-title" className="login-heading">Check your email</h1>
-              <p>Code sent to:</p>
-              <strong>{normalizedEmail}</strong>
-            </div>
-
-            <form className="login-form" onSubmit={(event) => void handleVerify(event)}>
-              <div className={`login-otp${otpInvalid ? ' login-otp-invalid' : ''}`} role="group" aria-label="6-digit verification code">
-                {otp.map((digit, index) => (
+            {activeMode !== 'forgot' && (
+              <div className="login-field">
+                <label htmlFor="login-password">{activeMode === 'recovery' ? 'New password' : 'Password'}</label>
+                <div className="login-password-wrap">
                   <input
-                    key={index}
-                    ref={(node) => { otpRefs.current[index] = node; }}
-                    className="login-otp-cell"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    autoComplete={index === 0 ? 'one-time-code' : 'off'}
-                    value={digit}
-                    onChange={(event) => writeOtpDigits(index, event.target.value)}
-                    onKeyDown={(event) => handleOtpKeyDown(event, index)}
-                    onPaste={(event) => {
-                      event.preventDefault();
-                      writeOtpDigits(index, event.clipboardData.getData('text'));
-                    }}
-                    aria-label={`Digit ${index + 1} of ${OTP_LENGTH}`}
-                    aria-invalid={otpInvalid}
-                    aria-describedby={error ? 'login-error' : undefined}
-                    disabled={busy}
+                    id="login-password"
+                    className="login-input login-password-input"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete={activeMode === 'signin' ? 'current-password' : 'new-password'}
+                    value={password}
+                    onChange={(event) => { setPassword(event.target.value); resetFeedback(); }}
+                    placeholder={activeMode === 'recovery' ? 'New password' : 'Password'}
+                    disabled={disabled}
+                    required
                   />
-                ))}
+                  <button
+                    type="button"
+                    className="login-password-toggle"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    disabled={disabled}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
               </div>
+            )}
 
-              <button
-                type="submit"
-                className="login-continue"
-                disabled={busy || otpCode.length !== OTP_LENGTH}
-                aria-busy={loading}
-              >
-                {loading ? <span className="login-spinner" aria-hidden="true" /> : null}
-                <span>{loading ? 'Verifying…' : 'Continue'}</span>
-              </button>
-            </form>
+            {(activeMode === 'signup' || activeMode === 'recovery') && (
+              <div className="login-field">
+                <label htmlFor="login-confirm-password">Confirm password</label>
+                <input
+                  id="login-confirm-password"
+                  className="login-input"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => { setConfirmPassword(event.target.value); resetFeedback(); }}
+                  placeholder="Confirm password"
+                  disabled={disabled}
+                  required
+                />
+              </div>
+            )}
 
-            <button type="button" className="login-resend" onClick={() => void handleResend()} disabled={busy}>
-              {resending ? 'Sending…' : 'Resend code'}
+            <button type="submit" className="login-continue" disabled={disabled} aria-busy={busy}>
+              {busy && <span className="login-spinner" aria-hidden="true" />}
+              <span>{busy ? 'Please wait…' : activeMode === 'signup' ? 'Create account' : activeMode === 'forgot' ? 'Send reset link' : activeMode === 'recovery' ? 'Update password' : 'Continue'}</span>
             </button>
-          </div>
-        )}
+          </form>
 
-        {phase === 'success' && (
-          <div className="login-panel login-panel-enter login-success" role="status" aria-live="polite">
-            <span className="login-success-icon" aria-hidden="true">✓</span>
-            <h1 id="login-title" className="login-heading">Signed in</h1>
-            <p>Opening AssetMind…</p>
-          </div>
-        )}
+          {activeMode === 'signin' && (
+            <div className="login-secondary-actions">
+              <button type="button" className="login-link" onClick={() => switchMode('forgot')} disabled={disabled}>Forgot password?</button>
+              <p>New to AssetMind? <button type="button" className="login-link" onClick={() => switchMode('signup')} disabled={disabled}>Create account</button></p>
+            </div>
+          )}
 
-        {error && (
-          <p id="login-error" className="login-error" role="alert" aria-live="assertive">
-            {error}
+          {activeMode === 'signup' && (
+            <p className="login-secondary-actions">Already have an account? <button type="button" className="login-link" onClick={() => switchMode('signin')} disabled={disabled}>Sign in</button></p>
+          )}
+
+          {activeMode === 'forgot' && (
+            <button type="button" className="login-back-link" onClick={() => switchMode('signin')} disabled={disabled}>Back to sign in</button>
+          )}
+        </div>
+
+        {(configurationError || error || startupError) && (
+          <p className="login-error" role="alert" aria-live="assertive">
+            {configurationError ?? error ?? startupError}
           </p>
         )}
+        {notice && <p className="login-notice" role="status" aria-live="polite">{notice}</p>}
 
         <p className="login-security">Private. Secure.</p>
       </section>
