@@ -18,7 +18,7 @@ Use Node 22.22.2+ or 24.15.0+, then `npm ci` and `npm run dev`. The portfolio an
 
 ## Optional market data
 
-Only `FINNHUB_API_KEY` is used, server-side in Vercel. No `SUPABASE_*` or `DEFAULT_PORTFOLIO_ID` variables are required. Quotes, search and history use the existing market-data endpoints. Missing quotes are shown as incomplete valuation rather than substituting trade prices for current market prices. Risk uses historical prices for current holdings, not actual historical portfolio NAV. Local trades work when those endpoints are unavailable, but loading the app itself offline is not guaranteed.
+A small built-in catalog supports name/ticker search (including Palantir / PLTR) immediately, even when the API fails. Extended search still needs the provider. Only `FINNHUB_API_KEY` is used, server-side in Vercel. No `SUPABASE_*` or `DEFAULT_PORTFOLIO_ID` variables are required. Quotes, search and history use the existing market-data endpoints. Missing quotes are shown as incomplete valuation rather than substituting trade prices for current market prices. Risk uses historical prices for current holdings, not actual historical portfolio NAV. Local trades work when those endpoints are unavailable, but loading the app itself offline is not guaranteed.
 
 ## Storage and calculations
 

@@ -1,90 +1,37 @@
 import { useEffect, useState } from 'react';
 import type { SearchResult } from '../types';
+import { searchInstruments } from '../data/instruments';
+import { searchAssets } from '../utils/searchAssets';
 
-interface Props {
-  onSelect: (r: SearchResult) => void;
-}
-
+interface Props { onSelect: (r: SearchResult) => void }
 export function SearchPanel({ onSelect }: Props) {
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
+  const query = q.trim();
+  const [remote, setRemote] = useState<{ query: string; results: SearchResult[]; offline: boolean } | null>(null);
+  const current = remote?.query === query ? remote : null;
+  const results = current?.results ?? searchInstruments(query);
+  const loading = Boolean(query && !current);
   useEffect(() => {
-    const query = q.trim();
-    if (!query) {
-      setResults([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-
+    if (!query) return;
     const controller = new AbortController();
     const timeout = window.setTimeout(async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
-          signal: controller.signal,
-        });
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-          setError('Search unavailable. Enter the ticker and price in the form below.');
-          setResults([]);
-          return;
-        }
-
-        const unique = new Map<string, SearchResult>();
-        for (const result of data.results ?? []) {
-          if (result?.symbol && !unique.has(result.symbol)) {
-            unique.set(result.symbol, result);
-          }
-        }
-        setResults([...unique.values()]);
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setError('Search unavailable. Enter the ticker and price in the form below.');
-        setResults([]);
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
+      const result = await searchAssets(query, controller.signal);
+      if (!controller.signal.aborted) setRemote({ query, ...result });
     }, 300);
+    return () => { window.clearTimeout(timeout); controller.abort(); };
+  }, [query]);
 
-    return () => {
-      window.clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [q]);
-
-  return (
-    <div className="card">
-      <h2>Search asset</h2>
-      <input
-        className="input"
-        type="search"
-        placeholder="AAPL, NVDA, …"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        autoComplete="off"
-        aria-label="Search asset"
-      />
-      {loading && <p className="empty compact-empty">Searching…</p>}
-      {error && <div className="error-banner inline-banner">{error}</div>}
-      {results.length > 0 && (
-        <ul className="search-results">
-          {results.map((r) => (
-            <li key={r.symbol}>
-              <button type="button" onClick={() => onSelect(r)}>
-                <span className="sym">{r.symbol}</span>
-                <span className="name">{r.name}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
+  return <div className="card">
+    <h2>Search asset</h2>
+    <input className="input" type="search" placeholder="Palantir, PLTR, AAPL, …" value={q}
+      onChange={e => { setQ(e.target.value); setRemote(null); }} autoComplete="off" aria-label="Search asset" />
+    {loading && <p className="empty compact-empty" role="status">Checking more assets…</p>}
+    {current?.offline && <p className="empty compact-empty" role="status">Showing the built-in catalog. Extended search is temporarily unavailable.</p>}
+    {query && !loading && results.length === 0 && <p className="empty compact-empty">No matches. You can enter a ticker and price in the transaction form below.</p>}
+    {results.length > 0 && <ul className="search-results">
+      {results.map(r => <li key={r.symbol}><button type="button" onClick={() => onSelect(r)}>
+        <span className="sym">{r.symbol}</span><span className="name">{r.name}</span>
+      </button></li>)}
+    </ul>}
+  </div>;
 }

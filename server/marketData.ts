@@ -3,6 +3,7 @@
  * Current provider: Finnhub.
  */
 
+import { searchInstruments as fallbackSearch } from '../src/data/instruments.js';
 import type { HistoryBar, Quote, SearchResult } from '../src/types';
 
 const FINNHUB_BASE = 'https://finnhub.io/api/v1';
@@ -47,20 +48,6 @@ function providerSignal(): AbortSignal {
   return AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
 }
 
-/** Static fallback for search when Finnhub is unavailable. Real tickers only. */
-const FALLBACK_INSTRUMENTS: SearchResult[] = [
-  { symbol: 'AAPL', name: 'Apple Inc.', exchange: 'NASDAQ', country: 'US' },
-  { symbol: 'MSFT', name: 'Microsoft Corporation', exchange: 'NASDAQ', country: 'US' },
-  { symbol: 'GOOGL', name: 'Alphabet Inc.', exchange: 'NASDAQ', country: 'US' },
-  { symbol: 'AMZN', name: 'Amazon.com Inc.', exchange: 'NASDAQ', country: 'US' },
-  { symbol: 'NVDA', name: 'NVIDIA Corporation', exchange: 'NASDAQ', country: 'US' },
-  { symbol: 'META', name: 'Meta Platforms Inc.', exchange: 'NASDAQ', country: 'US' },
-  { symbol: 'TSLA', name: 'Tesla Inc.', exchange: 'NASDAQ', country: 'US' },
-  { symbol: 'BRK.B', name: 'Berkshire Hathaway Inc.', exchange: 'NYSE', country: 'US' },
-  { symbol: 'JPM', name: 'JPMorgan Chase & Co.', exchange: 'NYSE', country: 'US' },
-  { symbol: 'V', name: 'Visa Inc.', exchange: 'NYSE', country: 'US' },
-];
-
 export async function search(query: string): Promise<SearchResult[]> {
   const q = query.trim();
   if (!q) return [];
@@ -69,9 +56,8 @@ export async function search(query: string): Promise<SearchResult[]> {
   const cached = readCache(searchCache, cacheKey);
   if (cached !== undefined) return cached;
 
-  const key = getApiKey();
-
   try {
+    const key = getApiKey();
     const url = `${FINNHUB_BASE}/search?q=${encodeURIComponent(q)}&token=${key}`;
     const res = await fetch(url, { signal: providerSignal() });
     if (!res.ok) throw new Error(`Finnhub search HTTP ${res.status}`);
@@ -112,14 +98,6 @@ export async function search(query: string): Promise<SearchResult[]> {
   } catch {
     return writeCache(searchCache, cacheKey, fallbackSearch(q), 15_000);
   }
-}
-
-function fallbackSearch(q: string): SearchResult[] {
-  const upper = q.toUpperCase();
-  return FALLBACK_INSTRUMENTS.filter(
-    (instrument) =>
-      instrument.symbol.includes(upper) || instrument.name.toUpperCase().includes(upper)
-  );
 }
 
 export async function quote(symbol: string): Promise<Quote | null> {

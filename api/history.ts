@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { marketData, type HistoryPeriod } from '../server/marketData';
+import { marketData, type HistoryPeriod } from '../server/marketData.js';
 
 const VALID_PERIODS: HistoryPeriod[] = ['1m', '3m', '6m', '1y', '2y', '5y'];
 
