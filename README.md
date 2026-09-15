@@ -2,7 +2,31 @@
 
 AssetMind is a personal investment portfolio tracker and analytics workspace built with React, TypeScript and Vite.
 
-It combines portfolio tracking, market data, price charts and a quantitative laboratory in one interface. Authentication is handled by Supabase Auth, while portfolio transactions remain stored locally in the browser and are isolated per authenticated user.
+> **Supabase is connected and active.** AssetMind uses **Supabase Auth** for user registration, login, persistent sessions, email confirmation and password recovery. Portfolio transactions are currently stored in browser `localStorage`, isolated by the authenticated Supabase user ID.
+
+It combines portfolio tracking, market data, price charts and a quantitative laboratory in one interface.
+
+## Supabase integration
+
+Supabase is part of the current application architecture, not a future placeholder.
+
+**Currently used for:**
+
+- email/password registration
+- email/password login
+- persisted authentication sessions
+- email confirmation when enabled in the Supabase project
+- password reset and recovery flows
+- user identity used to isolate local portfolio storage
+
+**Required client environment variables:**
+
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_publishable_or_anon_key
+```
+
+The portfolio database itself has **not** yet been moved to Supabase. Transactions remain local to the browser and are stored separately for each authenticated Supabase user. This distinction is intentional and prevents the README from pretending cloud synchronization exists when it does not.
 
 ## Features
 
