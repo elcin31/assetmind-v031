@@ -9,6 +9,7 @@ export function SearchPanel({ onSelect }: Props) {
   const [selected, setSelected] = useState<SearchResult | null>(null);
   const [open, setOpen] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const container = useRef<HTMLElement>(null);
   const resultsId = useId();
   const query = q.trim();
   const [remote, setRemote] = useState<{ query: string; results: SearchResult[]; offline: boolean } | null>(null);
@@ -26,6 +27,21 @@ export function SearchPanel({ onSelect }: Props) {
     return () => { window.clearTimeout(timeout); controller.abort(); };
   }, [query, expanded]);
 
+  useEffect(() => {
+    if (!expanded) return;
+    const dismissOutside = (event: Event) => {
+      if (event.target instanceof Node && !container.current?.contains(event.target)) setOpen(false);
+    };
+    // Safari can blur the input without focusing the tapped button. Waiting for
+    // the actual outside interaction keeps results clickable until selection.
+    document.addEventListener('pointerdown', dismissOutside, true);
+    document.addEventListener('focusin', dismissOutside, true);
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside, true);
+      document.removeEventListener('focusin', dismissOutside, true);
+    };
+  }, [expanded]);
+
   function select(result: SearchResult) {
     setSelected(result);
     setQ(result.symbol);
@@ -36,9 +52,7 @@ export function SearchPanel({ onSelect }: Props) {
     input.current?.blur();
   }
 
-  return <section className="card asset-search" onBlur={event => {
-    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
-  }} onKeyDown={event => {
+  return <section ref={container} className="card asset-search" onKeyDown={event => {
     if (event.key === 'Escape') { input.current?.focus(); setOpen(false); }
   }}>
     <h2>Найти актив</h2>
