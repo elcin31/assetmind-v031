@@ -47,6 +47,10 @@ function recoveryWasRequested(): boolean {
   return params.get('mode') === 'recovery' || params.has('error_code') || window.location.hash.includes('type=recovery');
 }
 
+function recoveryTokenIsPresent(): boolean {
+  return typeof window !== 'undefined' && window.location.hash.includes('type=recovery');
+}
+
 function recoveryLinkHasError(): boolean {
   if (typeof window === 'undefined') return false;
   const params = new URLSearchParams(window.location.search);
@@ -82,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let active = true;
     const recoveryRequested = recoveryWasRequested();
+    const recoveryTokenPresent = recoveryTokenIsPresent();
     const recoveryErrored = recoveryLinkHasError();
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
@@ -105,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (recoveryErrored || (recoveryRequested && !data.session)) {
           setRecoveryMode(false);
           setStartupError('This password recovery link is invalid or expired. Request a new one.');
-        } else if (recoveryRequested && data.session) {
+        } else if (recoveryTokenPresent && data.session) {
           setRecoveryMode(true);
         }
       }
