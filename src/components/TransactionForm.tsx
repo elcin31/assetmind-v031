@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { addTransaction } from '../storage/portfolio';
 import { toLocalDateTimeInputValue } from '../utils/format';
 
 interface Props {
@@ -91,35 +92,14 @@ export function TransactionForm({
     idempotencyKey.current ??= crypto.randomUUID();
 
     try {
-      const res = await fetch('/api/portfolio/transaction', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          idempotencyKey: idempotencyKey.current,
-          transaction: {
-            symbol: normalizedSymbol,
-            type,
-            quantity: qty,
-            price: px,
-            currency,
-            timestamp: timestamp.toISOString(),
-          },
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        onError(data.error || 'Transaction failed');
-        return;
-      }
+      await addTransaction({ symbol: normalizedSymbol, type, quantity: qty, price: px,
+        currency, timestamp: timestamp.toISOString() }, idempotencyKey.current);
 
       setQuantity('');
       idempotencyKey.current = null;
       onSuccess();
-    } catch {
-      onError('Network error while saving transaction');
+    } catch (error) {
+      onError(error instanceof Error ? error.message : 'Could not save transaction');
     } finally {
       setSubmitting(false);
     }

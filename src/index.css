@@ -343,3 +343,5 @@ a {
   background: var(--surface-2);
   outline: none;
 }
+
+.backup-actions { display: flex; flex-wrap: wrap; gap: 12px; }

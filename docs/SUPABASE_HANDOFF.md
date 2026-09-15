@@ -1,3 +1,5 @@
+> Архив: версия localStorage не использует Supabase. См. [актуальную инструкцию](DEPLOYMENT_RU.md).
+
 # Supabase Handoff — AssetMind v2
 
 This repository was reviewed without applying changes to a live Supabase project.

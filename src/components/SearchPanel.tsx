@@ -32,7 +32,7 @@ export function SearchPanel({ onSelect }: Props) {
         const data = await res.json().catch(() => ({}));
 
         if (!res.ok) {
-          setError(data.error || 'Search failed');
+          setError('Search unavailable. Enter the ticker and price in the form below.');
           setResults([]);
           return;
         }
@@ -46,7 +46,7 @@ export function SearchPanel({ onSelect }: Props) {
         setResults([...unique.values()]);
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        setError('Network error');
+        setError('Search unavailable. Enter the ticker and price in the form below.');
         setResults([]);
       } finally {
         if (!controller.signal.aborted) setLoading(false);

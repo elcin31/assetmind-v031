@@ -11,21 +11,7 @@ assert.ok(
 assert.ok(!base.username && !base.password && base.pathname === '/' && !base.search && !base.hash,
   'Use only the app origin, without credentials, paths or query parameters.');
 
-async function request(path) {
-  const response = await fetch(new URL(path, base), {
-    redirect: 'error',
-    signal: AbortSignal.timeout(30000),
-  });
-  const body = await response.json().catch(() => null);
-  return { response, body };
-}
-
-// Read only: never print portfolio data.
-const { response, body } = await request('/api/portfolio');
-assert.equal(response.status, 200, `Portfolio request failed with HTTP ${response.status}`);
-assert.ok(body?.portfolio?.id, 'Portfolio response is missing its ID.');
-assert.ok(Array.isArray(body.positions), 'Portfolio response is missing positions.');
-assert.ok(Array.isArray(body.transactions), 'Portfolio response is missing transactions.');
-assert.ok(typeof body.valuation?.complete === 'boolean', 'Valuation coverage metadata is missing.');
-console.log('PASS: portfolio response without login');
-console.log('Read-only smoke checks passed. Live quotes, history and transaction writes still need the deployment checklist.');
+const response = await fetch(base, { redirect: 'error', signal: AbortSignal.timeout(30000) });
+assert.equal(response.status, 200, `Page returned HTTP ${response.status}`);
+assert.match(await response.text(), /id=["']root["']/);
+console.log('PASS: app page is available. Verify local transaction persistence in the browser.');
