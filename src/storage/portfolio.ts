@@ -40,7 +40,7 @@ function parseSavedPortfolio(raw: string): LocalPortfolio {
   catch { throw new Error('Saved portfolio is damaged or unsupported. It has not been overwritten. Export it before recovery.'); }
 }
 
-function migrateLegacyPortfolio(userId: string, storageKey: string): LocalPortfolio | null {
+function migrateLegacyPortfolio(storageKey: string): LocalPortfolio | null {
   let legacyRaw: string | null;
   try { legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY); }
   catch { throw new Error('Browser storage is unavailable. Allow site storage to save your portfolio.'); }
@@ -69,7 +69,7 @@ export function readPortfolio(userId: string): LocalPortfolio {
   catch { throw new Error('Browser storage is unavailable. Allow site storage to save your portfolio.'); }
   if (raw !== null) return parseSavedPortfolio(raw);
 
-  const migrated = migrateLegacyPortfolio(userId, storageKey);
+  const migrated = migrateLegacyPortfolio(storageKey);
   if (migrated) return migrated;
 
   return {
