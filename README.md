@@ -40,3 +40,10 @@ Deployment: [Russian instructions](docs/DEPLOYMENT_RU.md).
 ## Portfolio laboratory
 
 The responsive workspace includes a synchronized laboratory: cost or market weights, HHI, effective position count, per-asset/all-asset shock scenarios, historical daily VaR/ES at 95%, maximum drawdown, annualized volatility and adjustable-risk-free-rate Sharpe. Historical metrics require at least 21 common price observations, and model today's holdings rather than actual account NAV. Cost scenarios are explicitly hypothetical; incomplete quotes never produce full-market weights. Formula panels explain inputs and assumptions.
+
+### Asset selection, price charts and appearance
+
+- Selecting a search result collapses the list, confirms the selected instrument and fills the trade ticker. Escape and focus leaving the search close results; “Изменить” starts a new search. Reduced-motion preferences disable animation.
+- Price history is available for the selected trade ticker and through the asset selector in “Активы”, with 1M/3M/6M/1Y/5Y periods and an accessible date scrubber. The chart uses `/api/history`, validates and sorts daily closes, cancels obsolete requests and handles missing history.
+- If history is unavailable, an official TradingView chart widget provides an independent visual fallback. It requests only the ticker, period and theme from TradingView; portfolio quantities and transactions are not sent. It does not feed the portfolio valuation or risk calculations. Market coverage and data delays depend on the provider. A direct chart link remains available if the embed cannot load.
+- The header theme toggle covers the portfolio interface and saves `assetmind:theme:v1` in browser storage. The first visit uses the system preference. Storage restrictions do not prevent switching themes.

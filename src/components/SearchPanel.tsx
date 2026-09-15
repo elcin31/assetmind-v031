@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { SearchResult } from '../types';
 import { searchInstruments } from '../data/instruments';
 import { searchAssets } from '../utils/searchAssets';
@@ -6,32 +6,64 @@ import { searchAssets } from '../utils/searchAssets';
 interface Props { onSelect: (r: SearchResult) => void }
 export function SearchPanel({ onSelect }: Props) {
   const [q, setQ] = useState('');
+  const [selected, setSelected] = useState<SearchResult | null>(null);
+  const [open, setOpen] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const resultsId = useId();
   const query = q.trim();
   const [remote, setRemote] = useState<{ query: string; results: SearchResult[]; offline: boolean } | null>(null);
   const current = remote?.query === query ? remote : null;
   const results = current?.results ?? searchInstruments(query);
-  const loading = Boolean(query && !current);
+  const expanded = open && Boolean(query) && !selected;
+  const loading = Boolean(expanded && !current);
   useEffect(() => {
-    if (!query) return;
+    if (!expanded) return;
     const controller = new AbortController();
     const timeout = window.setTimeout(async () => {
       const result = await searchAssets(query, controller.signal);
       if (!controller.signal.aborted) setRemote({ query, ...result });
     }, 300);
     return () => { window.clearTimeout(timeout); controller.abort(); };
-  }, [query]);
+  }, [query, expanded]);
 
-  return <div className="card">
+  function select(result: SearchResult) {
+    setSelected(result);
+    setQ(result.symbol);
+    setOpen(false);
+    onSelect(result);
+    // Return focus from a now-hidden result; collapse the mobile keyboard.
+    input.current?.focus();
+    input.current?.blur();
+  }
+
+  return <section className="card asset-search" onBlur={event => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+  }} onKeyDown={event => {
+    if (event.key === 'Escape') { input.current?.focus(); setOpen(false); }
+  }}>
     <h2>Найти актив</h2>
-    <input className="input" type="search" placeholder="Palantir, PLTR, AAPL, …" value={q}
-      onChange={e => { setQ(e.target.value); setRemote(null); }} autoComplete="off" aria-label="Search asset" />
-    {loading && <p className="empty compact-empty" role="status">Ищем дополнительные активы…</p>}
-    {current?.offline && <p className="empty compact-empty" role="status">Показан встроенный каталог. Расширенный поиск временно недоступен.</p>}
-    {query && !loading && results.length === 0 && <p className="empty compact-empty">Не найдено. Введите тикер и цену в форме сделки.</p>}
-    {results.length > 0 && <ul className="search-results">
-      {results.map(r => <li key={r.symbol}><button type="button" onClick={() => onSelect(r)}>
-        <span className="sym">{r.symbol}</span><span className="name">{r.name}</span>
-      </button></li>)}
-    </ul>}
-  </div>;
+    <input ref={input} className="input" type="search" placeholder="Palantir, PLTR, AAPL, …" value={q}
+      onFocus={() => { if (!selected) setOpen(true); }}
+      onChange={e => { setQ(e.target.value); setRemote(null); setSelected(null); setOpen(true); }}
+      autoComplete="off" aria-label="Search asset" aria-expanded={expanded} aria-controls={resultsId} />
+    <div className={`search-collapse ${expanded ? 'is-open' : ''}`} inert={!expanded} aria-hidden={!expanded} id={resultsId}>
+      <div className="search-collapse-inner">
+        {loading && <p className="empty compact-empty" role="status">Ищем дополнительные активы…</p>}
+        {current?.offline && <p className="empty compact-empty" role="status">Показан встроенный каталог. Расширенный поиск временно недоступен.</p>}
+        {query && !loading && results.length === 0 && <p className="empty compact-empty">Не найдено. Введите тикер и цену в форме сделки.</p>}
+        {results.length > 0 && <ul className="search-results" aria-label="Найденные активы">
+          {results.map(r => <li key={r.symbol}><button type="button" onClick={() => select(r)}>
+            <span className="sym">{r.symbol}</span><span className="name">{r.name}</span>
+          </button></li>)}
+        </ul>}
+      </div>
+    </div>
+    {selected && <div className="selected-asset" key={selected.symbol}>
+      <span className="selection-check" aria-hidden="true">✓</span>
+      <div role="status"><strong>{selected.symbol} выбран</strong><span>{selected.name}</span></div>
+      <button type="button" className="selection-change" onClick={() => {
+        setSelected(null); setQ(''); setRemote(null); setOpen(true); input.current?.focus();
+      }}>Изменить</button>
+    </div>}
+  </section>;
 }
