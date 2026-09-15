@@ -4,6 +4,7 @@ import { addTransaction } from '../storage/portfolio';
 import { toLocalDateTimeInputValue } from '../utils/format';
 
 interface Props {
+  userId: string;
   currency: string;
   initialSymbol: string | null;
   onSuccess: () => void;
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function TransactionForm({
+  userId,
   currency,
   initialSymbol,
   onSuccess,
@@ -93,7 +95,7 @@ export function TransactionForm({
 
     try {
       await addTransaction({ symbol: normalizedSymbol, type, quantity: qty, price: px,
-        currency, timestamp: timestamp.toISOString() }, idempotencyKey.current);
+        currency, timestamp: timestamp.toISOString() }, idempotencyKey.current, userId);
 
       setQuantity('');
       idempotencyKey.current = null;
