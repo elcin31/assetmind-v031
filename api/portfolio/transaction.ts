@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getInviteCode, isInviteCodeShapeValid } from '../../server/auth';
+import { requireDefaultPortfolio } from '../../server/portfolio';
 import { getSupabaseServer } from '../../server/supabaseServer';
 import type { TransactionType } from '../../src/types';
 
@@ -24,10 +24,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const code = getInviteCode(req);
-  if (!isInviteCodeShapeValid(code)) {
-    return res.status(401).json({ error: 'Invalid or missing invite code' });
-  }
+  const portfolioId = requireDefaultPortfolio(res);
+  if (!portfolioId) return;
 
   let body: TransactionBody;
   try {
@@ -85,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = getSupabaseServer();
     const { data: inserted, error } = await supabase
       .rpc('add_portfolio_transaction', {
-        p_code: code,
+        p_portfolio_id: portfolioId,
         p_client_request_id: idempotencyKey,
         p_symbol: symbol,
         p_type: type as TransactionType,
@@ -98,8 +96,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (error) {
       const message = error.message ?? '';
-      if (message.includes('INVALID_INVITE_CODE')) {
-        return res.status(401).json({ error: 'Invalid or inactive invite code' });
+      if (message.includes('PORTFOLIO_NOT_FOUND')) {
+        return res.status(404).json({ error: 'Portfolio not found' });
       }
       if (message.includes('SELL_QUANTITY_EXCEEDS_AVAILABLE_POSITION')) {
         return res.status(400).json({ error: 'SELL quantity exceeds available position' });

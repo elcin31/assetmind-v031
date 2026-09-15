@@ -1,15 +1,14 @@
+BEGIN;
 -- Apply this to an existing AssetMind database before deploying the hardened API.
 -- Review production data and take a verified backup before applying this migration.
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 ALTER TABLE public.portfolios ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.invite_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 
 GRANT USAGE ON SCHEMA public TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.portfolios TO service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.invite_codes TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.transactions TO service_role;
 
 ALTER TABLE public.transactions
@@ -33,8 +32,12 @@ DROP FUNCTION IF EXISTS public.add_portfolio_transaction(
   TEXT, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
 );
 
+DROP FUNCTION IF EXISTS public.add_portfolio_transaction(
+  TEXT, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
+);
+
 CREATE OR REPLACE FUNCTION public.add_portfolio_transaction(
-  p_code TEXT,
+  p_portfolio_id UUID,
   p_client_request_id UUID,
   p_symbol TEXT,
   p_type TEXT,
@@ -58,10 +61,6 @@ DECLARE
   v_type TEXT := UPPER(TRIM(p_type));
   v_currency TEXT := UPPER(TRIM(p_currency));
 BEGIN
-  IF p_code IS NULL OR LENGTH(TRIM(p_code)) < 8 OR LENGTH(TRIM(p_code)) > 128 THEN
-    RAISE EXCEPTION 'INVALID_INVITE_CODE' USING ERRCODE = 'P0001';
-  END IF;
-
   IF p_client_request_id IS NULL THEN
     RAISE EXCEPTION 'INVALID_IDEMPOTENCY_KEY' USING ERRCODE = 'P0001';
   END IF;
@@ -82,16 +81,13 @@ BEGIN
     RAISE EXCEPTION 'INVALID_CURRENCY' USING ERRCODE = 'P0001';
   END IF;
 
-  SELECT i.portfolio_id, UPPER(p.base_currency)
+  SELECT p.id, UPPER(p.base_currency)
     INTO v_portfolio_id, v_base_currency
-  FROM public.invite_codes AS i
-  JOIN public.portfolios AS p ON p.id = i.portfolio_id
-  WHERE i.code = TRIM(p_code)
-    AND i.active = true
-  LIMIT 1;
+  FROM public.portfolios AS p
+  WHERE p.id = p_portfolio_id;
 
   IF v_portfolio_id IS NULL THEN
-    RAISE EXCEPTION 'INVALID_INVITE_CODE' USING ERRCODE = 'P0001';
+    RAISE EXCEPTION 'PORTFOLIO_NOT_FOUND' USING ERRCODE = 'P0001';
   END IF;
 
   IF v_currency <> v_base_currency THEN
@@ -171,8 +167,10 @@ END;
 $$;
 
 REVOKE EXECUTE ON FUNCTION public.add_portfolio_transaction(
-  TEXT, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
+  UUID, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
 ) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.add_portfolio_transaction(
-  TEXT, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
+  UUID, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
 ) TO service_role;
+
+COMMIT;

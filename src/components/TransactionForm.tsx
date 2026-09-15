@@ -3,7 +3,6 @@ import type { FormEvent } from 'react';
 import { toLocalDateTimeInputValue } from '../utils/format';
 
 interface Props {
-  code: string;
   currency: string;
   initialSymbol: string | null;
   onSuccess: () => void;
@@ -11,7 +10,6 @@ interface Props {
 }
 
 export function TransactionForm({
-  code,
   currency,
   initialSymbol,
   onSuccess,
@@ -40,7 +38,6 @@ export function TransactionForm({
     const timeout = window.setTimeout(async () => {
       try {
         const res = await fetch(`/api/quote?symbol=${encodeURIComponent(normalized)}`, {
-          headers: { Authorization: `Bearer ${code}` },
           signal: controller.signal,
         });
         if (!res.ok) return;
@@ -62,7 +59,7 @@ export function TransactionForm({
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [code, symbol]);
+  }, [symbol]);
 
   const resetIdempotency = () => {
     idempotencyKey.current = null;
@@ -98,7 +95,6 @@ export function TransactionForm({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${code}`,
         },
         body: JSON.stringify({
           idempotencyKey: idempotencyKey.current,

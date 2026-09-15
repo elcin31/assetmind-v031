@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireActiveInvite } from '../server/auth';
 import { marketData, type HistoryPeriod } from '../server/marketData';
 
 const VALID_PERIODS: HistoryPeriod[] = ['1m', '3m', '6m', '1y', '2y', '5y'];
@@ -8,9 +7,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-
-  const invite = await requireActiveInvite(req, res);
-  if (!invite) return;
 
   const symbol =
     typeof req.query.symbol === 'string' ? req.query.symbol.trim().toUpperCase() : '';

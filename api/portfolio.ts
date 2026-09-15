@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getSupabaseServer } from '../server/supabaseServer';
-import { requireActiveInvite } from '../server/auth';
+import { requireDefaultPortfolio } from '../server/portfolio';
 import { enrichPositionsWithQuotes } from '../src/math/pnl';
 import { calculatePositions } from '../src/math/positions';
 import { marketData } from '../server/marketData';
@@ -17,15 +17,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const invite = await requireActiveInvite(req, res);
-    if (!invite) return;
+    const portfolioId = requireDefaultPortfolio(res);
+    if (!portfolioId) return;
 
     const supabase = getSupabaseServer();
 
     const { data: portfolio, error: portfolioError } = await supabase
       .from('portfolios')
       .select('id, name, base_currency, created_at')
-      .eq('id', invite.portfolioId)
+      .eq('id', portfolioId)
       .single();
 
     if (portfolioError || !portfolio) {

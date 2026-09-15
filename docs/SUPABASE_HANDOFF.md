@@ -17,16 +17,13 @@ SUPABASE_URL=
 SUPABASE_SECRET_KEY=
 # Legacy fallback only:
 # SUPABASE_SERVICE_ROLE_KEY=
+DEFAULT_PORTFOLIO_ID=
 FINNHUB_API_KEY=
 ```
 
 ## Access model
 
-The frontend never receives Supabase credentials. The invite code is the MVP bearer credential and is sent as:
-
-```http
-Authorization: Bearer <invite-code>
-```
+The frontend never receives Supabase credentials. No login is required: every visitor reads and writes the portfolio explicitly selected by server-only `DEFAULT_PORTFOLIO_ID`. The transaction RPC accepts `p_portfolio_id` from server configuration. Client IDs cannot override it.
 
 Public tables have RLS enabled and no `anon`/`authenticated` policies. The server-side `service_role` is explicitly granted the table privileges it needs.
 
@@ -42,11 +39,11 @@ It also acquires a PostgreSQL advisory transaction lock per `portfolio_id + symb
 
 - [ ] Apply `schema.sql` on a fresh project, or `harden_existing.sql` on the existing project
 - [ ] Confirm service-role Data API reads/writes work
-- [ ] Confirm `anon` cannot read the three tables
+- [ ] Confirm `anon` cannot read portfolios and transactions
 - [ ] Confirm `anon` and `authenticated` cannot execute `add_portfolio_transaction`
-- [ ] Seed a portfolio + strong random invite code
-- [ ] Confirm `GET /api/portfolio` with Bearer auth returns the portfolio
-- [ ] Confirm the invite code is absent from request URLs
+- [ ] Select or seed a shared portfolio and configure DEFAULT_PORTFOLIO_ID
+- [ ] Confirm `GET /api/portfolio` without credentials returns the portfolio
+- [ ] Confirm client portfolio IDs cannot override server configuration
 - [ ] Confirm valid BUY succeeds
 - [ ] Confirm SELL larger than current position is rejected
 - [ ] Confirm a backdated SELL that creates any negative historical quantity is rejected
@@ -54,7 +51,7 @@ It also acquires a PostgreSQL advisory transaction lock per `portfolio_id + symb
 - [ ] Confirm transaction currency must match portfolio base currency
 - [ ] Retry the exact same POST with the same idempotency key; confirm only one row exists
 - [ ] Reuse an idempotency key with a different payload; confirm it is rejected
-- [ ] Confirm inactive invite returns 401 without revealing whether the code exists
+- [ ] Confirm missing DEFAULT_PORTFOLIO_ID returns 503
 - [ ] Confirm service role key is never present in client bundles
 
 ## Still requires live verification

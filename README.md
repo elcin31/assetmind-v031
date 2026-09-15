@@ -11,7 +11,7 @@ Browser → Vercel Serverless API → Supabase / Finnhub
 - Transactions are the source of truth.
 - Positions are derived with weighted average cost (WAC).
 - Supabase and Finnhub secrets stay server-side.
-- The invite code is treated as a bearer credential and is sent in the `Authorization` header, not in URLs.
+- The app opens without login. All visitors read and write the shared portfolio selected by server-only `DEFAULT_PORTFOLIO_ID`.
 - `portfolioValue` is the marked-to-market value of **open holdings**, not a cash-inclusive account balance.
 
 ## Project structure
@@ -19,13 +19,13 @@ Browser → Vercel Serverless API → Supabase / Finnhub
 | Directory | Contents |
 |-----------|----------|
 | `src/` | React entry point, app and shared styles |
-| `src/pages/` | Invite and portfolio screens |
+| `src/pages/` | Portfolio screen |
 | `src/components/` | Portfolio cards, holdings, search and transaction form |
 | `src/math/` | Positions, P&L, returns and risk calculations |
 | `src/types/` | Shared TypeScript types |
 | `src/utils/` | Formatting helpers |
 | `api/` | Vercel API routes; transaction endpoint in `api/portfolio/` |
-| `server/` | Server-only authentication, Supabase and market-data helpers |
+| `server/` | Server-only portfolio selection, Supabase and market-data helpers |
 | `tests/` | Financial calculation tests |
 | `supabase/` | Database schema and hardening SQL |
 | `public/` | Static images and icons served by Vite |
@@ -73,6 +73,7 @@ vercel dev
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_SECRET_KEY` | Supabase secret key, server only (preferred) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Legacy service-role key fallback during migration |
+| `DEFAULT_PORTFOLIO_ID` | UUID of the shared portfolio; required, no automatic selection |
 | `FINNHUB_API_KEY` | Finnhub API key, server only |
 
 Never prefix server secrets with `VITE_`.
@@ -93,30 +94,18 @@ The schema:
 - validates the complete chronological quantity history, including backdated transactions;
 - makes transaction creation idempotent so a client retry cannot duplicate a committed trade.
 
-Then seed a portfolio and invite code:
-
-```sql
-INSERT INTO public.portfolios (name, base_currency)
-VALUES ('Demo', 'USD')
-RETURNING id;
-
-INSERT INTO public.invite_codes (code, portfolio_id, active)
-VALUES ('am_your_secret_code_here', '<portfolio-uuid>', true);
-```
+Run `supabase/seed_demo.sql` once, or select an existing portfolio explicitly.
+Set its returned UUID as `DEFAULT_PORTFOLIO_ID` in Vercel.
 
 ### Existing project
 
 Review and run `supabase/harden_existing.sql` before deploying the updated transaction API.
 
-## API authentication
+## Open access
 
-All browser-facing API routes require:
+No login, invite code or Authorization header is required. Every visitor can read and add transactions to the same configured portfolio. Client-supplied portfolio IDs are ignored. Missing or malformed server configuration returns 503 instead of selecting an arbitrary portfolio. Supabase credentials and direct database access remain server-only.
 
-```http
-Authorization: Bearer <invite-code>
-```
-
-The invite code is intentionally not placed in query strings because URLs are commonly captured by browser history, access logs, proxies, and observability tools.
+Existing invite rows are retained as unused legacy data; the app no longer reads them.
 
 ## API contract
 
@@ -165,7 +154,7 @@ npm run build
 
 This repository does not prove that a live Supabase project has been configured. After applying SQL and environment variables, verify:
 
-1. inactive/invalid invite → 401;
+1. requests without credentials load only the configured shared portfolio;
 2. valid BUY persists;
 3. oversized SELL is rejected;
 4. a backdated SELL that makes any historical position negative is rejected;
@@ -181,4 +170,4 @@ This repository does not prove that a live Supabase project has been configured.
 - The model has no cash ledger, deposits, withdrawals, dividends, splits, or other corporate actions. `portfolioValue` therefore means open-holdings value, not total account NAV.
 - Risk uses the current holdings mix over historical closes. True portfolio-performance analytics require daily cash-inclusive NAV reconstruction and cash-flow-aware return metrics.
 - In-memory market-data caches are per server instance. Production scale should use shared caching and distributed rate limiting.
-- Invite codes are MVP bearer credentials. A production authentication model should use stronger identity/session controls and store reusable access tokens in a non-plaintext form where practical.
+- This is an intentionally shared, unauthenticated app. Separate private portfolios require a new identity and access model.

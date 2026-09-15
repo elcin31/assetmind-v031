@@ -10,20 +10,16 @@ import { SearchPanel } from '../components/SearchPanel';
 type Tab = 'overview' | 'holdings' | 'trade' | 'risk';
 
 interface Props {
-  code: string;
   snapshot: PortfolioSnapshot;
   onRefresh: () => void;
-  onLogout: () => void;
   loading: boolean;
   error: string | null;
   setError: (e: string | null) => void;
 }
 
 export function PortfolioScreen({
-  code,
   snapshot,
   onRefresh,
-  onLogout,
   loading,
   error,
   setError,
@@ -45,8 +41,8 @@ export function PortfolioScreen({
             {snapshot.portfolio.base_currency} · {snapshot.positions.length} positions
           </p>
         </div>
-        <button className="btn btn-ghost compact-button" onClick={onLogout}>
-          Exit
+        <button className="btn btn-ghost compact-button" onClick={onRefresh} disabled={loading}>
+          Refresh
         </button>
       </header>
 
@@ -87,9 +83,8 @@ export function PortfolioScreen({
 
         {tab === 'trade' && (
           <>
-            <SearchPanel code={code} onSelect={handleSelectSymbol} />
+            <SearchPanel onSelect={handleSelectSymbol} />
             <TransactionForm
-              code={code}
               currency={snapshot.portfolio.base_currency}
               initialSymbol={selectedSymbol}
               onSuccess={() => {

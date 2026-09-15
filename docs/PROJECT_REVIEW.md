@@ -1,3 +1,5 @@
+> Historical review before removal of invite login. Current open-access setup: [DEPLOYMENT_RU.md](DEPLOYMENT_RU.md).
+
 # AssetMind v2 — Code Review and Fix Report
 
 Review date: 2026-09-14

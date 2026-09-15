@@ -1,3 +1,4 @@
+BEGIN;
 -- AssetMind v2 Database Schema
 -- Execute this in the Supabase SQL editor for a fresh project.
 -- Server-only access model: the browser never talks to Supabase directly.
@@ -11,17 +12,6 @@ CREATE TABLE IF NOT EXISTS public.portfolios (
     CHECK (base_currency ~ '^[A-Z]{3}$'),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-CREATE TABLE IF NOT EXISTS public.invite_codes (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  code TEXT NOT NULL UNIQUE,
-  portfolio_id UUID NOT NULL REFERENCES public.portfolios(id) ON DELETE CASCADE,
-  active BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_invite_codes_portfolio_id
-  ON public.invite_codes(portfolio_id);
 
 CREATE TABLE IF NOT EXISTS public.transactions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -49,12 +39,10 @@ CREATE INDEX IF NOT EXISTS idx_transactions_portfolio_symbol_time
   ON public.transactions(portfolio_id, symbol, timestamp, created_at, id);
 
 ALTER TABLE public.portfolios ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.invite_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 
 GRANT USAGE ON SCHEMA public TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.portfolios TO service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.invite_codes TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.transactions TO service_role;
 
 -- Remove an older 7-argument version if this schema is re-applied.
@@ -62,8 +50,12 @@ DROP FUNCTION IF EXISTS public.add_portfolio_transaction(
   TEXT, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
 );
 
+DROP FUNCTION IF EXISTS public.add_portfolio_transaction(
+  TEXT, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
+);
+
 CREATE OR REPLACE FUNCTION public.add_portfolio_transaction(
-  p_code TEXT,
+  p_portfolio_id UUID,
   p_client_request_id UUID,
   p_symbol TEXT,
   p_type TEXT,
@@ -87,10 +79,6 @@ DECLARE
   v_type TEXT := UPPER(TRIM(p_type));
   v_currency TEXT := UPPER(TRIM(p_currency));
 BEGIN
-  IF p_code IS NULL OR LENGTH(TRIM(p_code)) < 8 OR LENGTH(TRIM(p_code)) > 128 THEN
-    RAISE EXCEPTION 'INVALID_INVITE_CODE' USING ERRCODE = 'P0001';
-  END IF;
-
   IF p_client_request_id IS NULL THEN
     RAISE EXCEPTION 'INVALID_IDEMPOTENCY_KEY' USING ERRCODE = 'P0001';
   END IF;
@@ -111,16 +99,13 @@ BEGIN
     RAISE EXCEPTION 'INVALID_CURRENCY' USING ERRCODE = 'P0001';
   END IF;
 
-  SELECT i.portfolio_id, UPPER(p.base_currency)
+  SELECT p.id, UPPER(p.base_currency)
     INTO v_portfolio_id, v_base_currency
-  FROM public.invite_codes AS i
-  JOIN public.portfolios AS p ON p.id = i.portfolio_id
-  WHERE i.code = TRIM(p_code)
-    AND i.active = true
-  LIMIT 1;
+  FROM public.portfolios AS p
+  WHERE p.id = p_portfolio_id;
 
   IF v_portfolio_id IS NULL THEN
-    RAISE EXCEPTION 'INVALID_INVITE_CODE' USING ERRCODE = 'P0001';
+    RAISE EXCEPTION 'PORTFOLIO_NOT_FOUND' USING ERRCODE = 'P0001';
   END IF;
 
   IF v_currency <> v_base_currency THEN
@@ -202,15 +187,11 @@ END;
 $$;
 
 REVOKE EXECUTE ON FUNCTION public.add_portfolio_transaction(
-  TEXT, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
+  UUID, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
 ) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.add_portfolio_transaction(
-  TEXT, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
+  UUID, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
 ) TO service_role;
 
--- Optional seed:
--- INSERT INTO public.portfolios (id, name, base_currency)
--- VALUES ('00000000-0000-0000-0000-000000000001', 'Demo Portfolio', 'USD');
---
--- INSERT INTO public.invite_codes (code, portfolio_id, active)
--- VALUES ('am_demo_test_code_replace_me', '00000000-0000-0000-0000-000000000001', true);
+
+COMMIT;

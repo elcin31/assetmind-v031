@@ -2,11 +2,10 @@ import { useEffect, useState } from 'react';
 import type { SearchResult } from '../types';
 
 interface Props {
-  code: string;
   onSelect: (r: SearchResult) => void;
 }
 
-export function SearchPanel({ code, onSelect }: Props) {
+export function SearchPanel({ onSelect }: Props) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,7 +27,6 @@ export function SearchPanel({ code, onSelect }: Props) {
 
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
-          headers: { Authorization: `Bearer ${code}` },
           signal: controller.signal,
         });
         const data = await res.json().catch(() => ({}));
@@ -59,7 +57,7 @@ export function SearchPanel({ code, onSelect }: Props) {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [code, q]);
+  }, [q]);
 
   return (
     <div className="card">

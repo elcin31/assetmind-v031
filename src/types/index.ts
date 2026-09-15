@@ -20,14 +20,6 @@ export interface Portfolio {
   created_at: string;
 }
 
-export interface InviteCode {
-  id: string;
-  code: string;
-  portfolio_id: string;
-  active: boolean;
-  created_at: string;
-}
-
 /** Position derived purely from transactions (weighted average cost). */
 export interface Position {
   symbol: string;
