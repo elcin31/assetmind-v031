@@ -1,36 +1,40 @@
-import type { HistoryBar, PortfolioSnapshot } from "../types";
-import type { Period } from "../types/analytics";
-import { reconstructPortfolioHistory } from "./portfolioHistory";
+import type { HistoryBar, PortfolioSnapshot } from '../types';
+import type { Period } from '../types/analytics';
+import { reconstructPortfolioHistory } from './portfolioHistory';
 import {
   datedReturns,
   performanceMetrics,
   selectPeriod,
   historyReadouts,
-} from "./performance";
-import { drawdowns } from "./drawdown";
-import { downsideDeviation } from "./downside";
+} from './performance';
+import { drawdowns } from './drawdown';
+import { downsideDeviation } from './downside';
 import {
   calmarRatio,
   historicalTailRisk,
   sharpeRatio,
   sortinoRatio,
-} from "./ratios";
+} from './ratios';
 import {
   correlation,
   correlationMatrix,
   averageCorrelation,
-} from "./correlation";
-import { riskContributions } from "./riskContribution";
-import { benchmarkMetrics, alignReturns } from "./benchmark";
+} from './correlation';
+import { riskContributions } from './riskContribution';
+import { benchmarkMetrics, alignReturns } from './benchmark';
 import {
   pnlAttribution,
   positionReturn,
   returnAttribution,
-} from "./attribution";
-import { concentration } from "./lab";
-import { volatility } from "./statistics";
-import { calculatePositions } from "./positions";
-import { buildCurrentHoldingsRiskProxy } from "./returns";
+} from './attribution';
+import { concentration } from './lab';
+import {
+  annualRateToDaily,
+  MIN_OBSERVATIONS,
+  volatility,
+} from './statistics';
+import { calculatePositions } from './positions';
+import { buildCurrentHoldingsRiskProxy } from './returns';
 
 export function calculatePortfolioAnalytics(
   snapshot: PortfolioSnapshot,
@@ -42,7 +46,10 @@ export function calculatePortfolioAnalytics(
   mar: number,
 ) {
   const clean = new Map(
-    [...histories].map(([s, bars]) => [s, bars.filter((b) => b.date <= asOf)]),
+    [...histories].map(([s, bars]) => [
+      s,
+      bars.filter((b) => b.date <= asOf),
+    ]),
   );
   const history = reconstructPortfolioHistory(
     snapshot.transactions,
@@ -51,7 +58,8 @@ export function calculatePortfolioAnalytics(
   );
   const points = selectPeriod(history.points, period, asOf);
   const performance = performanceMetrics(points);
-  const values = performance.returns.map((r) => r.value);
+  const riskValues = performance.riskReturns.map((r) => r.value);
+
   let wealth = 100;
   const returnIndex = performance.returns.length
     ? [
@@ -66,16 +74,29 @@ export function calculatePortfolioAnalytics(
   const valueDrawdown = drawdowns(
     points.map((p) => ({ date: p.date, value: p.value })),
   );
-  const tail = historicalTailRisk(values);
+  const tail = historicalTailRisk(riskValues);
+  const dailyMar = annualRateToDaily(mar);
   const risk = {
-    volatility: volatility(values),
-    downside: downsideDeviation(values, mar / 252),
-    sharpe: sharpeRatio(values, rf),
-    sortino: sortinoRatio(values, mar),
+    volatility: volatility(riskValues),
+    downside:
+      dailyMar === null ? null : downsideDeviation(riskValues, dailyMar),
+    sharpe: sharpeRatio(riskValues, rf),
+    sortino: sortinoRatio(riskValues, mar),
     calmar: calmarRatio(performance.cagr, drawdown?.max ?? null),
     var95: tail?.var ?? null,
     es95: tail?.es ?? null,
   };
+  const riskReason =
+    riskValues.length < MIN_OBSERVATIONS
+      ? `Недостаточно чистых return-интервалов для risk analytics: ${riskValues.length}/${MIN_OBSERVATIONS}. Загрязнённые trade/gap интервалы исключены, а не заменены нулём.`
+      : risk.volatility === null
+        ? 'Волатильность математически не определена: дисперсия ряда нулевая или некорректна.'
+        : null;
+  const sortinoReason =
+    risk.sortino === null && riskReason === null
+      ? 'Sortino недоступен: недостаточно downside-наблюдений относительно дневного MAR или downside deviation равна нулю.'
+      : riskReason;
+
   const rangeHistories = new Map(
     [...clean].map(([s, bars]) => [s, selectPeriod(bars, period, asOf)]),
   );
@@ -92,30 +113,34 @@ export function calculatePortfolioAnalytics(
     matrix && complete
       ? riskContributions(symbols, weights, matrix.covariance)
       : null;
+
   const proxy = buildCurrentHoldingsRiskProxy(
     snapshot.positions,
     rangeHistories,
   );
-  const proxyReturns = proxy.available
-    ? proxy.dailyReturns.map((value, i) => ({
-        value,
-        date: proxy.dates[i + 1],
-        startDate: proxy.dates[i],
-      }))
-    : [];
+  const proxyReturns = proxy.available ? proxy.returns : [];
+  const proxyDrawdown = proxy.available
+    ? drawdowns(
+        proxy.dates.map((date, i) => ({ date, value: proxy.values[i] })),
+      )
+    : null;
+
   const benchmarkReturns = datedReturns(rangeHistories.get(benchmark) ?? []);
   const benchmarkResult = benchmarkMetrics(
-    performance.returns,
+    performance.riskReturns,
     benchmarkReturns,
     rf,
   );
-  // P&L is lifetime; return attribution is strictly the selected no-trade historical period.
+
+  // P&L is lifetime; return attribution is strictly the selected continuous
+  // no-trade historical performance stream.
   const pnl = pnlAttribution(snapshot.transactions, snapshot.positions);
   const first = points[0];
   const holdings = first
     ? calculatePositions(
         snapshot.transactions.filter(
-          (t) => new Date(t.timestamp).toISOString().slice(0, 10) <= first.date,
+          (t) =>
+            new Date(t.timestamp).toISOString().slice(0, 10) <= first.date,
         ),
       ).positions
     : [];
@@ -145,6 +170,7 @@ export function calculatePortfolioAnalytics(
   const contributions = linked
     ? contributionSymbols.map((symbol, i) => ({ symbol, value: linked[i] }))
     : [];
+
   const details = Object.fromEntries(
     snapshot.positions.map((p) => {
       const returns = datedReturns(rangeHistories.get(p.symbol) ?? []);
@@ -167,12 +193,15 @@ export function calculatePortfolioAnalytics(
       ];
     }),
   );
+
   return {
     history,
     points,
     readouts: historyReadouts(points),
     performance,
     risk,
+    riskReason,
+    sortinoReason,
     drawdown,
     valueDrawdown,
     matrix,
@@ -187,8 +216,10 @@ export function calculatePortfolioAnalytics(
       ...proxy,
       volatility: volatility(proxy.dailyReturns),
       sharpe: sharpeRatio(proxy.dailyReturns, rf),
+      drawdown: proxyDrawdown,
     },
-    sample: `${points[0]?.date ?? "—"} — ${points.at(-1)?.date ?? "—"} · ${values.length} доходностей`,
+    sample: `${points[0]?.date ?? '—'} — ${points.at(-1)?.date ?? '—'} · ${riskValues.length} чистых return-интервалов`,
   };
 }
+
 export type PortfolioAnalytics = ReturnType<typeof calculatePortfolioAnalytics>;

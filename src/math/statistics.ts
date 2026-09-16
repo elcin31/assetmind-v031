@@ -1,16 +1,21 @@
 export const EPSILON = 1e-12;
 export const MIN_OBSERVATIONS = 20;
+export const MIN_DOWNSIDE_OBSERVATIONS = 5;
 export const TRADING_DAYS = 252;
+
 export const finite = (value: number): number | null =>
   Number.isFinite(value) ? value : null;
+
 export function valid(values: number[], minimum = 1): boolean {
   return values.length >= minimum && values.every(Number.isFinite);
 }
+
 export function mean(values: number[]): number | null {
   return valid(values)
     ? finite(values.reduce((a, b) => a + b / values.length, 0))
     : null;
 }
+
 export function covariance(
   a: number[],
   b: number[],
@@ -22,9 +27,13 @@ export function covariance(
   const mb = mean(b);
   if (ma === null || mb === null) return null;
   return finite(
-    a.reduce((sum, v, i) => sum + ((v - ma) * (b[i] - mb)) / (a.length - 1), 0),
+    a.reduce(
+      (sum, v, i) => sum + ((v - ma) * (b[i] - mb)) / (a.length - 1),
+      0,
+    ),
   );
 }
+
 export function volatility(
   values: number[],
   minimum = MIN_OBSERVATIONS,
@@ -34,11 +43,23 @@ export function volatility(
     ? null
     : finite(Math.sqrt(variance * TRADING_DAYS));
 }
+
 export function safeRatio(a: number | null, b: number | null): number | null {
-  return a === null || b === null || !Number.isFinite(a) || !Number.isFinite(b) || Math.abs(b) <= EPSILON
+  return a === null ||
+    b === null ||
+    !Number.isFinite(a) ||
+    !Number.isFinite(b) ||
+    Math.abs(b) <= EPSILON
     ? null
     : finite(a / b);
 }
+
+/** Effective annual rate -> equivalent one-trading-day compounded rate. */
+export function annualRateToDaily(annualRate: number): number | null {
+  if (!Number.isFinite(annualRate) || annualRate <= -1) return null;
+  return finite((1 + annualRate) ** (1 / TRADING_DAYS) - 1);
+}
+
 export function validDate(date: string): boolean {
   return (
     /^\d{4}-\d{2}-\d{2}$/.test(date) &&

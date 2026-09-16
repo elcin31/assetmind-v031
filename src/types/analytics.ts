@@ -46,7 +46,10 @@ export interface PerformanceMetrics {
   worstDay: number | null;
   positiveDays: number | null;
   negativeDays: number | null;
+  /** Continuous return stream eligible for cumulative performance/TWR. */
   returns: DatedReturn[];
+  /** Clean observed market-return intervals; contaminated trade/gap intervals are omitted. */
+  riskReturns: DatedReturn[];
   monthly: MonthlyReturn[];
   reason: string | null;
 }
@@ -73,8 +76,11 @@ export interface CorrelationMatrix {
 export interface RiskContribution {
   symbol: string;
   weight: number;
+  /** Marginal contribution to variance: (Σw)i. */
   marginal: number;
+  /** Absolute contribution to variance: wi(Σw)i. */
   absolute: number;
+  /** Fraction of portfolio variance. */
   fraction: number;
 }
 export interface BenchmarkMetrics {

@@ -1,25 +1,27 @@
-import { useState } from "react";
-import type { PortfolioSnapshot } from "../types";
-import type { AnalyticsController } from "../analytics/usePortfolioAnalytics";
-import { AnalyticsMetric, Formula } from "./AnalyticsMetric";
-import { pct } from "../utils/analyticsFormat";
-import { PortfolioHistoryChart, PeriodSelector } from "./PortfolioHistoryChart";
-import { MonthlyReturnsHeatmap } from "./MonthlyReturnsHeatmap";
-import { DrawdownChart } from "./DrawdownChart";
-import { CorrelationMatrix } from "./CorrelationMatrix";
-import { BenchmarkPanel } from "./BenchmarkPanel";
-import { AttributionPanel } from "./AttributionPanel";
-import { ScenariosPanel } from "./ScenariosPanel";
-import { AnalyticsChart } from "./AnalyticsChart";
-import { rollingMetric } from "../math/rolling";
+import { useState } from 'react';
+import type { PortfolioSnapshot } from '../types';
+import type { AnalyticsController } from '../analytics/usePortfolioAnalytics';
+import { AnalyticsMetric, Formula } from './AnalyticsMetric';
+import { pct } from '../utils/analyticsFormat';
+import { PortfolioHistoryChart, PeriodSelector } from './PortfolioHistoryChart';
+import { MonthlyReturnsHeatmap } from './MonthlyReturnsHeatmap';
+import { DrawdownChart } from './DrawdownChart';
+import { CorrelationMatrix } from './CorrelationMatrix';
+import { BenchmarkPanel } from './BenchmarkPanel';
+import { AttributionPanel } from './AttributionPanel';
+import { ScenariosPanel } from './ScenariosPanel';
+import { AnalyticsChart } from './AnalyticsChart';
+import { rollingMetric } from '../math/rolling';
+
 const tabs = [
-  { id: "performance", label: "Доходность" },
-  { id: "risk", label: "Риск" },
-  { id: "diversification", label: "Диверсификация" },
-  { id: "attribution", label: "Атрибуция" },
-  { id: "scenarios", label: "Сценарии" },
-  { id: "benchmark", label: "Рынок" },
+  { id: 'performance', label: 'Доходность' },
+  { id: 'risk', label: 'Риск' },
+  { id: 'diversification', label: 'Диверсификация' },
+  { id: 'attribution', label: 'Атрибуция' },
+  { id: 'scenarios', label: 'Сценарии' },
+  { id: 'benchmark', label: 'Рынок' },
 ];
+
 export function Laboratory({
   snapshot,
   controller: c,
@@ -27,19 +29,36 @@ export function Laboratory({
   snapshot: PortfolioSnapshot;
   controller: AnalyticsController;
 }) {
-  const [tab, setTab] = useState("performance");
+  const [tab, setTab] = useState('performance');
   const [volWindow, setVolWindow] = useState(20);
   const [sharpeWindow, setSharpeWindow] = useState(63);
   const a = c.analytics;
   const sample = `${a.sample} · Rf ${c.rf}% · MAR ${c.mar}%`;
   const vol =
-    tab === "risk"
-      ? rollingMetric(a.performance.returns, volWindow, "volatility")
+    tab === 'risk'
+      ? rollingMetric(a.performance.riskReturns, volWindow, 'volatility')
       : [];
   const rollingSharpe =
-    tab === "risk"
-      ? rollingMetric(a.performance.returns, sharpeWindow, "sharpe", c.rf / 100)
+    tab === 'risk'
+      ? rollingMetric(
+          a.performance.riskReturns,
+          sharpeWindow,
+          'sharpe',
+          c.rf / 100,
+        )
       : [];
+  const providerReason = c.errors.length ? c.errors.join('; ') : null;
+  const matrixReason =
+    providerReason ??
+    (a.history.missingSymbols.length
+      ? `Нет полной рыночной истории: ${a.history.missingSymbols.join(', ')}.`
+      : `Нужно минимум 20 строго общих return-интервалов и ненулевая дисперсия каждого актива. Сейчас: ${a.matrix?.observations ?? 0}.`);
+  const currentRiskReason = !snapshot.valuation.complete
+    ? 'Нужны текущие котировки всех открытых позиций для рыночных весов.'
+    : !a.matrix
+      ? matrixReason
+      : 'Вклад в риск математически не определён: portfolio variance должна быть положительной.';
+
   return (
     <>
       <section className="lab-intro">
@@ -90,11 +109,14 @@ export function Laboratory({
           />
         </label>
       </div>
-      {tab !== "performance" && <PeriodSelector controller={c} />}
-      {(tab === "performance" || tab === "risk" || tab === "benchmark") &&
-        a.performance.reason &&
-        !c.loading && <p className="notice">{a.performance.reason}</p>}
-      {tab === "performance" && (
+      {tab !== 'performance' && <PeriodSelector controller={c} />}
+      {tab === 'performance' && a.performance.reason && !c.loading && (
+        <p className="notice">{a.performance.reason}</p>
+      )}
+      {tab === 'risk' && a.riskReason && !c.loading && (
+        <p className="notice">{providerReason ?? a.riskReason}</p>
+      )}
+      {tab === 'performance' && (
         <>
           <PortfolioHistoryChart
             controller={c}
@@ -104,13 +126,13 @@ export function Laboratory({
             <div className="analytics-metrics">
               {(
                 [
-                  "twr",
-                  "cagr",
-                  "totalReturn",
-                  "bestDay",
-                  "worstDay",
-                  "positiveDays",
-                  "negativeDays",
+                  'twr',
+                  'cagr',
+                  'totalReturn',
+                  'bestDay',
+                  'worstDay',
+                  'positiveDays',
+                  'negativeDays',
                 ] as const
               ).map((metric) => (
                 <AnalyticsMetric
@@ -130,20 +152,25 @@ export function Laboratory({
           />
         </>
       )}
-      {tab === "risk" && (
+      {tab === 'risk' && (
         <>
           <section className="card">
             <h2>Риск исторического портфеля</h2>
+            <p className="caption">
+              Risk statistics используют чистые однодневные market-return
+              интервалы. Интервалы с BUY/SELL или ценовым gap исключаются без
+              нулей и без соединения через разрыв.
+            </p>
             <div className="analytics-metrics">
               {(
                 [
-                  "volatility",
-                  "downside",
-                  "sharpe",
-                  "sortino",
-                  "calmar",
-                  "var95",
-                  "es95",
+                  'volatility',
+                  'downside',
+                  'sharpe',
+                  'sortino',
+                  'calmar',
+                  'var95',
+                  'es95',
                 ] as const
               ).map((metric) => (
                 <AnalyticsMetric
@@ -151,19 +178,28 @@ export function Laboratory({
                   metric={metric}
                   value={a.risk[metric]}
                   sample={sample}
-                  ratio={["sharpe", "sortino", "calmar"].includes(metric)}
-                  reason={a.performance.reason}
+                  ratio={['sharpe', 'sortino', 'calmar'].includes(metric)}
+                  reason={
+                    providerReason ??
+                    (metric === 'sortino'
+                      ? a.sortinoReason
+                      : metric === 'calmar'
+                        ? (a.performance.reason ?? a.riskReason)
+                        : a.riskReason)
+                  }
                 />
               ))}
               <AnalyticsMetric
                 metric="maxDrawdown"
                 value={a.drawdown?.max}
                 sample={sample}
+                reason={providerReason ?? a.performance.reason}
               />
               <AnalyticsMetric
                 metric="currentDrawdown"
                 value={a.drawdown?.current}
                 sample={sample}
+                reason={providerReason ?? a.performance.reason}
               />
             </div>
           </section>
@@ -187,14 +223,15 @@ export function Laboratory({
               label="Скользящая волатильность"
               format={pct}
               loading={c.loading}
-              reason={a.performance.reason}
+              reason={providerReason ?? a.riskReason}
             />
             <Formula
               name="Окно волатильности"
               formula="σ_window = stdev_sample(r_window) × √252"
             >
-              Нужно полное окно из {volWindow} доходностей. Участок до его
-              накопления не рисуется. Данные: {sample}.
+              Нужно полное окно из {volWindow} чистых доходностей. Участок до
+              накопления окна и окна, пересекающие исключённый trade/gap
+              интервал, не выдумываются. Данные: {sample}.
             </Formula>
           </section>
           <section className="card">
@@ -216,27 +253,27 @@ export function Laboratory({
               label="Скользящий Sharpe"
               format={(v) => v.toFixed(2)}
               loading={c.loading}
-              reason={a.performance.reason}
+              reason={providerReason ?? a.riskReason}
             />
             <Formula
               name="Окно Sharpe"
-              formula="(252mean(r_window) − Rf) / σ_window"
+              formula="Rf_daily=(1+Rf_annual)^(1/252)−1; Sharpe=252×mean(r−Rf_daily)/σ_annual"
             >
-              Полное окно {sharpeWindow} доходностей, Rf {c.rf}% в год. При
-              нулевой волатильности участок недоступен. Данные: {sample}.
+              Полное окно {sharpeWindow} чистых доходностей, Rf {c.rf}% в год.
+              При нулевой волатильности участок недоступен. Данные: {sample}.
             </Formula>
           </section>
           <section className="card">
             <h2>Исторический риск текущего состава · proxy</h2>
             <p className="caption">
-              Как сегодняшний состав портфеля вёл бы себя на прошлых
-              исторических ценах. Это модель, не фактическая доходность.
+              Как сегодняшний состав портфеля вёл бы себя на прошлых adjusted
+              close. Это модель, не фактическая доходность портфеля.
             </p>
             <div className="analytics-metrics">
               <AnalyticsMetric
                 metric="volatility"
                 value={a.proxy.volatility}
-                sample={`${a.proxy.dailyReturns.length} доходностей proxy`}
+                sample={`${a.proxy.dailyReturns.length} строго общих proxy-интервалов`}
               />
               <AnalyticsMetric
                 metric="sharpe"
@@ -244,19 +281,25 @@ export function Laboratory({
                 sample={`proxy · Rf ${c.rf}%`}
                 ratio
               />
+              <AnalyticsMetric
+                metric="maxDrawdown"
+                value={a.proxy.drawdown?.max}
+                sample="proxy value series"
+              />
             </div>
             <Formula
               name="Текущие количества"
               formula="V_proxy(t) = Σqᵢ(today)Pᵢ(t)"
             >
-              Фиксированные сегодняшние количества, общие даты цен. Модель не
-              учитывает реальные исторические сделки. Для коэффициентов минимум
-              20 доходностей.
+              Фиксированные сегодняшние количества. Доходности считаются только
+              на return-интервалах, где у каждого актива есть обе цены start/end;
+              пропуск не превращается в 0 и не создаёт мост через дату. Для
+              коэффициентов минимум 20 доходностей.
             </Formula>
           </section>
         </>
       )}
-      {tab === "diversification" && (
+      {tab === 'diversification' && (
         <>
           <section className="card">
             <div className="analytics-metrics">
@@ -264,18 +307,21 @@ export function Laboratory({
                 metric="covarianceVol"
                 value={a.currentRisk?.volatility}
                 sample={`${a.matrix?.observations ?? 0} общих интервалов`}
+                reason={!a.currentRisk ? currentRiskReason : null}
               />
               <AnalyticsMetric
                 metric="diversificationRatio"
                 value={a.currentRisk?.diversificationRatio}
                 sample={sample}
                 ratio
+                reason={!a.currentRisk ? currentRiskReason : null}
               />
               <AnalyticsMetric
                 metric="averageCorrelation"
                 value={a.averageCorrelation}
                 sample={sample}
                 ratio
+                reason={!a.matrix ? matrixReason : null}
               />
               <AnalyticsMetric
                 metric="hhi"
@@ -294,29 +340,20 @@ export function Laboratory({
           <CorrelationMatrix
             matrix={a.matrix}
             loading={c.loading}
-            reason={
-              a.history.missingSymbols.length
-                ? `Нет полной истории: ${a.history.missingSymbols.join(", ")}.`
-                : "Недостаточно общей истории или нулевая дисперсия."
-            }
+            reason={matrixReason}
           />
           <section className="card">
             <h2>Вклад в риск текущего состава</h2>
-            {!a.currentRisk && (
-              <p className="notice">
-                Нужны котировки всех позиций, общая история и ненулевая
-                волатильность портфеля.
-              </p>
-            )}
+            {!a.currentRisk && <p className="notice">{currentRiskReason}</p>}
             <div className="table-scroll">
               <table>
                 <thead>
                   <tr>
                     <th>Актив</th>
                     <th>Вес</th>
-                    <th>Вклад в риск</th>
-                    <th>MCR</th>
-                    <th>RC · σ год</th>
+                    <th>Доля variance</th>
+                    <th>MCR = (Σw)ᵢ</th>
+                    <th>RC = wᵢMCRᵢ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -325,33 +362,33 @@ export function Laboratory({
                       <td>{c.symbol}</td>
                       <td>{pct(c.weight)}</td>
                       <td>{pct(c.fraction)}</td>
-                      <td>{c.marginal.toFixed(4)}</td>
-                      <td>{pct(c.absolute)}</td>
+                      <td>{c.marginal.toFixed(6)}</td>
+                      <td>{c.absolute.toFixed(6)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <Formula
-              name="Разложение риска"
-              formula="MCRᵢ = (Σw)ᵢ/σp; RCᵢ = wᵢMCRᵢ; shareᵢ = RCᵢ/ΣRC"
+              name="Разложение variance"
+              formula="σp²=w′Σw; MCRᵢ=(Σw)ᵢ; RCᵢ=wᵢMCRᵢ; shareᵢ=RCᵢ/σp²"
             >
-              Годовая ковариация и текущие рыночные веса. Сумма RC равна
-              волатильности портфеля. Отрицательный вклад возможен у
-              хеджирующего актива. Данные: {a.matrix?.observations ?? 0} общих
-              интервалов.
+              Годовая covariance matrix и текущие рыночные веса. ΣRCᵢ = σp²,
+              а сумма долей RC равна 1 с численной погрешностью. Отрицательный
+              вклад возможен у хеджирующего актива. Данные:{' '}
+              {a.matrix?.observations ?? 0} общих интервалов.
             </Formula>
           </section>
         </>
       )}
-      {tab === "attribution" && (
+      {tab === 'attribution' && (
         <AttributionPanel
           analytics={a}
           currency={snapshot.portfolio.base_currency}
         />
       )}
-      {tab === "scenarios" && <ScenariosPanel snapshot={snapshot} />}
-      {tab === "benchmark" && <BenchmarkPanel controller={c} detailed />}
+      {tab === 'scenarios' && <ScenariosPanel snapshot={snapshot} />}
+      {tab === 'benchmark' && <BenchmarkPanel controller={c} detailed />}
     </>
   );
 }

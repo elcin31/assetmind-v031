@@ -35,6 +35,7 @@ import {
 } from "../src/math/attribution";
 import { scenarioValue, scenarioPreset } from "../src/math/scenarios";
 import { rollingMetric } from "../src/math/rolling";
+
 const tx = (
   id: string,
   date: string,
@@ -52,12 +53,14 @@ const tx = (
   timestamp: `${date}T12:00:00Z`,
   created_at: `${date}T13:00:00Z`,
 });
+
 const bars: HistoryBar[] = [
   { date: "2026-01-01", close: 100 },
   { date: "2026-01-02", close: 110 },
   { date: "2026-01-03", close: 120 },
   { date: "2026-01-04", close: 125 },
 ];
+
 const history = (transactions: Transaction[]) =>
   reconstructPortfolioHistory(
     transactions,
@@ -67,6 +70,7 @@ const history = (transactions: Transaction[]) =>
     ]),
     "2026-01-04",
   );
+
 const rs = Array.from({ length: 60 }, (_, i) => ((i % 5) - 2) / 100 + 0.001);
 const dated = (values: number[]) =>
   values.map((value, i) => ({
@@ -74,6 +78,7 @@ const dated = (values: number[]) =>
     startDate: new Date(Date.UTC(2025, 0, i + 1)).toISOString().slice(0, 10),
     date: new Date(Date.UTC(2025, 0, i + 2)).toISOString().slice(0, 10),
   }));
+
 describe("transaction-aware inventory", () => {
   it("uses buys before each date, multiple buys and partial sells, independent of input order", () => {
     const h = history([
@@ -86,6 +91,7 @@ describe("transaction-aware inventory", () => {
     expect(h.points[1].dailyReturn).toBeNull();
     expect(h.points[3].dailyReturn).toBeCloseTo(125 / 120 - 1);
   });
+
   it("excludes future transactions and reconstructs sold positions", () => {
     const h = history([
       tx("1", "2026-01-02", 10),
@@ -95,6 +101,7 @@ describe("transaction-aware inventory", () => {
     expect(h.points.map((p) => p.value)).toEqual([1100, 0, 0]);
     expect(h.points.at(-1)?.dailyReturn).toBeNull();
   });
+
   it("supports multiple symbols and backdated transactions", () => {
     expect(
       history([
@@ -103,6 +110,7 @@ describe("transaction-aware inventory", () => {
       ]).points.map((p) => p.value),
     ).toEqual([1000, 1650, 1800, 1875]);
   });
+
   it("uses timestamp, created_at and id ties like the position engine", () => {
     const buy = tx("a", "2026-01-01", 2);
     const sell = {
@@ -116,6 +124,7 @@ describe("transaction-aware inventory", () => {
         .points[0].value,
     ).toBe(100);
   });
+
   it("never future-fills, does not require B prices before B is owned, and leaves gaps unavailable", () => {
     const h = reconstructPortfolioHistory(
       [tx("a", "2026-01-01", 1), tx("b", "2026-01-03", 1, "BUY", "B")],
@@ -133,6 +142,7 @@ describe("transaction-aware inventory", () => {
     expect(h.missingSymbols).toEqual(["B"]);
     expect(h.points.at(-1)?.dailyReturn).toBeNull();
   });
+
   it("rejects corrupted inputs and invalid sells", () => {
     expect(history([tx("a", "2026-01-01", 1, "SELL")]).points).toEqual([]);
     expect(
@@ -143,6 +153,7 @@ describe("transaction-aware inventory", () => {
     ).toEqual([]);
   });
 });
+
 describe("performance and returns", () => {
   it("removes known end-period flows and preserves unknown flows", () => {
     expect(flowAdjustedReturn(100, 110, 0)).toBeCloseTo(0.1);
@@ -151,6 +162,7 @@ describe("performance and returns", () => {
     expect(flowAdjustedReturn(100, 150, null)).toBeNull();
     expect(flowAdjustedReturn(0, 100, 100)).toBeNull();
   });
+
   it("compounds returns, computes TWR and conservative CAGR", () => {
     expect(cumulativeReturn([0.1, -0.1])).toBeCloseTo(-0.01);
     expect(timeWeightedReturn([0.1, 0.2])).toBeCloseTo(0.32);
@@ -160,9 +172,12 @@ describe("performance and returns", () => {
     expect(cumulativeReturn([Infinity])).toBeNull();
     expect(cumulativeReturn([-1.1])).toBeNull();
   });
+
   it("does not combine returns across trades; supports safe no-trade subperiod", () => {
     const h = history([tx("1", "2026-01-01", 1), tx("2", "2026-01-03", 1)]);
-    expect(performanceMetrics(h.points).totalReturn).toBeNull();
+    const withTrade = performanceMetrics(h.points);
+    expect(withTrade.totalReturn).toBeNull();
+    expect(withTrade.riskReturns).toHaveLength(2);
     expect(performanceMetrics(h.points.slice(2)).totalReturn).toBeCloseTo(
       125 / 120 - 1,
     );
@@ -172,19 +187,23 @@ describe("performance and returns", () => {
     expect(p.bestDay).toBeCloseTo(0.1);
     expect(p.positiveDays).toBe(1);
   });
+
   it("rejects invalid price series and includes period baseline", () => {
     expect(datedReturns([...bars].reverse())).toEqual([]);
     expect(selectPeriod(bars, "YTD", "2026-01-04")).toEqual(bars);
   });
 });
+
 describe("drawdown episodes", () => {
   const series = (values: number[]) =>
     values.map((value, i) => ({
       date: `2026-01-${String(i + 1).padStart(2, "0")}`,
       value,
     }));
+
   it("handles no drawdown", () =>
     expect(drawdowns(series([100, 110, 110]))?.episodes).toEqual([]));
+
   it("identifies bottoms, recovery at equal high, and open episodes", () => {
     const d = drawdowns(series([100, 90, 80, 100, 95, 98]));
     expect(d?.max).toBeCloseTo(-0.2);
@@ -200,11 +219,13 @@ describe("drawdown episodes", () => {
     expect(d?.episodes[1].recoveryDate).toBeNull();
     expect(d?.current).toBeCloseTo(-0.02);
   });
+
   it("validates dates, order, zero starting value and nonfinite values", () => {
     expect(drawdowns(series([0, 10]))).toBeNull();
     expect(drawdowns(series([100, Infinity]))).toBeNull();
   });
 });
+
 describe("risk, correlation and covariance", () => {
   it("enforces minimums", () => {
     expect(volatility([0.1, -0.1])).toBeNull();
@@ -212,18 +233,20 @@ describe("risk, correlation and covariance", () => {
     expect(sharpeRatio([0.1])).toBeNull();
     expect(correlation([1, 2], [1, 2])).toBeNull();
   });
+
   it("has known downside, Sharpe, Sortino, Calmar and tail values", () => {
     const returns = Array.from({ length: 20 }, (_, i) =>
       i % 2 ? -0.01 : 0.03,
     );
-    expect(downsideDeviation(returns)).toBeCloseTo(Math.sqrt(0.00005 * 252));
+    expect(downsideDeviation(returns)).toBeCloseTo(Math.sqrt(0.0001 * 252));
     expect(sharpeRatio(returns)).toBeCloseTo(2.52 / volatility(returns)!);
-    expect(sortinoRatio(returns)).toBeCloseTo(2.52 / Math.sqrt(0.00005 * 252));
+    expect(sortinoRatio(returns)).toBeCloseTo(2.52 / Math.sqrt(0.0001 * 252));
     expect(sortinoRatio(Array(20).fill(0.01))).toBeNull();
     expect(calmarRatio(0.12, -0.2)).toBeCloseTo(0.6);
     expect(calmarRatio(0.12, 0)).toBeNull();
     expect(historicalTailRisk(returns)).toEqual({ var: 0.01, es: 0.01 });
   });
+
   it("handles perfect positive/negative and orthogonal series", () => {
     expect(correlation(rs, rs)).toBeCloseTo(1);
     expect(
@@ -243,17 +266,19 @@ describe("risk, correlation and covariance", () => {
       ]),
     ).toBe(0.5);
   });
+
   it("matches a manually evaluated two asset covariance portfolio", () => {
     expect(covariance([1, 2, 3], [2, 4, 6], 2)).toBe(2);
     const matrix = [
       [0.04, 0.006],
       [0.006, 0.09],
     ];
-    expect(portfolioVariance([0.6, 0.4], matrix)).toBeCloseTo(0.03168);
+    const variance = portfolioVariance([0.6, 0.4], matrix)!;
+    expect(variance).toBeCloseTo(0.03168);
     const result = riskContributions(["A", "B"], [0.6, 0.4], matrix)!;
     expect(
       result.contributions.reduce((s, c) => s + c.absolute, 0),
-    ).toBeCloseTo(Math.sqrt(0.03168));
+    ).toBeCloseTo(variance);
     expect(
       result.contributions.reduce((s, c) => s + c.fraction, 0),
     ).toBeCloseTo(1);
@@ -288,6 +313,7 @@ describe("risk, correlation and covariance", () => {
       ),
     ).toBeNull();
   });
+
   it("aligns matching return intervals and requires history for every holding", () => {
     let price = 100;
     const prices = [
@@ -308,6 +334,7 @@ describe("risk, correlation and covariance", () => {
     expect(matrix?.correlation[0][1]).toBeCloseTo(1);
     expect(correlationMatrix(["A", "C"], new Map([["A", prices]]))).toBeNull();
   });
+
   it("leaves rolling warm-up empty", () => {
     const roll = rollingMetric(dated(rs), 20, "volatility");
     expect(roll[18].value).toBeNull();
@@ -317,6 +344,7 @@ describe("risk, correlation and covariance", () => {
     ).toBe(true);
   });
 });
+
 describe("benchmark, attribution and scenarios", () => {
   it("identical portfolio has beta 1, alpha 0, TE 0 and undefined IR", () => {
     const result = benchmarkMetrics(dated(rs), dated(rs), 0.04);
@@ -327,10 +355,12 @@ describe("benchmark, attribution and scenarios", () => {
     expect(result.comparison[0].portfolio).toBe(100);
     expect(result.portfolioReturn).toBeCloseTo(result.benchmarkReturn!);
   });
+
   it("does not compound an incomplete comparison", () =>
     expect(benchmarkMetrics(dated(rs), dated(rs).slice(1)).comparison).toEqual(
       [],
     ));
+
   it("links contribution to total compound return", () => {
     const contributions = returnAttribution([
       { weights: [0.5, 0.5], returns: [0.1, -0.02] },
@@ -343,6 +373,7 @@ describe("benchmark, attribution and scenarios", () => {
     expect(positionReturn(120, 100)).toBeCloseTo(0.2);
     expect(positionReturn(100, 0)).toBeNull();
   });
+
   it("includes closed-symbol realized P&L without changing WAC", () => {
     const rows = pnlAttribution(
       [
@@ -354,6 +385,7 @@ describe("benchmark, attribution and scenarios", () => {
     expect(rows[0].totalPnL).toBe(40);
     expect(rows[0].unrealizedPnL).toBe(0);
   });
+
   it("uses explicit shocks, selected preset membership and guards missing values", () => {
     const result = scenarioValue(
       [

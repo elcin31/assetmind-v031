@@ -1,47 +1,68 @@
-import { useEffect, useMemo, useState } from "react";
-import type { HistoryBar, PortfolioSnapshot } from "../types";
-import type { BenchmarkSymbol, Period } from "../types/analytics";
-import { calculatePortfolioAnalytics } from "../math/analytics";
-import { loadHistory } from "./historyCache";
+import { useEffect, useMemo, useState } from 'react';
+import type { HistoryBar, PortfolioSnapshot } from '../types';
+import type { BenchmarkSymbol, Period } from '../types/analytics';
+import { calculatePortfolioAnalytics } from '../math/analytics';
+import {
+  clearHistoryCache,
+  HistoryRequestError,
+  loadHistory,
+  type HistoryRequestIssue,
+} from './historyCache';
+
 interface HistoryResult {
   key: string;
   histories: Map<string, HistoryBar[]>;
   errors: string[];
+  issues: HistoryRequestIssue[];
 }
+
 export function usePortfolioAnalytics(snapshot: PortfolioSnapshot) {
-  const [period, setPeriod] = useState<Period>("1Y");
-  const [benchmark, setBenchmark] = useState<BenchmarkSymbol>("SPY");
+  const [period, setPeriod] = useState<Period>('1Y');
+  const [benchmark, setBenchmark] = useState<BenchmarkSymbol>('SPY');
   const [rf, setRf] = useState(0);
   const [mar, setMar] = useState(0);
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<HistoryResult | null>(null);
   const symbolsKey = [
-    ...new Set([...snapshot.transactions.map((t) => t.symbol), benchmark]),
+    ...new Set([
+      ...snapshot.transactions.map((t) => t.symbol.trim().toUpperCase()),
+      benchmark,
+    ]),
   ]
     .sort()
-    .join(",");
+    .join(',');
   const key = `${symbolsKey}:${retry}`;
+
   useEffect(() => {
     let active = true;
-    const symbols = symbolsKey.split(",").filter(Boolean);
+    const symbols = symbolsKey.split(',').filter(Boolean);
     void Promise.allSettled(symbols.map((symbol) => loadHistory(symbol))).then(
       (results) => {
         const histories = new Map<string, HistoryBar[]>();
         const errors: string[] = [];
+        const issues: HistoryRequestIssue[] = [];
         results.forEach((r, i) => {
-          if (r.status === "fulfilled") histories.set(symbols[i], r.value);
-          else
+          if (r.status === 'fulfilled') {
+            histories.set(symbols[i], r.value);
+            return;
+          }
+          if (r.reason instanceof HistoryRequestError) {
+            errors.push(r.reason.message);
+            issues.push(r.reason.issue);
+          } else {
             errors.push(
-              `${symbols[i]}: ${r.reason instanceof Error ? r.reason.message : "история недоступна"}`,
+              `${symbols[i]}: ${r.reason instanceof Error ? r.reason.message : 'история недоступна'}`,
             );
+          }
         });
-        if (active) setResult({ key, histories, errors });
+        if (active) setResult({ key, histories, errors, issues });
       },
     );
     return () => {
       active = false;
     };
   }, [key, symbolsKey]);
+
   const current = result?.key === key ? result : null;
   const asOf = new Date().toISOString().slice(0, 10);
   const analytics = useMemo(
@@ -57,6 +78,7 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot) {
       ),
     [snapshot, current, benchmark, period, asOf, rf, mar],
   );
+
   return {
     analytics,
     period,
@@ -69,7 +91,12 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot) {
     setMar,
     loading: !current,
     errors: current?.errors ?? [],
-    retry: () => setRetry((n) => n + 1),
+    issues: current?.issues ?? [],
+    retry: () => {
+      for (const symbol of symbolsKey.split(',').filter(Boolean)) clearHistoryCache(symbol);
+      setRetry((n) => n + 1);
+    },
   };
 }
+
 export type AnalyticsController = ReturnType<typeof usePortfolioAnalytics>;

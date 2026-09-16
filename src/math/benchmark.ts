@@ -1,6 +1,7 @@
-import type { BenchmarkMetrics, DatedReturn } from "../types/analytics";
-import { cumulativeReturn } from "./performance";
+import type { BenchmarkMetrics, DatedReturn } from '../types/analytics';
+import { cumulativeReturn } from './performance';
 import {
+  annualRateToDaily,
   covariance,
   EPSILON,
   finite,
@@ -9,7 +10,8 @@ import {
   safeRatio,
   validDate,
   volatility,
-} from "./statistics";
+} from './statistics';
+
 export function alignReturns(a: DatedReturn[], b: DatedReturn[]) {
   const clean = (rs: DatedReturn[]) =>
     rs.every(
@@ -37,10 +39,11 @@ export function alignReturns(a: DatedReturn[], b: DatedReturn[]) {
       : [];
   });
 }
+
 export function benchmarkMetrics(
   portfolio: DatedReturn[],
   benchmark: DatedReturn[],
-  rf = 0,
+  annualRf = 0,
 ): BenchmarkMetrics {
   const aligned = alignReturns(portfolio, benchmark);
   const p = aligned.map((r) => r.portfolio);
@@ -52,17 +55,21 @@ export function benchmarkMetrics(
       : null;
   const pm = mean(p);
   const bm = mean(b);
+  const dailyRf = annualRateToDaily(annualRf);
   const active = p.map((r, i) => r - b[i]);
   const trackingError = volatility(active);
   const alpha =
-    beta === null || pm === null || bm === null || !Number.isFinite(rf)
+    beta === null || pm === null || bm === null || dailyRf === null
       ? null
-      : finite(pm * 252 - (rf + beta * (bm * 252 - rf)));
+      : finite((pm - dailyRf - beta * (bm - dailyRf)) * 252);
   const averageActive = mean(active);
   const informationRatio =
     averageActive === null
       ? null
       : safeRatio(averageActive * 252, trackingError);
+
+  // Cumulative benchmark comparison is only valid across a continuous chain.
+  // Regression/risk statistics may still use clean aligned fragments.
   const continuous =
     aligned.length > 0 &&
     aligned.length === portfolio.length &&
@@ -84,11 +91,13 @@ export function benchmarkMetrics(
   )
     ? comparison
     : [];
+
   return {
     beta,
     alpha,
     trackingError: p.length >= MIN_OBSERVATIONS ? trackingError : null,
-    informationRatio,
+    informationRatio:
+      p.length >= MIN_OBSERVATIONS ? informationRatio : null,
     portfolioReturn: continuous ? cumulativeReturn(p) : null,
     benchmarkReturn: continuous ? cumulativeReturn(b) : null,
     observations: aligned.length,

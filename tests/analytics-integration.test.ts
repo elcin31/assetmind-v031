@@ -13,6 +13,7 @@ import { downsideDeviation } from "../src/math/downside";
 import { benchmarkMetrics } from "../src/math/benchmark";
 import { scenarioValue } from "../src/math/scenarios";
 import { portfolioVariance } from "../src/math/covariance";
+
 const transaction: Transaction = {
   id: "buy",
   portfolio_id: "p",
@@ -32,6 +33,7 @@ const histories = new Map([
   ["A", series],
   ["SPY", series],
 ]);
+
 function snapshot(
   transactions = [transaction],
   quoted = true,
@@ -63,6 +65,7 @@ function snapshot(
     ),
   };
 }
+
 describe("analytics data model", () => {
   it("connects inventory, performance, attribution and benchmark without future observations", () => {
     const a = calculatePortfolioAnalytics(
@@ -90,7 +93,8 @@ describe("analytics data model", () => {
     );
     expect(a.proxy.volatility).not.toBeNull();
   });
-  it("trades block actual return metrics while risk proxy remains explicitly available", () => {
+
+  it("trades block cumulative performance while clean risk returns remain available", () => {
     const a = calculatePortfolioAnalytics(
       snapshot([
         transaction,
@@ -105,13 +109,18 @@ describe("analytics data model", () => {
     );
     expect(a.performance.totalReturn).toBeNull();
     expect(a.performance.twr).toBeNull();
-    expect(a.risk.sharpe).toBeNull();
+    expect(a.performance.cagr).toBeNull();
+    expect(a.performance.riskReturns.length).toBeGreaterThan(20);
+    expect(a.risk.volatility).not.toBeNull();
+    expect(a.risk.sharpe).not.toBeNull();
     expect(a.drawdown).toBeNull();
     expect(a.contributions).toEqual([]);
+    expect(a.benchmark.observations).toBeGreaterThan(20);
     expect(a.benchmark.comparison).toEqual([]);
     expect(a.proxy.volatility).not.toBeNull();
     expect(a.valueDrawdown).not.toBeNull();
   });
+
   it("does not turn incomplete current quotes into fake weights or scenario values", () => {
     const a = calculatePortfolioAnalytics(
       snapshot([transaction], false),
@@ -127,6 +136,7 @@ describe("analytics data model", () => {
     expect(a.pnl[0].totalPnL).toBeNull();
     expect(a.performance.totalReturn).not.toBeNull();
   });
+
   it("requires a pre-January baseline for YTD and preserves unavailable months", () => {
     const a = calculatePortfolioAnalytics(
       snapshot(),
@@ -155,6 +165,7 @@ describe("analytics data model", () => {
       ])[0].ytd,
     ).toBeNull();
   });
+
   it("rejects nonfinite history inputs and propagates cursor unavailability", () => {
     const p = {
       date: "2025-01-01",
@@ -188,21 +199,21 @@ describe("analytics data model", () => {
     }
   });
 });
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
+
 describe("public history cache", () => {
   it("deduplicates concurrent consumers and caches the normalized response", async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          symbol: "CACHE",
-          period: "5y",
-          bars: [...series].reverse(),
-        }),
-      });
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        symbol: "CACHE",
+        period: "5y",
+        bars: [...series].reverse(),
+      }),
+    });
     vi.stubGlobal("fetch", fetch);
     const [a, b] = await Promise.all([
       loadHistory("CACHE"),
@@ -212,6 +223,7 @@ describe("public history cache", () => {
     expect(a[0].date).toBe(series[0].date);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+
   it("evicts errors for retry and rejects symbol mismatches", async () => {
     const fetch = vi
       .fn()
@@ -232,6 +244,9 @@ it('never converts an overflowing denominator or annual covariance into a UI num
   const { correlationMatrix } = await import('../src/math/correlation');
   expect(safeRatio(1, Infinity)).toBeNull();
   expect(safeRatio(NaN, 1)).toBeNull();
-  const extreme = Array.from({ length: 45 }, (_, i) => ({ date: new Date(Date.UTC(2025, 0, i + 1)).toISOString().slice(0, 10), close: i % 2 ? 1e155 : 1 }));
+  const extreme = Array.from({ length: 45 }, (_, i) => ({
+    date: new Date(Date.UTC(2025, 0, i + 1)).toISOString().slice(0, 10),
+    close: i % 2 ? 1e155 : 1,
+  }));
   expect(correlationMatrix(['A'], new Map([['A', extreme]]))).toBeNull();
 });
