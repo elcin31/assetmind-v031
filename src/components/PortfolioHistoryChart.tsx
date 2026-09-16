@@ -1,9 +1,10 @@
-import type { AnalyticsController } from "../analytics/usePortfolioAnalytics";
-import type { Period } from "../types/analytics";
-import { AnalyticsChart } from "./AnalyticsChart";
-import { Formula } from "./AnalyticsMetric";
-import { pct } from "../utils/analyticsFormat";
-import { formatCurrency } from "../utils/format";
+import type { AnalyticsController } from '../analytics/usePortfolioAnalytics';
+import type { Period } from '../types/analytics';
+import { AnalyticsChart } from './AnalyticsChart';
+import { Formula } from './AnalyticsMetric';
+import { pct } from '../utils/analyticsFormat';
+import { formatCurrency } from '../utils/format';
+
 export function PeriodSelector({
   controller: c,
 }: {
@@ -11,7 +12,7 @@ export function PeriodSelector({
 }) {
   return (
     <div className="chart-periods" role="group" aria-label="Период аналитики">
-      {(["1M", "3M", "6M", "YTD", "1Y", "ALL"] as Period[]).map((p) => (
+      {(['1M', '3M', '6M', 'YTD', '1Y', 'ALL'] as Period[]).map((p) => (
         <button
           key={p}
           aria-pressed={c.period === p}
@@ -23,6 +24,7 @@ export function PeriodSelector({
     </div>
   );
 }
+
 export function PortfolioHistoryChart({
   controller: c,
   currency,
@@ -49,18 +51,18 @@ export function PortfolioHistoryChart({
         label="Историческая стоимость активов"
         format={(v) => formatCurrency(v, currency)}
         loading={c.loading}
-        reason={a.history.reason}
+        reason={c.errors.length ? c.errors.join('; ') : a.history.reason}
       />
       <p className="caption">
-        Стоимость позиций, восстановленная по истории операций. Денежный остаток
-        не учтён — это не полная стоимость счёта. ALL: вся доступная история
-        API, максимум 5 лет. Данные: {a.sample}.
+        Стоимость позиций, восстановленная по истории операций и adjusted close.
+        Денежный остаток не учтён, поэтому это не полная стоимость счёта. ALL:
+        вся доступная API-история, максимум 5 лет. Данные: {a.sample}.
       </p>
-      {a.history.missingSymbols.length > 0 && (
+      {a.history.missingSymbols.length > 0 && !c.errors.length && (
         <p className="notice">
-          Неполная история: {a.history.missingSymbols.join(", ")}. Пропущено
-          дат: {a.history.missingDates.length}; стоимость неполного набора
-          позиций не показана.
+          Неполная рыночная история: {a.history.missingSymbols.join(', ')}.
+          Пропущено дат: {a.history.missingDates.length}; стоимость неполного
+          набора позиций не показана.
         </p>
       )}
       <Formula
@@ -68,10 +70,12 @@ export function PortfolioHistoryChart({
         formula="qᵢ(t) = Σ BUYᵢ − Σ SELLᵢ; V(t) = Σqᵢ(t)Pᵢ(t); rₜ = (Vₜ − Vₜ₋₁ − CFₜ)/Vₜ₋₁"
       >
         Операции упорядочены по timestamp, created_at, id. Оценка на конец дня
-        UTC. Цены только на соответствующую дату, без подстановок из будущего.
-        BUY/SELL не определяют внешний поток CF; интервалы со сделками не
-        используются как фактическая доходность. Не учтены дивиденды, комиссии,
-        FX и корпоративные действия.
+        UTC. Pᵢ(t) — нормализованный adjusted close только соответствующей
+        торговой даты, без forward fill. BUY/SELL не определяют внешний поток
+        CF; trade-интервалы не используются как cumulative investment return.
+        Adjusted close последовательно отражает provider adjustments для split и
+        dividend events, но отдельного cash/fee/FX ledger и отдельного split
+        ledger для количества акций пока нет.
       </Formula>
     </section>
   );
