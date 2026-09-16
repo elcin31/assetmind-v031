@@ -27,7 +27,8 @@ export function DataQualityPanel({
   const historyNotStarted = Boolean(firstTransaction && lastProxyDate && firstTransaction > lastProxyDate && cleanIntervals === 0);
   const providerPartial = c.errors.length > 0;
   const valuationPartial = !snapshot.valuation.complete;
-  const needsAttention = providerPartial || valuationPartial || historyNotStarted || (snapshot.transactions.length > 0 && cleanIntervals < 20);
+  const cashIncomplete = Boolean(snapshot.cashLedger && !snapshot.cashLedger.complete && (snapshot.transactions.length || snapshot.cashEvents?.length));
+  const needsAttention = providerPartial || valuationPartial || cashIncomplete || historyNotStarted || (snapshot.transactions.length > 0 && cleanIntervals < 20);
 
   return (
     <section className="card data-quality-card">
@@ -49,10 +50,12 @@ export function DataQualityPanel({
           Для большинства risk-метрик нужно минимум 20 чистых однодневных интервалов. Сейчас доступно {cleanIntervals}/20. BUY/SELL и неизвестные ценовые разрывы не подменяются нулевой доходностью.
         </p>
       )}
+      {cashIncomplete && <p className="notice">{snapshot.cashLedger?.reason}</p>}
       {providerPartial && <p className="notice">История поставщика загружена частично: {c.errors.join('; ')}</p>}
 
       <div className="data-quality-grid">
         <div><span>Рыночная оценка</span><b>{snapshot.valuation.pricedPositions}/{snapshot.valuation.totalPositions} позиций</b></div>
+        <div><span>Cash ledger</span><b>{snapshot.cashLedger?.complete ? 'reconciled' : 'incomplete'}</b></div>
         <div><span>Первая сделка</span><b>{day(firstTransaction)}</b></div>
         <div><span>Чистые portfolio returns</span><b>{cleanIntervals}</b></div>
         <div><span>Общие интервалы активов</span><b>{commonIntervals}</b></div>

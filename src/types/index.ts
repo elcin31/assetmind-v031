@@ -1,4 +1,5 @@
 export type TransactionType = 'BUY' | 'SELL';
+export type CashEventKind = 'DEPOSIT' | 'WITHDRAWAL' | 'DIVIDEND' | 'FEE';
 
 export interface Transaction {
   id: string;
@@ -11,6 +12,41 @@ export interface Transaction {
   timestamp: string; // ISO
   created_at: string;
   client_request_id?: string;
+}
+
+export interface CashEvent {
+  id: string;
+  portfolio_id: string;
+  kind: CashEventKind;
+  amount: number;
+  currency: string;
+  timestamp: string;
+  created_at: string;
+  symbol?: string;
+  client_request_id?: string;
+}
+
+export interface TargetAllocation {
+  symbol: string;
+  /** Target fraction of total account value, from 0 to 1. Unallocated weight is CASH. */
+  weight: number;
+}
+
+export interface CashLedgerSummary {
+  complete: boolean;
+  balance: number;
+  minimumBalance: number;
+  reason: string | null;
+  deposits: number;
+  withdrawals: number;
+  dividends: number;
+  fees: number;
+}
+
+export interface MoneyWeightedMetrics {
+  xirr: number | null;
+  cashFlowCount: number;
+  reason: string | null;
 }
 
 export interface Portfolio {
@@ -76,6 +112,13 @@ export interface PortfolioSnapshot {
     totalPositions: number;
     unpricedSymbols: string[];
   };
+  /** P1 capital layer. Optional for compatibility with older snapshots/tests. */
+  cashEvents?: CashEvent[];
+  targetAllocation?: TargetAllocation[];
+  cashLedger?: CashLedgerSummary;
+  /** Securities plus reconciled cash. Null when either valuation or cash ledger is incomplete. */
+  accountValue?: number | null;
+  moneyWeighted?: MoneyWeightedMetrics;
   risk?: {
     volatility: number | null;
     sharpe: number | null;
