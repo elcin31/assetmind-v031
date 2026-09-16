@@ -83,7 +83,9 @@ export function loadHistory(
         { signal: AbortSignal.timeout(12_000), cache: 'no-store' },
       );
     } catch (error) {
-      const timeout = error instanceof Error && error.name === 'TimeoutError';
+      const timeout =
+        error instanceof Error &&
+        (error.name === 'TimeoutError' || error.name === 'AbortError');
       throw new HistoryRequestError({
         symbol: normalizedSymbol,
         code: timeout ? 'PROVIDER_TIMEOUT' : 'NETWORK_ERROR',
@@ -123,7 +125,8 @@ export function loadHistory(
         provider,
         status: response.status,
         upstreamStatus,
-        retryable: data.retryable ?? response.status === 429 || response.status >= 500,
+        retryable:
+          data.retryable ?? (response.status === 429 || response.status >= 500),
         message: issueMessage(normalizedSymbol, code, provider, upstreamStatus),
       });
     }
