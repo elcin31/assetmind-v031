@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './index.css';
-import type { PortfolioSnapshot, Quote, HistoryBar } from './types';
+import type { PortfolioSnapshot, Quote } from './types';
 import { PortfolioScreen } from './pages/PortfolioScreen';
 import { AuthLoadingScreen, LoginScreen } from './pages/LoginScreen';
 import { useAuth } from './auth/AuthContext';
-import { buildPortfolioValueSeries } from './math/returns';
-import { annualizedVolatility } from './math/volatility';
-import { calculateSharpe } from './math/sharpe';
 import { enrichPositionsWithQuotes } from './math/pnl';
 import { exportPortfolio, getPortfolioStorageKey, importPortfolio, readPortfolio } from './storage/portfolio';
 
@@ -32,36 +29,18 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
     try {
       const data = readPortfolio(userId);
       const base = enrichPositionsWithQuotes(data.transactions, new Map());
-      let risk: PortfolioSnapshot['risk'] = { available: false, volatility: null, sharpe: null, reason: base.positions.length ? 'insufficient_history' : 'empty_portfolio' };
-      setSnapshot({ ...data, ...base, risk });
+      setSnapshot({ ...data, ...base });
       setLoading(base.positions.length > 0);
       const quotes = new Map<string, Quote>();
-      const history = new Map<string, HistoryBar[]>();
-      await Promise.all(base.positions.flatMap(({ symbol }) => [(async () => {
+      await Promise.all(base.positions.map(async ({ symbol }) => {
         try {
           const res = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { signal: AbortSignal.timeout(6000) });
           if (!res.ok) return;
           const q = await res.json();
           if (q.symbol === symbol && Number.isFinite(q.price) && q.price > 0) quotes.set(symbol, q);
         } catch { /* Market data is optional; local holdings remain usable offline. */ }
-      })(), (async () => {
-        try {
-          const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&period=1y`, { signal: AbortSignal.timeout(6000) });
-          if (!res.ok) return;
-          const data = await res.json();
-          if (Array.isArray(data.bars) && data.bars.every((b: HistoryBar) => typeof b.date === 'string' && Number.isFinite(b.close) && b.close > 0)) history.set(symbol, data.bars);
-        } catch { /* Optional history data. */ }
-      })()]));
-      let historySeries: PortfolioSnapshot['history'];
-      if (base.positions.length) {
-        const series = buildPortfolioValueSeries(base.positions, history);
-        if (series.available) {
-          historySeries = { dates: series.dates, values: series.values, dailyReturns: series.dailyReturns };
-          const volatility = annualizedVolatility(series.dailyReturns);
-          risk = { available: volatility !== null, volatility, sharpe: calculateSharpe(series.dailyReturns, volatility, 0), reason: volatility === null ? 'insufficient_history' : undefined };
-        }
-      }
-      if (run === generation.current) setSnapshot({ ...data, ...enrichPositionsWithQuotes(data.transactions, quotes), risk, history: historySeries });
+      }));
+      if (run === generation.current) setSnapshot({ ...data, ...enrichPositionsWithQuotes(data.transactions, quotes) });
     } catch (err) {
       if (run === generation.current) { setSnapshot(null); setError(err instanceof Error ? err.message : 'Could not read portfolio'); }
     } finally { if (run === generation.current) setLoading(false); }
