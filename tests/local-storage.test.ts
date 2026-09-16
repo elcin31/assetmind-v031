@@ -1,4 +1,7 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
+
+vi.mock('../src/auth/supabase', () => ({ supabase: null }));
+
 import { addTransaction, deleteTransaction, getPortfolioStorageKey, importPortfolio, LEGACY_STORAGE_KEY, readPortfolio, updateTransaction } from '../src/storage/portfolio';
 
 let values: Map<string, string>;
