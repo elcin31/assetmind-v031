@@ -1,27 +1,37 @@
-import { downsideDeviation } from "./downside";
+import { downsideDeviation } from './downside';
 import {
+  annualRateToDaily,
   finite,
   mean,
   MIN_OBSERVATIONS,
   safeRatio,
   valid,
   volatility,
-} from "./statistics";
-export function sharpeRatio(returns: number[], rf = 0): number | null {
-  const average = mean(returns);
-  return average === null || !Number.isFinite(rf) || returns.some((r) => r < -1)
+} from './statistics';
+
+export function sharpeRatio(returns: number[], annualRf = 0): number | null {
+  if (returns.some((r) => r < -1)) return null;
+  const dailyRf = annualRateToDaily(annualRf);
+  if (dailyRf === null) return null;
+  const averageExcess = mean(returns.map((r) => r - dailyRf));
+  return averageExcess === null
     ? null
-    : safeRatio(average * 252 - rf, volatility(returns));
+    : safeRatio(averageExcess * 252, volatility(returns));
 }
+
 export function sortinoRatio(returns: number[], annualMar = 0): number | null {
-  const average = mean(returns);
-  return average === null
+  if (returns.some((r) => r < -1)) return null;
+  const dailyMar = annualRateToDaily(annualMar);
+  if (dailyMar === null) return null;
+  const averageExcess = mean(returns.map((r) => r - dailyMar));
+  return averageExcess === null
     ? null
     : safeRatio(
-        average * 252 - annualMar,
-        downsideDeviation(returns, annualMar / 252),
+        averageExcess * 252,
+        downsideDeviation(returns, dailyMar),
       );
 }
+
 export function calmarRatio(
   growth: number | null,
   maxDrawdown: number | null,
@@ -30,6 +40,7 @@ export function calmarRatio(
     ? null
     : safeRatio(growth, Math.abs(maxDrawdown));
 }
+
 export function historicalTailRisk(returns: number[], confidence = 0.95) {
   if (
     !valid(returns, MIN_OBSERVATIONS) ||
