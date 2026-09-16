@@ -1,13 +1,19 @@
 /**
  * Server-only market data abstraction.
- * Current provider: Finnhub.
+ *
+ * Quote/search remain on Finnhub. Historical analytics use Yahoo adjusted close
+ * because the currently configured Finnhub account does not reliably expose
+ * stock/candle. Finnhub history can still be probed explicitly for diagnostics.
  */
 
 import { searchInstruments as fallbackSearch } from '../src/data/instruments.js';
 import type { HistoryBar, Quote, SearchResult } from '../src/types';
+import { normalizePriceHistory } from '../src/utils/priceHistory.js';
 
 const FINNHUB_BASE = 'https://finnhub.io/api/v1';
+const YAHOO_CHART_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart';
 const PROVIDER_TIMEOUT_MS = 8_000;
+const HISTORY_TTL_MS = 15 * 60_000;
 
 interface CacheEntry<T> {
   expiresAt: number;
@@ -16,7 +22,66 @@ interface CacheEntry<T> {
 
 const searchCache = new Map<string, CacheEntry<SearchResult[]>>();
 const quoteCache = new Map<string, CacheEntry<Quote | null>>();
-const historyCache = new Map<string, CacheEntry<HistoryBar[]>>();
+const historyCache = new Map<string, CacheEntry<HistoryResult>>();
+
+export type HistoryPeriod = '1m' | '3m' | '6m' | '1y' | '2y' | '5y';
+export type HistoryProvider = 'finnhub' | 'yahoo';
+export type HistoryPriceType = 'close' | 'adjusted';
+export type MarketDataErrorCode =
+  | 'PROVIDER_AUTHENTICATION'
+  | 'PROVIDER_FORBIDDEN'
+  | 'PROVIDER_RATE_LIMIT'
+  | 'PROVIDER_HTTP'
+  | 'PROVIDER_TIMEOUT'
+  | 'PROVIDER_MALFORMED_RESPONSE'
+  | 'PROVIDER_EMPTY_HISTORY'
+  | 'SYMBOL_NOT_FOUND';
+
+export interface ProviderFailure {
+  provider: HistoryProvider;
+  code: MarketDataErrorCode;
+  upstreamStatus: number | null;
+  retryable: boolean;
+  message: string;
+}
+
+export interface HistoryResult {
+  bars: HistoryBar[];
+  provider: HistoryProvider;
+  priceType: HistoryPriceType;
+}
+
+export class MarketDataProviderError extends Error {
+  readonly provider: HistoryProvider;
+  readonly code: MarketDataErrorCode;
+  readonly upstreamStatus: number | null;
+  readonly retryable: boolean;
+
+  constructor(
+    provider: HistoryProvider,
+    code: MarketDataErrorCode,
+    message: string,
+    options: { upstreamStatus?: number | null; retryable?: boolean } = {},
+  ) {
+    super(message);
+    this.name = 'MarketDataProviderError';
+    this.provider = provider;
+    this.code = code;
+    this.upstreamStatus = options.upstreamStatus ?? null;
+    this.retryable = options.retryable ?? false;
+  }
+}
+
+export function providerFailure(error: unknown): ProviderFailure | null {
+  if (!(error instanceof MarketDataProviderError)) return null;
+  return {
+    provider: error.provider,
+    code: error.code,
+    upstreamStatus: error.upstreamStatus,
+    retryable: error.retryable,
+    message: error.message,
+  };
+}
 
 function getApiKey(): string {
   const key = process.env.FINNHUB_API_KEY;
@@ -38,14 +103,23 @@ function writeCache<T>(
   cache: Map<string, CacheEntry<T>>,
   key: string,
   value: T,
-  ttlMs: number
+  ttlMs: number,
 ): T {
   cache.set(key, { value, expiresAt: Date.now() + ttlMs });
   return value;
 }
 
-function providerSignal(): AbortSignal {
-  return AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
+async function fetchWithTimeout(url: string): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'AssetMind/0.1 historical-market-data' },
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function search(query: string): Promise<SearchResult[]> {
@@ -59,7 +133,7 @@ export async function search(query: string): Promise<SearchResult[]> {
   try {
     const key = getApiKey();
     const url = `${FINNHUB_BASE}/search?q=${encodeURIComponent(q)}&token=${key}`;
-    const res = await fetch(url, { signal: providerSignal() });
+    const res = await fetchWithTimeout(url);
     if (!res.ok) throw new Error(`Finnhub search HTTP ${res.status}`);
 
     const data = (await res.json()) as {
@@ -93,7 +167,7 @@ export async function search(query: string): Promise<SearchResult[]> {
       searchCache,
       cacheKey,
       normalized.length > 0 ? normalized : fallbackSearch(q),
-      60_000
+      60_000,
     );
   } catch {
     return writeCache(searchCache, cacheKey, fallbackSearch(q), 15_000);
@@ -111,7 +185,7 @@ export async function quote(symbol: string): Promise<Quote | null> {
 
   try {
     const url = `${FINNHUB_BASE}/quote?symbol=${encodeURIComponent(sym)}&token=${key}`;
-    const res = await fetch(url, { signal: providerSignal() });
+    const res = await fetchWithTimeout(url);
     if (!res.ok) return writeCache(quoteCache, sym, null, 5_000);
 
     const data = (await res.json()) as {
@@ -135,82 +209,310 @@ export async function quote(symbol: string): Promise<Quote | null> {
         changePercent: data.dp ?? 0,
         timestamp: data.t ?? Math.floor(Date.now() / 1000),
       },
-      15_000
+      15_000,
     );
   } catch {
     return writeCache(quoteCache, sym, null, 5_000);
   }
 }
 
-export type HistoryPeriod = '1m' | '3m' | '6m' | '1y' | '2y' | '5y';
+function utcDayStart(value = Date.now()): Date {
+  const d = new Date(value);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
 
-function periodToSeconds(period: HistoryPeriod): number {
-  const day = 86_400;
+export function historyBounds(period: HistoryPeriod, now = Date.now()) {
+  // Exclude the current UTC day so analytics never consume an unfinished daily bar.
+  const endExclusive = utcDayStart(now);
+  const start = new Date(endExclusive);
   switch (period) {
     case '1m':
-      return 30 * day;
+      start.setUTCMonth(start.getUTCMonth() - 1);
+      break;
     case '3m':
-      return 90 * day;
+      start.setUTCMonth(start.getUTCMonth() - 3);
+      break;
     case '6m':
-      return 180 * day;
+      start.setUTCMonth(start.getUTCMonth() - 6);
+      break;
     case '1y':
-      return 365 * day;
+      start.setUTCFullYear(start.getUTCFullYear() - 1);
+      break;
     case '2y':
-      return 730 * day;
+      start.setUTCFullYear(start.getUTCFullYear() - 2);
+      break;
     case '5y':
-      return 1_825 * day;
+      start.setUTCFullYear(start.getUTCFullYear() - 5);
+      break;
+  }
+  return {
+    fromSeconds: Math.floor(start.getTime() / 1000),
+    toExclusiveSeconds: Math.floor(endExclusive.getTime() / 1000),
+    lastAllowedDate: new Date(endExclusive.getTime() - 1).toISOString().slice(0, 10),
+  };
+}
+
+function providerHttpError(
+  provider: HistoryProvider,
+  status: number,
+  detail?: string,
+): MarketDataProviderError {
+  const suffix = detail ? `: ${detail.slice(0, 160)}` : '';
+  if (status === 401)
+    return new MarketDataProviderError(
+      provider,
+      'PROVIDER_AUTHENTICATION',
+      `${provider} authentication failed${suffix}`,
+      { upstreamStatus: status, retryable: false },
+    );
+  if (status === 403)
+    return new MarketDataProviderError(
+      provider,
+      'PROVIDER_FORBIDDEN',
+      `${provider} denied historical data access${suffix}`,
+      { upstreamStatus: status, retryable: false },
+    );
+  if (status === 429)
+    return new MarketDataProviderError(
+      provider,
+      'PROVIDER_RATE_LIMIT',
+      `${provider} historical data rate limit reached${suffix}`,
+      { upstreamStatus: status, retryable: true },
+    );
+  return new MarketDataProviderError(
+    provider,
+    'PROVIDER_HTTP',
+    `${provider} historical data HTTP ${status}${suffix}`,
+    { upstreamStatus: status, retryable: status >= 500 },
+  );
+}
+
+async function safeResponseText(response: Response): Promise<string> {
+  try {
+    return await response.text();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Production historical provider: Yahoo chart adjusted close.
+ * Adjusted close is used consistently for every symbol so splits/dividends do
+ * not create artificial risk spikes. Missing adjusted observations are skipped,
+ * never forward-filled.
+ */
+async function yahooAdjustedHistory(
+  symbol: string,
+  period: HistoryPeriod,
+): Promise<HistoryResult> {
+  const bounds = historyBounds(period);
+  const params = new URLSearchParams({
+    period1: String(bounds.fromSeconds),
+    period2: String(bounds.toExclusiveSeconds),
+    interval: '1d',
+    events: 'div,splits',
+    includeAdjustedClose: 'true',
+  });
+  const url = `${YAHOO_CHART_BASE}/${encodeURIComponent(symbol)}?${params}`;
+
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(url);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new MarketDataProviderError(
+        'yahoo',
+        'PROVIDER_TIMEOUT',
+        'Yahoo historical data request timed out',
+        { retryable: true },
+      );
+    }
+    throw new MarketDataProviderError(
+      'yahoo',
+      'PROVIDER_HTTP',
+      'Yahoo historical data request failed',
+      { retryable: true },
+    );
+  }
+
+  if (!response.ok) {
+    throw providerHttpError('yahoo', response.status, await safeResponseText(response));
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new MarketDataProviderError(
+      'yahoo',
+      'PROVIDER_MALFORMED_RESPONSE',
+      'Yahoo returned invalid JSON for historical data',
+      { upstreamStatus: response.status, retryable: true },
+    );
+  }
+
+  const chart = payload as {
+    chart?: {
+      error?: { code?: string; description?: string } | null;
+      result?: Array<{
+        timestamp?: Array<number | null>;
+        indicators?: {
+          adjclose?: Array<{ adjclose?: Array<number | null> }>;
+        };
+      }> | null;
+    };
+  };
+  const chartError = chart.chart?.error;
+  if (chartError) {
+    const description = chartError.description ?? chartError.code ?? 'unknown Yahoo error';
+    const notFound = /not found|no data|delisted|invalid/i.test(description);
+    throw new MarketDataProviderError(
+      'yahoo',
+      notFound ? 'SYMBOL_NOT_FOUND' : 'PROVIDER_HTTP',
+      `Yahoo historical data error: ${description}`,
+      { upstreamStatus: response.status, retryable: !notFound },
+    );
+  }
+
+  const result = chart.chart?.result?.[0];
+  const timestamps = result?.timestamp;
+  const adjusted = result?.indicators?.adjclose?.[0]?.adjclose;
+  if (!Array.isArray(timestamps) || !Array.isArray(adjusted)) {
+    throw new MarketDataProviderError(
+      'yahoo',
+      'PROVIDER_MALFORMED_RESPONSE',
+      'Yahoo historical response has no adjusted-close series',
+      { upstreamStatus: response.status, retryable: true },
+    );
+  }
+
+  const rawBars: HistoryBar[] = [];
+  const length = Math.min(timestamps.length, adjusted.length);
+  for (let i = 0; i < length; i++) {
+    const timestamp = timestamps[i];
+    const close = adjusted[i];
+    if (!Number.isFinite(timestamp) || !Number.isFinite(close) || (close as number) <= 0)
+      continue;
+    rawBars.push({
+      date: new Date((timestamp as number) * 1000).toISOString().slice(0, 10),
+      close: close as number,
+    });
+  }
+
+  const bars = normalizePriceHistory(rawBars, bounds.lastAllowedDate);
+  if (!bars.length) {
+    throw new MarketDataProviderError(
+      'yahoo',
+      'PROVIDER_EMPTY_HISTORY',
+      `Yahoo returned no usable adjusted daily history for ${symbol}`,
+      { upstreamStatus: response.status, retryable: true },
+    );
+  }
+
+  return { bars, provider: 'yahoo', priceType: 'adjusted' };
+}
+
+/**
+ * Explicit diagnostic probe for the legacy/current Finnhub stock/candle path.
+ * It never participates in the analytics price series, preventing raw Finnhub
+ * closes from being mixed with Yahoo adjusted closes across assets.
+ */
+export async function diagnoseFinnhubHistory(
+  symbol: string,
+  period: HistoryPeriod,
+): Promise<{ ok: true; bars: number; status: 'ok' } | { ok: false; failure: ProviderFailure }> {
+  const sym = symbol.trim().toUpperCase();
+  try {
+    const key = getApiKey();
+    const bounds = historyBounds(period);
+    const to = Math.max(bounds.fromSeconds, bounds.toExclusiveSeconds - 1);
+    const url = `${FINNHUB_BASE}/stock/candle?symbol=${encodeURIComponent(
+      sym,
+    )}&resolution=D&from=${bounds.fromSeconds}&to=${to}&token=${key}`;
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(url);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new MarketDataProviderError(
+          'finnhub',
+          'PROVIDER_TIMEOUT',
+          'Finnhub historical data request timed out',
+          { retryable: true },
+        );
+      }
+      throw new MarketDataProviderError(
+        'finnhub',
+        'PROVIDER_HTTP',
+        'Finnhub historical data request failed',
+        { retryable: true },
+      );
+    }
+    if (!response.ok) {
+      throw providerHttpError('finnhub', response.status, await safeResponseText(response));
+    }
+    const data = (await response.json()) as {
+      s?: string;
+      t?: number[];
+      c?: number[];
+      error?: string;
+    };
+    if (data.s !== 'ok') {
+      const noData = data.s === 'no_data';
+      throw new MarketDataProviderError(
+        'finnhub',
+        noData ? 'PROVIDER_EMPTY_HISTORY' : 'PROVIDER_MALFORMED_RESPONSE',
+        `Finnhub stock/candle status ${data.s ?? 'missing'}${data.error ? `: ${data.error}` : ''}`,
+        { upstreamStatus: response.status, retryable: !noData },
+      );
+    }
+    if (!Array.isArray(data.t) || !Array.isArray(data.c) || !data.t.length) {
+      throw new MarketDataProviderError(
+        'finnhub',
+        'PROVIDER_EMPTY_HISTORY',
+        `Finnhub returned s: ok but no daily candles for ${sym}`,
+        { upstreamStatus: response.status, retryable: true },
+      );
+    }
+    return { ok: true, bars: Math.min(data.t.length, data.c.length), status: 'ok' };
+  } catch (error) {
+    const failure = providerFailure(error);
+    if (failure) return { ok: false, failure };
+    return {
+      ok: false,
+      failure: {
+        provider: 'finnhub',
+        code: 'PROVIDER_AUTHENTICATION',
+        upstreamStatus: null,
+        retryable: false,
+        message: error instanceof Error ? error.message : 'Finnhub diagnostic failed',
+      },
+    };
   }
 }
 
 export async function history(
   symbol: string,
-  period: HistoryPeriod = '1y'
-): Promise<HistoryBar[]> {
+  period: HistoryPeriod = '1y',
+): Promise<HistoryResult> {
   const sym = symbol.trim().toUpperCase();
-  if (!sym) return [];
+  if (!sym) {
+    throw new MarketDataProviderError(
+      'yahoo',
+      'SYMBOL_NOT_FOUND',
+      'Missing history symbol',
+      { retryable: false },
+    );
+  }
 
-  const cacheKey = `${sym}:${period}`;
+  const cacheKey = `${sym}:${period}:yahoo-adjusted`;
   const cached = readCache(historyCache, cacheKey);
   if (cached !== undefined) return cached;
 
-  const key = getApiKey();
-
-  try {
-    const to = Math.floor(Date.now() / 1000);
-    const from = to - periodToSeconds(period);
-    const url = `${FINNHUB_BASE}/stock/candle?symbol=${encodeURIComponent(
-      sym
-    )}&resolution=D&from=${from}&to=${to}&token=${key}`;
-
-    const res = await fetch(url, { signal: providerSignal() });
-    if (!res.ok) return writeCache(historyCache, cacheKey, [], 60_000);
-
-    const data = (await res.json()) as {
-      s?: string;
-      t?: number[];
-      c?: number[];
-    };
-
-    if (data.s !== 'ok' || !data.t || !data.c || data.t.length === 0) {
-      return writeCache(historyCache, cacheKey, [], 60_000);
-    }
-
-    const bars: HistoryBar[] = [];
-    const length = Math.min(data.t.length, data.c.length);
-    for (let i = 0; i < length; i++) {
-      const timestamp = data.t[i];
-      const close = data.c[i];
-      if (!Number.isFinite(timestamp) || !Number.isFinite(close)) continue;
-      bars.push({
-        date: new Date(timestamp * 1000).toISOString().slice(0, 10),
-        close,
-      });
-    }
-
-    return writeCache(historyCache, cacheKey, bars, 15 * 60_000);
-  } catch {
-    return writeCache(historyCache, cacheKey, [], 60_000);
-  }
+  // Only successful, normalized history is cached. Provider failures and empty
+  // results are intentionally never cached, so Retry performs a real request.
+  const result = await yahooAdjustedHistory(sym, period);
+  return writeCache(historyCache, cacheKey, result, HISTORY_TTL_MS);
 }
 
 export const marketData = { search, quote, history };
