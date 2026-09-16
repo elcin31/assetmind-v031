@@ -41,7 +41,7 @@ describe('historical proxy stress windows', () => {
   it('finds the worst compounded contiguous window', () => {
     const result = historicalStressWindows(chain, [1, 2]);
     expect(result.find((item) => item.window === 1)?.return).toBeCloseTo(-0.05);
-    expect(result.find((item) => item.window === 2)?.return).toBeCloseTo((1.01 * 0.95) - 1);
+    expect(result.find((item) => item.window === 2)?.return).toBeCloseTo((0.98 * 0.97) - 1);
   });
 
   it('does not bridge a missing interval', () => {
