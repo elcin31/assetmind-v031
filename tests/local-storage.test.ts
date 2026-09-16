@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
-import { addTransaction, getPortfolioStorageKey, importPortfolio, LEGACY_STORAGE_KEY, readPortfolio } from '../src/storage/portfolio';
+import { addTransaction, deleteTransaction, getPortfolioStorageKey, importPortfolio, LEGACY_STORAGE_KEY, readPortfolio, updateTransaction } from '../src/storage/portfolio';
 
 let values: Map<string, string>;
 const userA = 'user-a';
@@ -46,6 +46,25 @@ it('serializes concurrent sales so only one can spend the position', async () =>
   const results = await Promise.allSettled(['a', 'b'].map(id => addTransaction({ ...buy, type: 'SELL' }, id, userA)));
   expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
   expect(readPortfolio(userA).transactions).toHaveLength(2);
+});
+
+it('edits a transaction and preserves a valid portfolio', async () => {
+  const tx = await addTransaction(buy, 'buy', userA);
+  await updateTransaction(tx.id, { ...buy, symbol: 'MSFT', quantity: 2, price: 150 }, userA);
+  const saved = readPortfolio(userA).transactions;
+  expect(saved).toHaveLength(1);
+  expect(saved[0]).toMatchObject({ symbol: 'MSFT', quantity: 2, price: 150 });
+});
+
+it('rejects an edit or deletion that would make historical inventory negative', async () => {
+  const purchase = await addTransaction({ ...buy, quantity: 2 }, 'buy', userA);
+  const sale = await addTransaction({ ...buy, type: 'SELL', quantity: 2, timestamp: '2026-09-16T10:00:00Z' }, 'sell', userA);
+  await expect(updateTransaction(purchase.id, { ...buy, quantity: 1 }, userA)).rejects.toThrow('SELL quantity');
+  await expect(deleteTransaction(purchase.id, userA)).rejects.toThrow('later SELL');
+  expect(readPortfolio(userA).transactions).toHaveLength(2);
+  await deleteTransaction(sale.id, userA);
+  await deleteTransaction(purchase.id, userA);
+  expect(readPortfolio(userA).transactions).toHaveLength(0);
 });
 
 it('merges backups without duplicates and preserves data after invalid import', async () => {

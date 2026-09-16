@@ -8,6 +8,11 @@ import {
   loadHistory,
   type HistoryRequestIssue,
 } from './historyCache';
+import {
+  loadAnalyticsPreferences,
+  readLocalAnalyticsPreferences,
+  saveAnalyticsPreferences,
+} from './preferences';
 
 interface HistoryResult {
   key: string;
@@ -16,13 +21,38 @@ interface HistoryResult {
   issues: HistoryRequestIssue[];
 }
 
-export function usePortfolioAnalytics(snapshot: PortfolioSnapshot) {
-  const [period, setPeriod] = useState<Period>('1Y');
-  const [benchmark, setBenchmark] = useState<BenchmarkSymbol>('SPY');
-  const [rf, setRf] = useState(0);
-  const [mar, setMar] = useState(0);
+export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: string) {
+  const initial = userId ? readLocalAnalyticsPreferences(userId) : { period: '1Y' as Period, benchmark: 'SPY' as BenchmarkSymbol, rf: 0, mar: 0 };
+  const [period, setPeriod] = useState<Period>(initial.period);
+  const [benchmark, setBenchmark] = useState<BenchmarkSymbol>(initial.benchmark);
+  const [rf, setRf] = useState(initial.rf);
+  const [mar, setMar] = useState(initial.mar);
+  const [preferencesReady, setPreferencesReady] = useState(!userId);
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<HistoryResult | null>(null);
+
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    void loadAnalyticsPreferences(userId).then((preferences) => {
+      if (!active) return;
+      setPeriod(preferences.period);
+      setBenchmark(preferences.benchmark);
+      setRf(preferences.rf);
+      setMar(preferences.mar);
+      setPreferencesReady(true);
+    });
+    return () => { active = false; };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId || !preferencesReady) return;
+    const timer = window.setTimeout(() => {
+      void saveAnalyticsPreferences(userId, { period, benchmark, rf, mar });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [userId, preferencesReady, period, benchmark, rf, mar]);
+
   const symbolsKey = [
     ...new Set([
       ...snapshot.transactions.map((t) => t.symbol.trim().toUpperCase()),

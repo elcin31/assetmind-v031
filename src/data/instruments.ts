@@ -1,4 +1,4 @@
-import type { SearchResult } from '../types';
+import type { SearchResult } from '../types/index.js';
 
 /** Small offline catalog. No live prices; extended search remains available through the API. */
 const INSTRUMENTS: SearchResult[] = [
@@ -20,7 +20,6 @@ const INSTRUMENTS: SearchResult[] = [
   { symbol: 'JPM', name: 'JPMorgan Chase & Co.', exchange: 'NYSE', country: 'US' },
   { symbol: 'V', name: 'Visa Inc.', exchange: 'NYSE', country: 'US' },
 ];
-
 
 export function searchInstruments(query: string): SearchResult[] {
   const q = query.trim().toUpperCase();

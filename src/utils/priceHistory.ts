@@ -1,4 +1,4 @@
-import type { HistoryBar } from '../types';
+import type { HistoryBar } from '../types/index.js';
 
 function validIsoDay(date: string): boolean {
   return (
@@ -14,31 +14,15 @@ function utcToday(): string {
 
 /**
  * Normalize provider history at the application boundary.
- *
  * Rules: ISO UTC days only, finite positive closes, no future observations,
  * ascending order and one observation per day. Duplicate days resolve to the
  * last valid provider observation deterministically; no filling is performed.
  */
-export function normalizePriceHistory(
-  value: unknown,
-  asOf: string = utcToday(),
-): HistoryBar[] {
+export function normalizePriceHistory(value: unknown, asOf: string = utcToday()): HistoryBar[] {
   if (!Array.isArray(value) || !validIsoDay(asOf)) return [];
   const days = new Map<string, HistoryBar>();
   for (const item of value) {
-    if (
-      !item ||
-      typeof item !== 'object' ||
-      !('date' in item) ||
-      !('close' in item) ||
-      typeof item.date !== 'string' ||
-      !validIsoDay(item.date) ||
-      item.date > asOf ||
-      typeof item.close !== 'number' ||
-      !Number.isFinite(item.close) ||
-      item.close <= 0
-    )
-      continue;
+    if (!item || typeof item !== 'object' || !('date' in item) || !('close' in item) || typeof item.date !== 'string' || !validIsoDay(item.date) || item.date > asOf || typeof item.close !== 'number' || !Number.isFinite(item.close) || item.close <= 0) continue;
     days.set(item.date, { date: item.date, close: item.close });
   }
   return [...days.values()].sort((a, b) => a.date.localeCompare(b.date));

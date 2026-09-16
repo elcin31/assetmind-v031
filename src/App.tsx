@@ -5,7 +5,7 @@ import { PortfolioScreen } from './pages/PortfolioScreen';
 import { AuthLoadingScreen, LoginScreen } from './pages/LoginScreen';
 import { useAuth } from './auth/AuthContext';
 import { enrichPositionsWithQuotes } from './math/pnl';
-import { exportPortfolio, getPortfolioStorageKey, importPortfolio, readPortfolio } from './storage/portfolio';
+import { exportPortfolio, getPortfolioStorageKey, importPortfolio, readPortfolioSynced } from './storage/portfolio';
 
 export default function App() {
   const { user, session, loading, recoveryMode, signOut } = useAuth();
@@ -27,8 +27,9 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
     const run = ++generation.current;
     setError(null);
     try {
-      const data = readPortfolio(userId);
+      const data = await readPortfolioSynced(userId);
       const base = enrichPositionsWithQuotes(data.transactions, new Map());
+      if (run !== generation.current) return;
       setSnapshot({ ...data, ...base });
       setLoading(base.positions.length > 0);
       const quotes = new Map<string, Quote>();
@@ -38,7 +39,7 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
           if (!res.ok) return;
           const q = await res.json();
           if (q.symbol === symbol && Number.isFinite(q.price) && q.price > 0) quotes.set(symbol, q);
-        } catch { /* Market data is optional; local holdings remain usable offline. */ }
+        } catch { /* Market data is optional; cached holdings remain usable if quotes fail. */ }
       }));
       if (run === generation.current) setSnapshot({ ...data, ...enrichPositionsWithQuotes(data.transactions, quotes) });
     } catch (err) {
@@ -58,8 +59,8 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
 
   return <div className="app">
     <details className="backup-panel">
-      <summary>Данные и резервные копии <span>На этом устройстве</span></summary>
-      <p>Данные хранятся в этом браузере. Сохраните копию перед очисткой данных или переходом на другое устройство.</p>
+      <summary>Данные и резервные копии <span>Аккаунт + локальный кэш</span></summary>
+      <p>Портфель синхронизируется с вашим аккаунтом. Браузер хранит проверенную локальную копию для быстрого чтения; JSON остаётся дополнительной резервной копией.</p>
       <div className="backup-actions">
         <button className="btn btn-ghost" onClick={() => { try { exportPortfolio(userId); } catch { setError('Could not export browser data.'); } }}>Экспорт JSON</button>
         <button className="btn btn-ghost" onClick={() => fileInput.current?.click()}>Импорт JSON</button>
@@ -70,10 +71,11 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
         try {
           if (file.size > 5_000_000) throw new Error('Backup must be smaller than 5 MB.');
           await importPortfolio(await file.text(), userId);
+          await loadPortfolio();
         } catch (err) { setError(err instanceof Error ? err.message : 'Import failed'); }
       }} />
     </details>
-    {snapshot ? <PortfolioScreen snapshot={snapshot} userId={userId} onRefresh={loadPortfolio} onSignOut={onSignOut} loading={loading} setError={setError} error={error} /> :
-      <main className="card"><h1>AssetMind</h1>{error ? <p role="alert">{error}</p> : <p>Loading portfolio…</p>}<button className="btn btn-primary" onClick={loadPortfolio}>Retry</button></main>}
+    {snapshot ? <PortfolioScreen snapshot={snapshot} userId={userId} onRefresh={() => { void loadPortfolio(); }} onSignOut={onSignOut} loading={loading} setError={setError} error={error} /> :
+      <main className="card"><h1>AssetMind</h1>{error ? <p role="alert">{error}</p> : <p>Loading portfolio…</p>}<button className="btn btn-primary" onClick={() => void loadPortfolio()}>Retry</button></main>}
   </div>;
 }
