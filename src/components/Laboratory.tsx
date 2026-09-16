@@ -1,59 +1,357 @@
-import { useState } from 'react';
-import type { PortfolioSnapshot } from '../types';
-import { concentration, historicalRisk, stressValue } from '../math/lab';
-import { formatCurrency } from '../utils/format';
-
-const pct = (v: number | undefined | null) => v == null ? '—' : `${(v * 100).toFixed(2)}%`;
-function Formula({ name, formula, children }: { name: string; formula: string; children: React.ReactNode }) {
-  return <details className="formula"><summary>{name}<span>Формула ↗</span></summary><code>{formula}</code><p>{children}</p></details>;
-}
-export function Laboratory({ snapshot: s }: { snapshot: PortfolioSnapshot }) {
-  const [shock, setShock] = useState(-20);
-  const [target, setTarget] = useState('*');
-  const [basis, setBasis] = useState<'cost' | 'market'>('cost');
-  const [rf, setRf] = useState(0);
-  const complete = s.positions.length > 0 && s.valuation.complete;
-  const available = basis === 'cost' ? s.positions.length > 0 : complete;
-  const values = s.positions.map(p => ({ symbol: p.symbol, value: basis === 'cost' ? p.costBasis : p.marketValue ?? 0 }));
-  const selected = target === '*' || values.some(p => p.symbol === target) ? target : '*';
-  const c = available ? concentration(values.map(p => p.value)) : null;
-  const stress = available ? stressValue(values, shock / 100, selected) : null;
-  const history = s.history;
-  const risk = history ? historicalRisk(history.values, history.dailyReturns) : null;
-  const volatility = risk ? s.risk?.volatility : null;
-  const sharpe = risk && volatility && volatility > 0 ? (risk.meanDaily * 252 - rf / 100) / volatility : null;
-  const money = (n: number) => formatCurrency(n, s.portfolio.base_currency);
-  return <>
-    <section className="lab-intro"><div><span className="eyebrow">PORTFOLIO SCIENCE</span><h2>Лаборатория</h2><p>Изучайте структуру, проверяйте гипотезы и понимайте риск.</p></div><span className="status-pill">● {s.transactions.length} сделок · синхронизировано</span></section>
-    <div className="lab-grid">
-      <section className="card"><div className="section-heading"><h2>01 / Структура</h2><span className="tag">Математика</span></div>
-        <label className="field-label" htmlFor="lab-basis">База оценки</label><select id="lab-basis" className="input" value={basis} onChange={e => setBasis(e.target.value as 'cost' | 'market')}><option value="cost">Себестоимость открытых позиций</option><option value="market">Текущая рыночная стоимость</option></select>
-        {!available && <p className="empty">{s.positions.length ? 'Для рыночных весов нужны котировки всех позиций.' : 'Добавьте покупку: здесь появится структура портфеля.'}</p>}
-        <div className="stat-pair"><div><small>Индекс HHI</small><strong>{c ? c.hhi.toFixed(3) : '—'}</strong></div><div><small>Эффективных позиций</small><strong>{c ? c.effectivePositions.toFixed(2) : '—'}</strong></div></div>
-        {available && values.map(p => <div className="weight-row" key={p.symbol}><span>{p.symbol}</span><div><i style={{ width: `${p.value / values.reduce((n, v) => n + v.value, 0) * 100}%` }} /></div><b>{pct(p.value / values.reduce((n, v) => n + v.value, 0))}</b></div>)}
-        <Formula name="Концентрация и диверсификация" formula="wᵢ = Vᵢ / ΣVⱼ; HHI = Σwᵢ²; N_eff = 1 / HHI">HHI близкий к 1 означает концентрацию в одной позиции. N_eff — число равновесных позиций с той же концентрацией. Это не оценка корреляции активов. База: {basis === 'cost' ? 'себестоимость' : 'рыночная стоимость'}.</Formula>
+import { useState } from "react";
+import type { PortfolioSnapshot } from "../types";
+import type { AnalyticsController } from "../analytics/usePortfolioAnalytics";
+import { AnalyticsMetric, Formula } from "./AnalyticsMetric";
+import { pct } from "../utils/analyticsFormat";
+import { PortfolioHistoryChart, PeriodSelector } from "./PortfolioHistoryChart";
+import { MonthlyReturnsHeatmap } from "./MonthlyReturnsHeatmap";
+import { DrawdownChart } from "./DrawdownChart";
+import { CorrelationMatrix } from "./CorrelationMatrix";
+import { BenchmarkPanel } from "./BenchmarkPanel";
+import { AttributionPanel } from "./AttributionPanel";
+import { ScenariosPanel } from "./ScenariosPanel";
+import { AnalyticsChart } from "./AnalyticsChart";
+import { rollingMetric } from "../math/rolling";
+const tabs = [
+  { id: "performance", label: "Доходность" },
+  { id: "risk", label: "Риск" },
+  { id: "diversification", label: "Диверсификация" },
+  { id: "attribution", label: "Атрибуция" },
+  { id: "scenarios", label: "Сценарии" },
+  { id: "benchmark", label: "Рынок" },
+];
+export function Laboratory({
+  snapshot,
+  controller: c,
+}: {
+  snapshot: PortfolioSnapshot;
+  controller: AnalyticsController;
+}) {
+  const [tab, setTab] = useState("performance");
+  const [volWindow, setVolWindow] = useState(20);
+  const [sharpeWindow, setSharpeWindow] = useState(63);
+  const a = c.analytics;
+  const sample = `${a.sample} · Rf ${c.rf}% · MAR ${c.mar}%`;
+  const vol =
+    tab === "risk"
+      ? rollingMetric(a.performance.returns, volWindow, "volatility")
+      : [];
+  const rollingSharpe =
+    tab === "risk"
+      ? rollingMetric(a.performance.returns, sharpeWindow, "sharpe", c.rf / 100)
+      : [];
+  return (
+    <>
+      <section className="lab-intro">
+        <div>
+          <span className="eyebrow">АНАЛИТИКА ПОРТФЕЛЯ</span>
+          <h2>Лаборатория</h2>
+          <p>Результат, источники риска и сценарии.</p>
+        </div>
       </section>
-      <section className="card scenario-card"><div className="section-heading"><h2>02 / Стресс-сценарий</h2><span className="tag">What if</span></div>
-        <label className="field-label" htmlFor="lab-target">Применить изменение к</label><select id="lab-target" className="input" value={selected} onChange={e => setTarget(e.target.value)}><option value="*">Весь портфель</option>{s.positions.map(p => <option key={p.symbol} value={p.symbol}>{p.symbol}</option>)}</select>
-        <div className="shock-number">{shock > 0 ? '+' : ''}{shock}%</div><label htmlFor="lab-shock" className="field-label">Изменение выбранной базы оценки</label><input id="lab-shock" type="range" min="-80" max="80" step="1" value={shock} onChange={e => setShock(Number(e.target.value))} /><div className="range-labels"><span>−80%</span><span>0%</span><span>+80%</span></div>
-        <div className="stat-pair"><div><small>После изменения</small><strong>{stress ? money(stress.after) : '—'}</strong></div><div><small>Разница</small><strong className={shock < 0 ? 'negative' : 'positive'}>{stress ? money(stress.change) : '—'}</strong></div></div>
-        <p className="caption">{basis === 'cost' ? 'Условный сценарий относительно себестоимости, не прогноз рыночного убытка.' : 'Сценарий относительно полной текущей рыночной оценки.'} Сделки не изменяются.</p>
-        <Formula name="Переоценка сценария" formula="V′ = Σ Vᵢ × (1 + sᵢ); ΔV = V′ − V">Шок s применяется к выбранному активу или всем позициям. Модель не учитывает валюты, ликвидность, комиссии и изменение корреляций.</Formula>
-      </section>
-      <section className="card"><div className="section-heading"><h2>03 / Исторический риск</h2><span className="tag">Quant</span></div>
-        <p className="caption">Сегодняшние количества активов на общих исторических датах. Это модель текущего состава, а не фактическая доходность счёта.</p>
-        {!risk && <div className="notice">Нужно минимум 21 общее наблюдение цен для всех позиций. Метрики появятся автоматически, когда история станет доступна.</div>}
-        <div className="stat-pair"><div><small>VaR 95% · 1 день</small><strong>{pct(risk?.var95)}</strong></div><div><small>Expected Shortfall</small><strong>{pct(risk?.es95)}</strong></div></div>
-        <div className="metric-row"><span>Максимальная просадка</span><b>{pct(risk?.maxDrawdown)}</b></div><div className="metric-row"><span>Доходностей в выборке</span><b>{risk?.observations ?? '—'}</b></div>
-        <Formula name="VaR и Expected Shortfall" formula="k = ceil(0.05n); VaR = max(0, −r₍k₎); ES = max(0, −mean(r₍1:k₎))">Доходности сортируются по возрастанию. VaR — эмпирический порог потери, ES — средняя потеря в худших k наблюдениях. Это историческая оценка, а не предел возможного убытка. Малые выборки нестабильны.</Formula>
-        <Formula name="Максимальная просадка" formula="MDD = maxₜ(1 − Vₜ / maxₛ≤ₜ Vₛ)">Наибольшее падение от предшествовавшего максимума модельной стоимости.</Formula>
-      </section>
-      <section className="card"><div className="section-heading"><h2>04 / Доходность и риск</h2><span className="tag">Модель</span></div>
-        <div className="stat-pair"><div><small>Волатильность · год</small><strong>{pct(volatility)}</strong></div><div><small>Коэффициент Sharpe</small><strong>{sharpe === null ? '—' : sharpe.toFixed(2)}</strong></div></div>
-        <label htmlFor="lab-rf" className="field-label">Безрисковая ставка: {rf}% в год</label><input id="lab-rf" type="range" min="0" max="15" step="0.25" value={rf} onChange={e => setRf(Number(e.target.value))} />
-        <Formula name="Волатильность" formula="σ_ann = stdev_sample(r_daily) × √252">Выборочное стандартное отклонение дневных доходностей, приведённое к 252 торговым дням. История текущего состава не гарантирует будущий риск.</Formula>
-        <Formula name="Sharpe" formula="S = (252 × mean(r_daily) − r_f) / σ_ann">Простая годовая экстраполяция средней дневной доходности. При нулевой волатильности коэффициент не определён. Ставка меняется только для этой модели.</Formula>
-      </section>
-    </div>
-  </>;
+      <div className="lab-tabs" role="group" aria-label="Раздел аналитики">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            aria-pressed={tab === t.id}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="analytics-settings">
+        <label>
+          Безрисковая ставка, % в год
+          <input
+            className="input"
+            type="number"
+            min="-10"
+            max="100"
+            step=".25"
+            value={c.rf}
+            onChange={(e) =>
+              c.setRf(Math.max(-10, Math.min(100, Number(e.target.value))))
+            }
+          />
+        </label>
+        <label>
+          MAR, % в год
+          <input
+            className="input"
+            type="number"
+            min="-10"
+            max="100"
+            step=".25"
+            value={c.mar}
+            onChange={(e) =>
+              c.setMar(Math.max(-10, Math.min(100, Number(e.target.value))))
+            }
+          />
+        </label>
+      </div>
+      {tab !== "performance" && <PeriodSelector controller={c} />}
+      {(tab === "performance" || tab === "risk" || tab === "benchmark") &&
+        a.performance.reason &&
+        !c.loading && <p className="notice">{a.performance.reason}</p>}
+      {tab === "performance" && (
+        <>
+          <PortfolioHistoryChart
+            controller={c}
+            currency={snapshot.portfolio.base_currency}
+          />
+          <section className="card">
+            <div className="analytics-metrics">
+              {(
+                [
+                  "twr",
+                  "cagr",
+                  "totalReturn",
+                  "bestDay",
+                  "worstDay",
+                  "positiveDays",
+                  "negativeDays",
+                ] as const
+              ).map((metric) => (
+                <AnalyticsMetric
+                  key={metric}
+                  metric={metric}
+                  value={a.performance[metric]}
+                  sample={sample}
+                  reason={a.performance.reason}
+                />
+              ))}
+            </div>
+          </section>
+          <MonthlyReturnsHeatmap
+            months={a.performance.monthly}
+            loading={c.loading}
+            sample={sample}
+          />
+        </>
+      )}
+      {tab === "risk" && (
+        <>
+          <section className="card">
+            <h2>Риск исторического портфеля</h2>
+            <div className="analytics-metrics">
+              {(
+                [
+                  "volatility",
+                  "downside",
+                  "sharpe",
+                  "sortino",
+                  "calmar",
+                  "var95",
+                  "es95",
+                ] as const
+              ).map((metric) => (
+                <AnalyticsMetric
+                  key={metric}
+                  metric={metric}
+                  value={a.risk[metric]}
+                  sample={sample}
+                  ratio={["sharpe", "sortino", "calmar"].includes(metric)}
+                  reason={a.performance.reason}
+                />
+              ))}
+              <AnalyticsMetric
+                metric="maxDrawdown"
+                value={a.drawdown?.max}
+                sample={sample}
+              />
+              <AnalyticsMetric
+                metric="currentDrawdown"
+                value={a.drawdown?.current}
+                sample={sample}
+              />
+            </div>
+          </section>
+          <DrawdownChart analytics={a} loading={c.loading} />
+          <section className="card">
+            <h2>Скользящая волатильность</h2>
+            <div className="chart-periods" aria-label="Окно волатильности">
+              {[20, 60, 252].map((n) => (
+                <button
+                  key={n}
+                  aria-pressed={volWindow === n}
+                  onClick={() => setVolWindow(n)}
+                >
+                  {n}D
+                </button>
+              ))}
+            </div>
+            <AnalyticsChart
+              key={`vol-${volWindow}-${c.period}`}
+              points={vol}
+              label="Скользящая волатильность"
+              format={pct}
+              loading={c.loading}
+              reason={a.performance.reason}
+            />
+            <Formula
+              name="Окно волатильности"
+              formula="σ_window = stdev_sample(r_window) × √252"
+            >
+              Нужно полное окно из {volWindow} доходностей. Участок до его
+              накопления не рисуется. Данные: {sample}.
+            </Formula>
+          </section>
+          <section className="card">
+            <h2>Скользящий Sharpe</h2>
+            <div className="chart-periods" aria-label="Окно Sharpe">
+              {[63, 126, 252].map((n) => (
+                <button
+                  key={n}
+                  aria-pressed={sharpeWindow === n}
+                  onClick={() => setSharpeWindow(n)}
+                >
+                  {n}D
+                </button>
+              ))}
+            </div>
+            <AnalyticsChart
+              key={`sharpe-${sharpeWindow}-${c.period}`}
+              points={rollingSharpe}
+              label="Скользящий Sharpe"
+              format={(v) => v.toFixed(2)}
+              loading={c.loading}
+              reason={a.performance.reason}
+            />
+            <Formula
+              name="Окно Sharpe"
+              formula="(252mean(r_window) − Rf) / σ_window"
+            >
+              Полное окно {sharpeWindow} доходностей, Rf {c.rf}% в год. При
+              нулевой волатильности участок недоступен. Данные: {sample}.
+            </Formula>
+          </section>
+          <section className="card">
+            <h2>Исторический риск текущего состава · proxy</h2>
+            <p className="caption">
+              Как сегодняшний состав портфеля вёл бы себя на прошлых
+              исторических ценах. Это модель, не фактическая доходность.
+            </p>
+            <div className="analytics-metrics">
+              <AnalyticsMetric
+                metric="volatility"
+                value={a.proxy.volatility}
+                sample={`${a.proxy.dailyReturns.length} доходностей proxy`}
+              />
+              <AnalyticsMetric
+                metric="sharpe"
+                value={a.proxy.sharpe}
+                sample={`proxy · Rf ${c.rf}%`}
+                ratio
+              />
+            </div>
+            <Formula
+              name="Текущие количества"
+              formula="V_proxy(t) = Σqᵢ(today)Pᵢ(t)"
+            >
+              Фиксированные сегодняшние количества, общие даты цен. Модель не
+              учитывает реальные исторические сделки. Для коэффициентов минимум
+              20 доходностей.
+            </Formula>
+          </section>
+        </>
+      )}
+      {tab === "diversification" && (
+        <>
+          <section className="card">
+            <div className="analytics-metrics">
+              <AnalyticsMetric
+                metric="covarianceVol"
+                value={a.currentRisk?.volatility}
+                sample={`${a.matrix?.observations ?? 0} общих интервалов`}
+              />
+              <AnalyticsMetric
+                metric="diversificationRatio"
+                value={a.currentRisk?.diversificationRatio}
+                sample={sample}
+                ratio
+              />
+              <AnalyticsMetric
+                metric="averageCorrelation"
+                value={a.averageCorrelation}
+                sample={sample}
+                ratio
+              />
+              <AnalyticsMetric
+                metric="hhi"
+                value={a.concentration?.hhi}
+                sample="текущие рыночные веса"
+                ratio
+              />
+              <AnalyticsMetric
+                metric="effectivePositions"
+                value={a.concentration?.effectivePositions}
+                sample="текущие рыночные веса"
+                ratio
+              />
+            </div>
+          </section>
+          <CorrelationMatrix
+            matrix={a.matrix}
+            loading={c.loading}
+            reason={
+              a.history.missingSymbols.length
+                ? `Нет полной истории: ${a.history.missingSymbols.join(", ")}.`
+                : "Недостаточно общей истории или нулевая дисперсия."
+            }
+          />
+          <section className="card">
+            <h2>Вклад в риск текущего состава</h2>
+            {!a.currentRisk && (
+              <p className="notice">
+                Нужны котировки всех позиций, общая история и ненулевая
+                волатильность портфеля.
+              </p>
+            )}
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Актив</th>
+                    <th>Вес</th>
+                    <th>Вклад в риск</th>
+                    <th>MCR</th>
+                    <th>RC · σ год</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {a.currentRisk?.contributions.map((c) => (
+                    <tr key={c.symbol}>
+                      <td>{c.symbol}</td>
+                      <td>{pct(c.weight)}</td>
+                      <td>{pct(c.fraction)}</td>
+                      <td>{c.marginal.toFixed(4)}</td>
+                      <td>{pct(c.absolute)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Formula
+              name="Разложение риска"
+              formula="MCRᵢ = (Σw)ᵢ/σp; RCᵢ = wᵢMCRᵢ; shareᵢ = RCᵢ/ΣRC"
+            >
+              Годовая ковариация и текущие рыночные веса. Сумма RC равна
+              волатильности портфеля. Отрицательный вклад возможен у
+              хеджирующего актива. Данные: {a.matrix?.observations ?? 0} общих
+              интервалов.
+            </Formula>
+          </section>
+        </>
+      )}
+      {tab === "attribution" && (
+        <AttributionPanel
+          analytics={a}
+          currency={snapshot.portfolio.base_currency}
+        />
+      )}
+      {tab === "scenarios" && <ScenariosPanel snapshot={snapshot} />}
+      {tab === "benchmark" && <BenchmarkPanel controller={c} detailed />}
+    </>
+  );
 }

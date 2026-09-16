@@ -1,7 +1,8 @@
 import { useEffect, useId, useState } from 'react';
 import type { HistoryBar } from '../types';
 import { TradingViewChart } from './TradingViewChart';
-import { chartGeometry, normalizePriceHistory } from '../utils/priceHistory';
+import { loadHistory } from '../analytics/historyCache';
+import { chartGeometry } from '../utils/priceHistory';
 
 const periods = [{ value: '1m', label: '1М' }, { value: '3m', label: '3М' }, { value: '6m', label: '6М' }, { value: '1y', label: '1Г' }, { value: '5y', label: '5Л' }];
 const number = (value: number) => value.toLocaleString('ru-RU', { maximumFractionDigits: 4 });
@@ -18,22 +19,13 @@ export function PriceChart({ symbol }: { symbol: string }) {
   const current = result?.key === requestKey ? result : null;
   const bars = current?.bars ?? [];
   useEffect(() => {
-    const controller = new AbortController();
     let active = true;
-    const timer = window.setTimeout(() => controller.abort(), 12000);
-    void (async () => {
-      try {
-        const response = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&period=${period}`, { signal: controller.signal });
-        if (!response.ok) throw new Error('История цен временно недоступна. Попробуйте позже.');
-        const data = await response.json();
-        if (data.symbol !== symbol || data.period !== period) throw new Error('Получены данные другого актива или периода. Повторите запрос.');
-        const normalized = normalizePriceHistory(data.bars);
-        if (active) setResult({ key: requestKey, bars: normalized });
-      } catch (error) {
-        if (active) setResult({ key: requestKey, bars: [], error: controller.signal.aborted ? 'Превышено время ожидания истории цен.' : error instanceof Error ? error.message : 'Не удалось загрузить историю цен.' });
-      } finally { window.clearTimeout(timer); }
-    })();
-    return () => { active = false; window.clearTimeout(timer); controller.abort(); };
+    void loadHistory(symbol, period).then(bars => {
+      if (active) setResult({ key: requestKey, bars });
+    }).catch(error => {
+      if (active) setResult({ key: requestKey, bars: [], error: error instanceof Error ? error.message : 'Не удалось загрузить историю цен.' });
+    });
+    return () => { active = false; };
   }, [symbol, period, requestKey]);
   const { points, min, max } = chartGeometry(bars);
   const first = bars[0];
