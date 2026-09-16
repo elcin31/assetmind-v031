@@ -179,6 +179,7 @@ export function calculatePortfolioAnalytics(
     details,
     proxy: {
       ...proxy,
+      drawdown: proxy.available && proxy.intervals.length === proxy.dates.length - 1 ? drawdowns(proxy.dates.map((date, i) => ({ date, value: proxy.values[i] }))) : null,
       volatility: volatility(proxy.dailyReturns),
       sharpe: sharpeRatio(proxy.dailyReturns, rf),
     },

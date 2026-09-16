@@ -68,6 +68,7 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot) {
     mar,
     setMar,
     loading: !current,
+    historyState: !current ? "loading" : current.errors.length ? (current.histories.size ? "partial_provider_history" : "provider_unavailable") : "ready",
     errors: current?.errors ?? [],
     retry: () => setRetry((n) => n + 1),
   };

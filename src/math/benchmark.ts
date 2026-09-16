@@ -1,4 +1,5 @@
 import type { BenchmarkMetrics, DatedReturn } from "../types/analytics";
+import { correlation } from "./correlation";
 import { cumulativeReturn } from "./performance";
 import {
   annualToDaily,
@@ -89,6 +90,8 @@ export function benchmarkMetrics(
   return {
     beta,
     alpha,
+    correlation: correlation(p, b),
+    excessReturn: continuous ? finite((cumulativeReturn(p) ?? NaN) - (cumulativeReturn(b) ?? NaN)) : null,
     trackingError: p.length >= MIN_OBSERVATIONS ? trackingError : null,
     informationRatio,
     portfolioReturn: continuous ? cumulativeReturn(p) : null,

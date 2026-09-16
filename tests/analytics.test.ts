@@ -216,9 +216,9 @@ describe("risk, correlation and covariance", () => {
     const returns = Array.from({ length: 20 }, (_, i) =>
       i % 2 ? -0.01 : 0.03,
     );
-    expect(downsideDeviation(returns)).toBeCloseTo(Math.sqrt(0.00005 * 252));
+    expect(downsideDeviation(returns)).toBeCloseTo(Math.sqrt(0.0001 * 252));
     expect(sharpeRatio(returns)).toBeCloseTo(2.52 / volatility(returns)!);
-    expect(sortinoRatio(returns)).toBeCloseTo(2.52 / Math.sqrt(0.00005 * 252));
+    expect(sortinoRatio(returns)).toBeCloseTo(2.52 / Math.sqrt(0.0001 * 252));
     expect(sortinoRatio(Array(20).fill(0.01))).toBeNull();
     expect(calmarRatio(0.12, -0.2)).toBeCloseTo(0.6);
     expect(calmarRatio(0.12, 0)).toBeNull();

@@ -84,6 +84,8 @@ export interface BenchmarkMetrics {
   beta: number | null;
   alpha: number | null;
   trackingError: number | null;
+  correlation: number | null;
+  excessReturn: number | null;
   informationRatio: number | null;
   portfolioReturn: number | null;
   benchmarkReturn: number | null;

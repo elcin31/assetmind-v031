@@ -20,13 +20,13 @@ export function PriceChart({ symbol }: { symbol: string }) {
   const bars = current?.bars ?? [];
   useEffect(() => {
     let active = true;
-    void loadHistory(symbol, period).then(bars => {
+    void loadHistory(symbol, period, retry > 0).then(bars => {
       if (active) setResult({ key: requestKey, bars });
     }).catch(error => {
       if (active) setResult({ key: requestKey, bars: [], error: error instanceof Error ? error.message : 'Не удалось загрузить историю цен.' });
     });
     return () => { active = false; };
-  }, [symbol, period, requestKey]);
+  }, [symbol, period, requestKey, retry]);
   const { points, min, max } = chartGeometry(bars);
   const first = bars[0];
   const last = bars[bars.length - 1];
@@ -58,7 +58,7 @@ export function PriceChart({ symbol }: { symbol: string }) {
       </svg>
       <div className="range-labels"><span>{date(first.date)}</span><span>{date(last.date)}</span></div>
       <input className="chart-scrubber" type="range" min="0" max={bars.length - 1} value={index} aria-label="Дата на графике" aria-valuetext={`${date(focused.date)}: ${number(focused.close)}`} onChange={event => setCursor(Number(event.target.value))}/>
-      <p className="caption">Дневные цены закрытия в валюте котировки. Последняя дата: {date(last.date)}. Источник: Finnhub.</p>
+      <p className="caption">Дневные цены закрытия в валюте котировки. Последняя дата: {date(last.date)}. Источник: серверный market history (Finnhub / Yahoo); цены с поправкой на splits, без реинвестирования дивидендов.</p>
     </>}
   </div>;
 }

@@ -10,10 +10,12 @@ export function downsideDeviation(
     !Number.isFinite(dailyMar)
   )
     return null;
+  const downside = returns.filter(r => r < dailyMar);
+  if (downside.length < 2) return null;
   return finite(
     Math.sqrt(
-      returns.reduce(
-        (sum, r) => sum + Math.min(r - dailyMar, 0) ** 2 / returns.length,
+      downside.reduce(
+        (sum, r) => sum + (r - dailyMar) ** 2 / downside.length,
         0,
       ),
     ) * Math.sqrt(252),

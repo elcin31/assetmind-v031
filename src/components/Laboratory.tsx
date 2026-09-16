@@ -31,6 +31,10 @@ export function Laboratory({
   const [volWindow, setVolWindow] = useState(20);
   const [sharpeWindow, setSharpeWindow] = useState(63);
   const a = c.analytics;
+  const providerReason = c.errors.length ? c.errors.join("; ") : null;
+  const riskReason = c.loading ? "Загрузка истории…" : providerReason ?? (a.performance.riskReturns.length < 20
+    ? `Недостаточно наблюдений: ${a.performance.riskReturns.length}; нужно минимум 20 чистых интервалов.`
+    : "Метрика математически не определена: проверьте дисперсию и число наблюдений ниже MAR (минимум 2).");
   const sample = `${a.sample} · Rf ${c.rf}% · MAR ${c.mar}%`;
   const vol =
     tab === "risk"
@@ -90,7 +94,7 @@ export function Laboratory({
           />
         </label>
       </div>
-      {tab !== "performance" && (c.loading ? <p role="status">Загрузка истории…</p> : c.errors.length > 0 ? <div role="alert" className="notice"><p>{c.errors.join("; ")}</p><button onClick={c.retry}>Повторить загрузку</button></div> : null)}
+      {tab !== "performance" && c.loading && <p role="status">Загрузка истории…</p>}
       {tab !== "performance" && <PeriodSelector controller={c} />}
       {(tab === "performance" || tab === "risk" || tab === "benchmark") &&
         a.performance.reason &&
@@ -119,7 +123,7 @@ export function Laboratory({
                   metric={metric}
                   value={a.performance[metric]}
                   sample={sample}
-                  reason={c.errors.length ? c.errors.join("; ") : a.performance.reason}
+                  reason={providerReason ?? a.performance.reason}
                 />
               ))}
             </div>
@@ -154,7 +158,7 @@ export function Laboratory({
                   value={a.risk[metric]}
                   sample={sample}
                   ratio={["sharpe", "sortino", "calmar"].includes(metric)}
-                  reason={c.errors.length ? c.errors.join("; ") : a.performance.reason}
+                  reason={metric === "calmar" ? providerReason ?? a.performance.reason ?? "Calmar требует CAGR и ненулевую просадку." : riskReason}
                 />
               ))}
               <AnalyticsMetric
@@ -189,7 +193,7 @@ export function Laboratory({
               label="Скользящая волатильность"
               format={pct}
               loading={c.loading}
-              reason={c.errors.length ? c.errors.join("; ") : a.performance.reason}
+              reason={providerReason ?? a.performance.reason}
             />
             <Formula
               name="Окно волатильности"
@@ -218,7 +222,7 @@ export function Laboratory({
               label="Скользящий Sharpe"
               format={(v) => v.toFixed(2)}
               loading={c.loading}
-              reason={c.errors.length ? c.errors.join("; ") : a.performance.reason}
+              reason={providerReason ?? a.performance.reason}
             />
             <Formula
               name="Окно Sharpe"
@@ -246,6 +250,7 @@ export function Laboratory({
                 sample={`proxy · Rf ${c.rf}%`}
                 ratio
               />
+              <AnalyticsMetric metric="maxDrawdown" value={a.proxy.drawdown?.max} sample="Current Holdings Historical Risk Proxy · не фактическая просадка" />
             </div>
             <Formula
               name="Текущие количества"
@@ -297,14 +302,14 @@ export function Laboratory({
             matrix={a.matrix}
             loading={c.loading}
             reason={
-              a.history.missingSymbols.length
+              providerReason ?? (a.history.missingSymbols.length
                 ? `Нет полной истории: ${a.history.missingSymbols.join(", ")}.`
-                : "Недостаточно общей истории или нулевая дисперсия."
+                : "Недостаточно общей истории или нулевая дисперсия.")
             }
           />
           <section className="card">
             <h2>Вклад в риск текущего состава</h2>
-            {!a.currentRisk && (
+            {!a.currentRisk && !c.loading && !c.errors.length && (
               <p className="notice">
                 Нужны котировки всех позиций, общая история и ненулевая
                 волатильность портфеля.

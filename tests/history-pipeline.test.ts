@@ -146,3 +146,13 @@ describe('calendar and disconnected risk streams', () => {
     for (const v of [null, undefined, NaN, Infinity, -Infinity]) { expect(pct(v)).toBe('—'); expect(numeric(v)).toBe('—'); }
   });
 });
+
+it('deploy guard allows only the requested Vercel project', async () => {
+  const { spawnSync } = await import('node:child_process');
+  for (const id of ['', 'prj_wrong', 'prj_0OQTvpMdNFAJFm2Ty0o536nHR7Qx']) {
+    const allowed = id === 'prj_0OQTvpMdNFAJFm2Ty0o536nHR7Qx';
+    const env = { ...process.env, VERCEL_PROJECT_ID: id };
+    expect(spawnSync(process.execPath, ['scripts/vercel-target.mjs'], { env }).status).toBe(allowed ? 0 : 1);
+    expect(spawnSync(process.execPath, ['scripts/vercel-target.mjs', '--ignore'], { env }).status).toBe(allowed ? 1 : 0);
+  }
+});

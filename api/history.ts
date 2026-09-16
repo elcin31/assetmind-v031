@@ -16,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!symbol) {
     return res.status(400).json({ error: 'Missing symbol' });
   }
-  if (symbol.length > 20 || !/^[A-Z0-9.\-]+$/.test(symbol)) {
+  if (symbol.length > 20 || !/^[A-Z0-9.-]+$/.test(symbol)) {
     return res.status(400).json({ error: 'Invalid symbol format' });
   }
   if (!VALID_PERIODS.includes(periodRaw as HistoryPeriod)) {
