@@ -33,7 +33,7 @@ describe('rolling analytics across excluded intervals', () => {
     expect(rolling).toHaveLength(returns.length);
     expect(rolling[19].value).not.toBeNull();
     const firstAfterGap = rolling.findIndex(
-      (point, index) =>
+      (_, index) =>
         index > 20 &&
         returns[index].startDate !== returns[index - 1].date,
     );
