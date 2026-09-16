@@ -34,7 +34,9 @@ It combines authenticated access, portfolio tracking, market data, interactive p
 - Ticker/name search with a built-in fallback instrument catalog
 - Interactive asset price charts with `1M`, `3M`, `6M`, `1Y` and `5Y` periods
 - TradingView chart fallback when internal historical data is unavailable
-- Portfolio laboratory synchronized with current positions
+- Transaction-aware portfolio history, performance and benchmark dashboard
+- Segmented laboratory for risk, diversification, attribution and stress scenarios
+- Expandable holdings with position-level analytics
 - Light and dark themes
 - JSON backup export and validated import
 - Responsive desktop/mobile interface
@@ -192,109 +194,149 @@ The TradingView widget receives chart configuration such as the ticker, period a
 
 TradingView data may be delayed and does not feed AssetMind's valuation or risk calculations.
 
-## Portfolio laboratory
+## Portfolio Analytics
 
-The laboratory is synchronized with the current portfolio and operates on the current open positions.
+AssetMind separates **transaction-aware historical asset value**, **actual observable price performance**, and **current-holdings risk models**. Analytics run locally in pure, typed TypeScript modules. Supabase Auth, user-scoped localStorage, persisted BUY/SELL types and the existing Weighted Average Cost engine are unchanged.
 
-### 1. Portfolio weights
+### Historical portfolio reconstruction
 
-AssetMind can calculate weights using either cost basis or complete current market value:
+`src/math/portfolioHistory.ts` replays BUY/SELL in the same `timestamp → created_at → id` order as the position engine. For each end-of-day UTC valuation:
 
-$$
-w_i = \frac{V_i}{\sum_j V_j}
-$$
+```text
+q_i(t) = buys through t − sells through t
+V(t) = Σ q_i(t) × close_i(t)
+```
 
-Market-value weights are only shown when quotes are available for all open positions.
+It includes previously closed symbols, multiple buys, partial sells and backdated operations. Today's quantities never replace historical inventory. A symbol needs a price only while held. Missing active-position prices omit that valuation; the next return stays unavailable instead of bridging the missing observation. Future prices and forward filling are never used.
 
-### 2. Herfindahl-Hirschman Index
+The UI calls this **Историческая стоимость активов / Historical Portfolio Value**. It is the value of reconstructed positions, **not full account NAV**: there is no cash account.
 
-Portfolio concentration is measured using:
+### Performance, cash flows and TWR
 
-$$
-HHI = \sum_i w_i^2
-$$
+```text
+r_t = (V_t − V_(t−1) − CF_t) / V_(t−1)
+Total Return = TWR = Π(1 + r_subperiod) − 1
+CAGR = (1 + Total Return)^(365.25 / calendarDays) − 1
+```
 
-A value closer to `1` means stronger concentration.
+The current BUY/SELL ledger cannot distinguish a deposit from reinvestment of cash or identify withdrawals. Therefore **BUY/SELL notional is not treated as external cash flow**. `externalFlow: null` means unknown, not zero. Trade-free intervals measure observable price returns of the reconstructed holdings; intervals containing trades are unavailable. A selected period with any unknown return has no Total Return, TWR, CAGR, performance-based risk or return attribution. The UI explains why and allows choosing a trade-free period. No proxy silently substitutes for actual performance.
 
-### 3. Effective number of positions
+`flowAdjustedReturn` accepts explicitly known end-period external flows. It requires a correct flow-timing convention; it is not an exact intraday TWR estimator. `timeWeightedReturn` geometrically links supplied valid subperiod returns; exact flow-aware TWR needs valuations around every cash flow. The separate `CashEvent` boundary anticipates DEPOSIT, WITHDRAWAL, DIVIDEND and FEE without changing persisted transaction types. Dividends/fees are internal investment income/costs, not deposits/withdrawals.
 
-AssetMind converts HHI into an intuitive equal-weight equivalent:
+CAGR requires at least 30 calendar days. Its formula explanation warns that annualizing short samples is unstable. Best/worst day and positive/negative day percentages use a complete selected daily-return series; flat days stay in the denominator.
 
-$$
-N_{eff} = \frac{1}{HHI}
-$$
+Monthly returns compound available intervals within calendar months. Unknown intervals make the month unavailable. Boundary months may be partial and are labelled as such. Calendar YTD requires a valuation before January 1 and every elapsed month; an incomplete initial January cannot produce a fabricated YTD.
 
-This is a concentration measure only. It does not account for correlations between assets.
+### Drawdown and recovery
 
-### 4. Stress scenarios
+Investment drawdown uses a chained return index W, so capital changes are not mistaken for losses:
 
-The laboratory can apply a hypothetical shock from `-80%` to `+80%` to one position or the entire portfolio:
+```text
+DD(t) = W(t) / max(W through t) − 1
+```
 
-$$
-V' = \sum_i V_i(1+s_i)
-$$
+Current/max drawdown, underwater chart and episodes expose start, bottom, recovery date, depth, duration and recovery duration. An episode starts on the first below-high observation and ends when the previous high is reached or exceeded. Durations are calendar days; recovery duration is from bottom to recovery. Open episodes remain unrecovered. The separate collapsible **asset-value drawdown** uses V directly and explicitly warns that trades affect it; it is not investment-risk drawdown.
 
-$$
-\Delta V = V' - V
-$$
+### Risk and rolling metrics
 
-Cost-basis scenarios are explicitly hypothetical. The model does not account for liquidity, commissions, FX effects or correlation changes during market stress.
+| Metric | Convention / minimum |
+| --- | --- |
+| Volatility | Sample standard deviation × √252; ≥20 returns |
+| Sharpe | `(252 × mean(r) − Rf) / volatility`; ≥20 returns |
+| Downside deviation | `sqrt(mean(min(r − MAR/252, 0)^2)) × sqrt(252)`; ≥20 returns |
+| Sortino | `(252 × mean(r) − MAR) / annual downside deviation`; ≥20 returns |
+| Calmar | CAGR / absolute max investment drawdown; requires available CAGR and negative drawdown |
+| VaR 95% | `max(0, −r_(ceil(.05n)))`, ascending returns; ≥20 returns |
+| Expected Shortfall 95% | Mean loss in the same worst `ceil(.05n)` observations; ≥20 returns |
+| Rolling volatility | Complete windows of 20 / 60 / 252 trading observations |
+| Rolling Sharpe | Complete windows of 63 / 126 / 252 observations |
 
-### 5. Historical VaR 95%
+Rf and MAR are configurable annual **arithmetic** rates, default zero. Numerators use arithmetic annualized mean, not CAGR. Downside MAR is divided by 252, consistently with that convention. Near-zero denominators return null. Rolling warm-up and undefined windows are not plotted. A 20-point minimum is a gate, not a claim of statistical reliability; VaR/ES are particularly unstable with small samples.
 
-For historical daily returns sorted from worst to best:
+### Diversification and current-composition risk
 
-$$
-k = \lceil 0.05n \rceil
-$$
+Returns are aligned by **both start and end dates**. We never pair a multi-day return from a sparse series with a one-day return ending on the same day. A matrix uses the same common sample for every holding (minimum 20 intervals); missing holdings are not silently dropped.
 
-$$
-VaR_{95} = \max(0,-r_{(k)})
-$$
+```text
+correlation_ij = Cov(R_i, R_j) / (sd_i × sd_j)
+Σ_annual = sampleCovariance × 252
+portfolioVariance = wᵀΣw
+portfolioVolatility = sqrt(wᵀΣw)
+MCR_i = (Σw)_i / portfolioVolatility
+RC_i = w_i × MCR_i
+riskShare_i = RC_i / ΣRC
+Diversification Ratio = Σ(w_i × sd_i) / portfolioVolatility
+```
 
-The metric represents an empirical one-day loss threshold from the available sample. It is not a maximum possible loss.
+Current market weights require all quotes. Sum of RC equals portfolio volatility; negative contributions can reflect hedging. The matrix shows correlations and a collapsible annual covariance table in squared decimal-return units. Correlation is undefined for zero-variance assets, so a joint correlation/covariance panel is unavailable in that case. A pure portfolio-variance function also validates symmetry and positive semidefiniteness. Average correlation is the unweighted mean of unique asset pairs, with no arbitrary good/bad label. HHI/effective positions measure concentration separately from correlation.
 
-### 6. Expected Shortfall 95%
+The previous fixed-quantity series remains as `buildCurrentHoldingsRiskProxy` (legacy alias retained) and **Исторический риск текущего состава · proxy**: how today's quantities would have behaved on historical prices. Its volatility/Sharpe are explicitly model metrics, never historical portfolio performance.
 
-Expected Shortfall averages the worst 5% of observed daily returns:
+### Benchmark
 
-$$
-ES_{95} = \max\left(0,-\frac{1}{k}\sum_{i=1}^{k}r_{(i)}\right)
-$$
+SPY is the default; QQQ, DIA and IWM are selectable. Prices use the existing market-history API and shared client cache. The comparison compounds portfolio and benchmark returns from the same start at 100, only with uninterrupted common intervals.
 
-### 7. Maximum drawdown
+- **Beta:** `Cov(Rp, Rm) / Var(Rm)`.
+- **Jensen Alpha:** `252mean(Rp) − [Rf + Beta × (252mean(Rm) − Rf)]`.
+- **Tracking Error:** `sampleStdev(Rp − Rm) × sqrt(252)`.
+- **Information Ratio:** `252mean(Rp − Rm) / Tracking Error`.
 
-$$
-MDD = \max_t\left(1-\frac{V_t}{\max_{s\le t}V_s}\right)
-$$
+Regression/risk metrics require ≥20 matched intervals. Identical series give Beta 1, Alpha 0 and tracking error 0; Information Ratio is unavailable when tracking error is zero. This is **price-return** comparison, not dividend-reinvested total return.
 
-This measures the largest peak-to-trough decline in the modeled historical value series.
+### Attribution and scenarios
 
-### 8. Annualized volatility
+P&L attribution reuses WAC, includes closed symbols and shows realized, unrealized and total lifetime P&L. Missing live quotes make the affected total unavailable. Contributors/detractors are sortable and visualized with horizontal bars.
 
-Daily sample volatility is annualized using 252 trading days:
+Return attribution is separate: `c_i,t = weight_i,t−1 × return_i,t`. It uses reconstructed beginning weights and links contributions with preceding cumulative wealth, `C_i = Σ W_t−1 c_i,t`. This makes the sum equal compounded portfolio return. It is available only for a complete selected period without unknown flows.
 
-$$
-\sigma_{ann}=\sigma_{daily}\sqrt{252}
-$$
+Simple stress sliders and per-asset shocks use `V′ = Σ V_i(1 + shock_i)` with current market values. Presets fill shocks only:
 
-### 9. Sharpe ratio
+- broad sell-off: −15% for all holdings;
+- technology correction: −25% for user-selected group, −8% for others;
+- high-volatility shock: −35% for user-selected group, −12% for others;
+- custom/reset: zero shocks before user edits.
 
-The laboratory allows the user to adjust the annual risk-free rate:
+Group membership is explicitly selected by the user, not guessed from tickers. Every scenario says **Гипотетический сценарий, не прогноз**. No transactions are changed.
 
-$$
-Sharpe = \frac{252\cdot\overline{r}_{daily}-r_f}{\sigma_{ann}}
-$$
+### Interface and data flow
 
-The current implementation uses a simple annual extrapolation of average daily return.
+Overview prioritizes value, history, four performance/risk metrics, benchmark, P&L contributors, allocation and open positions. Laboratory renders one of six sections: Доходность, Риск, Диверсификация, Атрибуция, Сценарии, Рынок. Holdings expand into P&L, return, weight, risk contribution, volatility, correlation with the **current-holdings proxy**, Beta and the existing PriceChart.
 
-### Historical-model limitation
+`calculatePortfolioAnalytics` produces view models; components do not build covariance matrices or replay transactions. A public-market-data cache deduplicates in-flight requests and caches successful symbol/period responses for five minutes, with bounded entries and failed-request eviction. Analytics load up to 5 years once per symbol, including closed symbols and the benchmark; period/tab switches reuse those prices. PriceChart shares the cache while retaining its periods, cursor and TradingView fallback.
 
-Historical portfolio metrics model **today's fixed holdings** against overlapping historical asset prices.
+Supported portfolio periods: 1M / 3M / 6M / YTD / 1Y / ALL. The last available close preceding the period boundary is included as a baseline. **ALL means all available API history, at most 5 years**, not a lifetime guarantee. Actual date range and observation counts are displayed. Loading, empty, insufficient, provider-error and partial-data states remain distinct. Tables/heatmaps scroll inside their containers on narrow screens; unavailable numbers use `—`, never fabricated zeros.
 
-They do **not** reconstruct the actual historical NAV of the account from transaction dates, deposits, withdrawals or historical position sizes.
+### Methodological limits
 
-At least 21 common price observations are required before the historical-risk metrics are shown.
+- No cash ledger, external flow classification, dividend/fee history or full account NAV. Known price returns are not net total returns.
+- UTC day grouping cannot resolve intraday execution/flow timing. Returns start from the first reconstructed close, not the first trade execution price.
+- No split/corporate-action ledger, historical FX conversion or provider adjustment metadata. Inventory reconstruction assumes prices and recorded quantities use compatible units; affected securities need validated price/transaction history before relying on results.
+- Provider observations define the trading calendar. There is no exchange-calendar service; simultaneous missing dates across every series cannot be detected. No forward fill, interpolation or look-ahead is performed.
+- Provider coverage may start after the first transaction, end before today or be unavailable for a closed/delisted ticker. The displayed range is authoritative. PriceChart's TradingView fallback does not supply analytics prices.
+- Current-composition covariance/proxy risk and historical performance are different models. Return attribution and monetary P&L use different time horizons, clearly labelled.
+- All newly exposed ratios validate inputs and return null for insufficient/invalid data or near-zero denominators. No optimizer, options analytics, Monte Carlo or AI recommendations are included.
+
+### Verification
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run lint
+npm run build
+npm run verify
+```
+
+Unit/integration tests cover historical inventory/order, missing/future data, flow-adjusted returns, TWR/CAGR/monthly/YTD, drawdown episodes, downside/ratios/tails, correlation/covariance/variance/RC identities, benchmark identities, attribution, scenarios, numerical guards and shared-cache behavior.
+
+Optional browser regressions (Playwright with Chromium installed):
+
+```bash
+node tests/browser/analytics.mjs
+node tests/browser/search-selection.mjs
+```
+
+The scripts start isolated Vite fixtures. `PLAYWRIGHT_MODULE_PATH` and `BROWSER_EXECUTABLE` may select runtime-owned installations. Analytics checks cover 320/375/390/430/768/1440 px, navigation, periods, benchmark, scrubber, holding details, scenarios, request deduplication, empty/partial/provider-error states and console exceptions. Fixtures use synthetic market data; they do not validate live provider credentials, subscription access or authenticated production sessions.
 
 ## Portfolio calculations
 
@@ -432,7 +474,8 @@ src/
 ├── auth/          Supabase authentication, session and recovery logic
 ├── components/    Portfolio UI, charts, search and laboratory components
 ├── data/          Built-in instrument data and local fallback search
-├── math/          Positions, P&L, returns, volatility, Sharpe and lab math
+├── analytics/     Shared history cache, analytics hook and metric explanations
+├── math/          Pure history, performance, risk, diversification, benchmark and attribution modules
 ├── pages/         Login and authenticated portfolio screens
 ├── storage/       Versioned local persistence, migration and backup logic
 ├── theme/         Light/dark theme persistence
@@ -469,7 +512,7 @@ The current version deliberately does not claim capabilities that are not implem
 - there is no deposit/withdrawal model
 - there is no automatic FX conversion
 - portfolios currently default to USD
-- historical laboratory analytics are not a transaction-accurate historical NAV backtest
+- reconstructed historical asset value excludes cash; transaction-aware positions do not imply full account NAV
 - HHI/effective-position metrics do not model asset correlations
 - market valuation and historical analytics depend on external market-data availability
 
