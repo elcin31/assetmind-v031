@@ -10,8 +10,9 @@ import { useAuth } from './auth/AuthContext';
 import { enrichPositionsWithQuotes } from './math/pnl';
 import { buildCashLedger } from './math/cashLedger';
 import { moneyWeightedReturn } from './math/xirr';
-import { exportPortfolio, getPortfolioStorageKey, importPortfolio, readPortfolioSynced } from './storage/portfolio';
+import { getPortfolioStorageKey, readPortfolioSynced } from './storage/portfolio';
 import { readPlanningState } from './storage/planning';
+import { exportAccountBackup, importAccountBackup } from './storage/accountBackup';
 
 export default function App() {
   const { user, session, loading, recoveryMode, signOut } = useAuth();
@@ -48,6 +49,8 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<string | null>(null);
   const generation = useRef(0);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -89,22 +92,37 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
     return () => { ++generation.current; window.removeEventListener('storage', storage); window.removeEventListener('assetmind:changed', update); };
   }, [loadPortfolio, userId]);
 
+  const handleExport = async () => {
+    setBackupBusy(true); setBackupStatus(null); setError(null);
+    try {
+      const backup = await exportAccountBackup(userId);
+      setBackupStatus(`Полный backup создан: ${backup.transactions.length} trades · ${backup.cashEvents.length} cash events · ${backup.targetAllocation.length} targets.`);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Не удалось создать backup.'); }
+    finally { setBackupBusy(false); }
+  };
+
   return <div className="app">
     <details className="backup-panel">
       <summary>Данные и резервные копии <span>Аккаунт + локальный кэш</span></summary>
-      <p>Портфель и capital layer синхронизируются с вашим аккаунтом. JSON сейчас остаётся резервной копией торгового ledger; cash events и target allocation хранятся в Supabase.</p>
+      <p>Полный account backup включает BUY/SELL, cash events, target allocation и настройки аналитики. Импорт работает как merge: существующие записи не удаляются, конфликты блокируются до записи. Старые trades-only backup тоже поддерживаются.</p>
       <div className="backup-actions">
-        <button className="btn btn-ghost" onClick={() => { try { exportPortfolio(userId); } catch { setError('Could not export browser data.'); } }}>Экспорт trades JSON</button>
-        <button className="btn btn-ghost" onClick={() => fileInput.current?.click()}>Импорт trades JSON</button>
+        <button className="btn btn-ghost" disabled={backupBusy} onClick={() => void handleExport()}>{backupBusy ? 'Подготовка…' : 'Экспорт полного backup'}</button>
+        <button className="btn btn-ghost" disabled={backupBusy} onClick={() => fileInput.current?.click()}>Импорт backup</button>
       </div>
-      <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="Import portfolio backup" onChange={async event => {
+      {backupStatus && <p className="caption" role="status">{backupStatus}</p>}
+      <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="Import AssetMind account backup" onChange={async event => {
         const file = event.target.files?.[0]; event.target.value = '';
         if (!file) return;
+        setBackupBusy(true); setBackupStatus(null); setError(null);
         try {
           if (file.size > 5_000_000) throw new Error('Backup must be smaller than 5 MB.');
-          await importPortfolio(await file.text(), userId);
+          const result = await importAccountBackup(await file.text(), userId);
           await loadPortfolio();
+          setBackupStatus(result.kind === 'legacy-trades'
+            ? `Старый trades backup импортирован: +${result.importedTransactions} операций.`
+            : `Account backup восстановлен: +${result.importedTransactions} trades · +${result.importedCashEvents} cash events · ${result.targetCount} targets.`);
         } catch (err) { setError(err instanceof Error ? err.message : 'Import failed'); }
+        finally { setBackupBusy(false); }
       }} />
     </details>
     {snapshot ? <PortfolioScreen snapshot={snapshot} userId={userId} onRefresh={() => { void loadPortfolio(); }} onSignOut={onSignOut} loading={loading} setError={setError} error={error} /> :
