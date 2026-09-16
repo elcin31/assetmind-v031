@@ -19,7 +19,8 @@ export function DataQualityPanel({
     ? [...snapshot.transactions].sort((x, y) => Date.parse(x.timestamp) - Date.parse(y.timestamp))[0].timestamp.slice(0, 10)
     : null;
   const proxyReturns = a.proxy.dailyReturns;
-  const lastProxyDate = proxyReturns.length ? proxyReturns[proxyReturns.length - 1].date : null;
+  const datedProxyReturns = a.proxy.returns;
+  const lastProxyDate = datedProxyReturns.length ? datedProxyReturns[datedProxyReturns.length - 1].date : null;
   const cleanIntervals = a.performance.riskReturns.length;
   const commonIntervals = a.matrix?.observations ?? 0;
   const benchmarkIntervals = a.benchmark.observations;
@@ -48,9 +49,7 @@ export function DataQualityPanel({
           Для большинства risk-метрик нужно минимум 20 чистых однодневных интервалов. Сейчас доступно {cleanIntervals}/20. BUY/SELL и неизвестные ценовые разрывы не подменяются нулевой доходностью.
         </p>
       )}
-      {providerPartial && (
-        <p className="notice">История поставщика загружена частично: {c.errors.join('; ')}</p>
-      )}
+      {providerPartial && <p className="notice">История поставщика загружена частично: {c.errors.join('; ')}</p>}
 
       <div className="data-quality-grid">
         <div><span>Рыночная оценка</span><b>{snapshot.valuation.pricedPositions}/{snapshot.valuation.totalPositions} позиций</b></div>
