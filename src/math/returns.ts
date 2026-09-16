@@ -8,10 +8,13 @@
  */
 
 import type { HistoryBar, Position } from '../types';
+import type { DatedReturn } from '../types/analytics';
+import { datedReturns } from './performance';
 
 export interface PortfolioReturnSeries {
   dates: string[];
   values: number[];
+  returns: DatedReturn[];
   dailyReturns: number[];
   available: boolean;
   reason?: string;
@@ -19,13 +22,14 @@ export interface PortfolioReturnSeries {
 
 export function buildCurrentHoldingsRiskProxy(
   positions: Position[],
-  historyBySymbol: Map<string, HistoryBar[]>
+  historyBySymbol: Map<string, HistoryBar[]>,
 ): PortfolioReturnSeries {
-  if (positions.length === 0) {
-    return unavailable('empty_portfolio');
-  }
+  if (positions.length === 0) return unavailable('empty_portfolio');
 
+  const priceMaps = new Map<string, Map<string, number>>();
+  const returnMaps = new Map<string, Map<string, DatedReturn>>();
   let commonDates: string[] | null = null;
+  let commonIntervals: string[] | null = null;
 
   for (const pos of positions) {
     const bars = historyBySymbol.get(pos.symbol);
@@ -33,43 +37,43 @@ export function buildCurrentHoldingsRiskProxy(
       return unavailable(`insufficient_history_for_${pos.symbol}`);
     }
 
-    const dates = new Set(
+    const priceMap = new Map(
       bars
         .filter((bar) => Number.isFinite(bar.close) && bar.close > 0)
-        .map((bar) => bar.date)
+        .map((bar) => [bar.date, bar.close]),
     );
+    const returns = datedReturns(bars);
+    const intervalMap = new Map(
+      returns.map((r) => [`${r.startDate}/${r.date}`, r]),
+    );
+    priceMaps.set(pos.symbol, priceMap);
+    returnMaps.set(pos.symbol, intervalMap);
 
-    if (commonDates === null) {
-      commonDates = [...dates].sort();
-    } else {
-      commonDates = commonDates.filter((date) => dates.has(date));
-    }
+    const dates = [...priceMap.keys()].sort();
+    commonDates =
+      commonDates === null
+        ? dates
+        : commonDates.filter((date) => priceMap.has(date));
+
+    const intervalKeys = [...intervalMap.keys()];
+    commonIntervals =
+      commonIntervals === null
+        ? intervalKeys
+        : commonIntervals.filter((key) => intervalMap.has(key));
   }
 
-  if (!commonDates || commonDates.length < 5) {
+  if (!commonDates || commonDates.length < 2) {
     return unavailable('insufficient_common_history');
   }
-
-  const priceMaps = new Map<string, Map<string, number>>();
-  for (const pos of positions) {
-    const bars = historyBySymbol.get(pos.symbol)!;
-    priceMaps.set(
-      pos.symbol,
-      new Map(
-        bars
-          .filter((bar) => Number.isFinite(bar.close) && bar.close > 0)
-          .map((bar) => [bar.date, bar.close])
-      )
-    );
+  if (!commonIntervals || commonIntervals.length === 0) {
+    return unavailable('insufficient_common_return_intervals');
   }
 
   const dates: string[] = [];
   const values: number[] = [];
-
   for (const date of commonDates) {
     let dayValue = 0;
     let valid = true;
-
     for (const pos of positions) {
       const price = priceMaps.get(pos.symbol)?.get(date);
       if (price === undefined || !Number.isFinite(price) || price <= 0) {
@@ -78,35 +82,65 @@ export function buildCurrentHoldingsRiskProxy(
       }
       dayValue += pos.quantity * price;
     }
-
     if (valid && Number.isFinite(dayValue) && dayValue > 0) {
       dates.push(date);
       values.push(dayValue);
     }
   }
 
-  if (values.length < 5) {
+  const returns: DatedReturn[] = commonIntervals
+    .map((key) => {
+      const [startDate, date] = key.split('/');
+      let startValue = 0;
+      let endValue = 0;
+      for (const pos of positions) {
+        const start = priceMaps.get(pos.symbol)?.get(startDate);
+        const end = priceMaps.get(pos.symbol)?.get(date);
+        if (
+          start === undefined ||
+          end === undefined ||
+          !Number.isFinite(start) ||
+          !Number.isFinite(end) ||
+          start <= 0 ||
+          end <= 0
+        )
+          return null;
+        startValue += pos.quantity * start;
+        endValue += pos.quantity * end;
+      }
+      if (
+        !Number.isFinite(startValue) ||
+        !Number.isFinite(endValue) ||
+        startValue <= 0 ||
+        endValue <= 0
+      )
+        return null;
+      const value = endValue / startValue - 1;
+      return Number.isFinite(value) && value >= -1
+        ? { startDate, date, value }
+        : null;
+    })
+    .filter((r): r is DatedReturn => r !== null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (values.length < 2 || returns.length === 0) {
     return unavailable('insufficient_clean_history');
   }
 
-  const dailyReturns: number[] = [];
-  for (let i = 1; i < values.length; i++) {
-    const prev = values[i - 1];
-    const current = values[i];
-    const dailyReturn = (current - prev) / prev;
-    if (!Number.isFinite(dailyReturn)) {
-      return unavailable('invalid_return_series');
-    }
-    dailyReturns.push(dailyReturn);
-  }
-
-  return { dates, values, dailyReturns, available: true };
+  return {
+    dates,
+    values,
+    returns,
+    dailyReturns: returns.map((r) => r.value),
+    available: true,
+  };
 }
 
 function unavailable(reason: string): PortfolioReturnSeries {
   return {
     dates: [],
     values: [],
+    returns: [],
     dailyReturns: [],
     available: false,
     reason,
