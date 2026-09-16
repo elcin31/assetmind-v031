@@ -17,7 +17,7 @@ export interface PortfolioReturnSeries {
   reason?: string;
 }
 
-export function buildPortfolioValueSeries(
+export function buildCurrentHoldingsRiskProxy(
   positions: Position[],
   historyBySymbol: Map<string, HistoryBar[]>
 ): PortfolioReturnSeries {
@@ -112,3 +112,6 @@ function unavailable(reason: string): PortfolioReturnSeries {
     reason,
   };
 }
+
+/** @deprecated Compatibility alias; this is never actual portfolio performance. */
+export const buildPortfolioValueSeries = buildCurrentHoldingsRiskProxy;
