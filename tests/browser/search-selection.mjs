@@ -31,6 +31,8 @@ try {
   });
   await result.tap();
   assert.equal(await search.inputValue(),symbol,`query must become ${symbol}`);
+  // initialSymbol is synchronized by a React effect; wait for the committed form value.
+  await page.waitForFunction(expected => document.querySelector('form input')?.value === expected, symbol, { timeout: 2000 });
   assert.equal(await page.locator('form input').first().inputValue(),symbol);
   await page.getByRole('heading',{name:`Цена · ${symbol}`,exact:true}).waitFor();
   await page.locator('.price-plot').waitFor();
