@@ -1,6 +1,6 @@
 import type { HistoryBar } from "../types";
 import { normalizePriceHistory } from "../utils/priceHistory";
-type Entry = { expires: number; promise: Promise<HistoryBar[]> };
+type Entry = { expires: number; promise: Promise<HistoryBar[]>; pending: boolean };
 const cache = new Map<string, Entry>();
 /** Public market data only. Pending requests are shared; errors are evicted for retry. */
 export function loadHistory(
@@ -10,6 +10,8 @@ export function loadHistory(
 ): Promise<HistoryBar[]> {
   symbol = symbol.trim().toUpperCase();
   const key = `${symbol}:${period}`;
+  const pending = cache.get(key);
+  if (pending?.pending) return pending.promise;
   if (refresh) cache.delete(key);
   const entry = cache.get(key);
   if (entry && entry.expires > Date.now()) return entry.promise;
@@ -29,7 +31,11 @@ export function loadHistory(
     if (!bars.length) throw new Error("Недостаточно истории");
     return bars;
   })();
-  cache.set(key, { expires: Date.now() + 300000, promise });
+  cache.set(key, { expires: Date.now() + 300000, promise, pending: true });
+  void promise.then(() => {
+    const entry = cache.get(key);
+    if (entry?.promise === promise) entry.pending = false;
+  }, () => {});
   void promise.catch(() => {
     if (cache.get(key)?.promise === promise) cache.delete(key);
   });

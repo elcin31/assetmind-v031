@@ -1,4 +1,4 @@
-import type { SearchResult } from '../types';
+import type { SearchResult } from '../types/index.js';
 
 /** Small offline catalog. No live prices; extended search remains available through the API. */
 const INSTRUMENTS: SearchResult[] = [

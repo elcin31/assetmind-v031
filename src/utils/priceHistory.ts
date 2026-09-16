@@ -1,4 +1,4 @@
-import type { HistoryBar } from '../types';
+import type { HistoryBar } from '../types/index.js';
 
 /** Discard invalid provider points, deduplicate days and sort chronologically. */
 export function normalizePriceHistory(value: unknown, asOf = new Date().toISOString().slice(0, 10)): HistoryBar[] {

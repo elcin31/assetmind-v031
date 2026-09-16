@@ -4,7 +4,7 @@
  */
 
 import { searchInstruments as fallbackSearch } from '../src/data/instruments.js';
-import type { Quote, SearchResult } from '../src/types';
+import type { Quote, SearchResult } from '../src/types/index.js';
 
 import { fetchHistory, type HistoryPeriod, type HistoryResult } from './historyProvider.js';
 export { HistoryProviderError } from './historyProvider.js';

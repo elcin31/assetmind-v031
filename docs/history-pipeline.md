@@ -19,7 +19,7 @@ References:
 - https://finance.yahoo.com/quote/AAPL/history/
 - https://help.yahoo.com/kb/SLN28256.html
 
-Periods use UTC calendar months: 1m, 3m, 6m, 1y, 2y, 5y, with end-of-month clamping. Normalization requires valid ISO dates, positive finite closes, no future dates, ascending dates; the last valid duplicate wins deterministically. No successful empty history is cached. An IPO can legitimately have less than the requested five years.
+Periods use UTC calendar months: 1m, 3m, 6m, 1y, 2y, 5y, with end-of-month clamping. Normalization requires valid ISO dates, positive finite closes, no future dates, ascending dates; the last valid duplicate wins deterministically. No successful empty history is cached. An IPO can legitimately have less than the requested five years. A response whose first/last dates miss the requested boundaries by over ten calendar days is marked partial; an incomplete Finnhub result also triggers fallback and the longer available series is retained. Coverage metadata and UI coverage details report the actual range without inventing pre-IPO data.
 
 The compatible success response retains `symbol`, `period`, `bars` and adds `provider`, `priceBasis`, `warnings`. A successful fallback reports the primary failure in warnings and server logs. Total failure returns `code`, `error`, `failures` with upstream statuses, never a success-shaped `bars: []`. Codes distinguish authorization, plan restriction, rate limit, timeout, malformed response, empty history, unavailable provider and missing configuration. HTTP 403 means access denied/possible plan restriction, not proof of the exact account entitlement.
 

@@ -1,8 +1,8 @@
-import type { HistoryBar } from '../src/types';
+import type { HistoryBar } from '../src/types/index.js';
 import { normalizePriceHistory } from '../src/utils/priceHistory.js';
 
 export type HistoryPeriod = '1m' | '3m' | '6m' | '1y' | '2y' | '5y';
-export type HistoryFailureCode = 'authorization' | 'plan_restriction' | 'rate_limit' | 'provider_unavailable' | 'timeout' | 'malformed_response' | 'empty_history' | 'not_configured';
+export type HistoryFailureCode = 'authorization' | 'plan_restriction' | 'rate_limit' | 'provider_unavailable' | 'timeout' | 'malformed_response' | 'empty_history' | 'not_configured' | 'partial_history';
 export interface ProviderFailure {
   provider: string;
   code: HistoryFailureCode;
@@ -21,6 +21,7 @@ export interface HistoryResult {
   provider: 'finnhub' | 'yahoo';
   priceBasis: 'split-adjusted-close';
   warnings: ProviderFailure[];
+  coverage: { firstDate: string; lastDate: string; bars: number; requestedStart: string; partial: boolean };
 }
 function fail(provider: string, code: HistoryFailureCode, status: number | null = null): never {
   throw new HistoryProviderError([{ provider, code, status }]);
@@ -35,7 +36,7 @@ async function json(url: string, provider: string): Promise<unknown> {
       fail(provider, code, response.status);
     }
     try { return await response.json(); }
-    catch { fail(provider, 'malformed_response'); }
+    catch { fail(provider, controller.signal.aborted ? 'timeout' : 'malformed_response'); }
   } catch (error) {
     if (error instanceof HistoryProviderError) throw error;
     fail(provider, controller.signal.aborted ? 'timeout' : 'provider_unavailable');
@@ -64,6 +65,13 @@ function barsFromArrays(timestamps: unknown, closes: unknown, provider: string, 
   if (!bars.length) fail(provider, timestamps.length ? 'malformed_response' : 'empty_history');
   return bars;
 }
+function coverage(bars: HistoryBar[], start: string, end: string) {
+  // Coverage is descriptive, not a claim that a young listing should have five years.
+  const firstDate = bars[0].date;
+  const lastDate = bars.at(-1)!.date;
+  const partial = Date.parse(firstDate) - Date.parse(start) > 10 * 86400000 || Date.parse(end) - Date.parse(lastDate) > 10 * 86400000;
+  return { firstDate, lastDate, bars: bars.length, requestedStart: start, partial };
+}
 /** Both providers use split-adjusted close, excluding dividend reinvestment. Never mix Yahoo adjclose with Finnhub close. */
 export async function fetchHistory(symbol: string, period: HistoryPeriod, now = new Date()): Promise<HistoryResult> {
   const sym = symbol.trim().toUpperCase();
@@ -73,13 +81,17 @@ export async function fetchHistory(symbol: string, period: HistoryPeriod, now = 
   const startDay = start.toISOString().slice(0, 10);
   const endDay = now.toISOString().slice(0, 10);
   const warnings: ProviderFailure[] = [];
+  let primary: HistoryResult | null = null;
   try {
     const key = process.env.FINNHUB_API_KEY;
     if (!key) fail('finnhub', 'not_configured');
     const data = record(await json(`https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(sym)}&resolution=D&from=${from}&to=${to}&token=${encodeURIComponent(key)}`, 'finnhub'));
     if (data.s === 'no_data') fail('finnhub', 'empty_history');
     if (data.s !== 'ok') fail('finnhub', 'malformed_response');
-    return { bars: barsFromArrays(data.t, data.c, 'finnhub', startDay, endDay), provider: 'finnhub', priceBasis: 'split-adjusted-close', warnings };
+    const bars = barsFromArrays(data.t, data.c, 'finnhub', startDay, endDay);
+    primary = { bars, provider: 'finnhub', priceBasis: 'split-adjusted-close', warnings: [], coverage: coverage(bars, startDay, endDay) };
+    if (!primary.coverage.partial) return primary;
+    warnings.push({ provider: 'finnhub', code: 'partial_history', status: null });
   } catch (error) {
     if (!(error instanceof HistoryProviderError)) throw error;
     warnings.push(...error.failures);
@@ -90,9 +102,12 @@ export async function fetchHistory(symbol: string, period: HistoryPeriod, now = 
     if (chart.error) fail('yahoo', 'provider_unavailable');
     const result = record(first(chart.result));
     const quotes = record(first(record(result.indicators).quote));
-    return { bars: barsFromArrays(result.timestamp, quotes.close, 'yahoo', startDay, endDay), provider: 'yahoo', priceBasis: 'split-adjusted-close', warnings };
+    const bars = barsFromArrays(result.timestamp, quotes.close, 'yahoo', startDay, endDay);
+    if (primary && primary.bars.length > bars.length) return { ...primary, warnings };
+    return { bars, provider: 'yahoo', priceBasis: 'split-adjusted-close', warnings, coverage: coverage(bars, startDay, endDay) };
   } catch (error) {
     if (!(error instanceof HistoryProviderError)) throw error;
+    if (primary) return { ...primary, warnings: [...warnings, ...error.failures] };
     throw new HistoryProviderError([...warnings, ...error.failures]);
   }
 }

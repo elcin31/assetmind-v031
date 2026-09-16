@@ -156,3 +156,22 @@ it('deploy guard allows only the requested Vercel project', async () => {
     expect(spawnSync(process.execPath, ['scripts/vercel-target.mjs', '--ignore'], { env }).status).toBe(allowed ? 1 : 0);
   }
 });
+
+it('timeouts remain distinct even during JSON body consumption', async () => {
+  vi.useFakeTimers();
+  vi.stubEnv('FINNHUB_API_KEY', 'unit-test');
+  vi.stubGlobal('fetch', vi.fn((_url, options) => Promise.resolve({ ok: true, status: 200, json: () => new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('aborted')))) })));
+  try {
+    const pending = expect(fetchHistory('AAPL', '5y', now)).rejects.toMatchObject({ failures: [expect.objectContaining({ code: 'timeout' }), expect.objectContaining({ code: 'timeout' })] });
+    await vi.advanceTimersByTimeAsync(12001); await pending;
+  } finally { vi.useRealTimers(); }
+});
+
+it('partial primary history tries fallback and expands coverage', async () => {
+  vi.stubEnv('FINNHUB_API_KEY', 'unit-test');
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(200, { s: 'ok', t: candles.t.slice(-30), c: candles.c.slice(-30) })).mockResolvedValueOnce(response(200, yahoo)));
+  const result = await fetchHistory('AAPL', '5y', now);
+  expect(result.bars.length).toBeGreaterThan(1000);
+  expect(result.warnings[0].code).toBe('partial_history');
+  expect(result.coverage.partial).toBe(false);
+});
