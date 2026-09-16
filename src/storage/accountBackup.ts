@@ -252,7 +252,7 @@ export async function importAccountBackup(raw: string, userId: string): Promise<
 
   // Backward compatibility with the pre-P3 BUY/SELL-only backup format.
   if (parsed && typeof parsed === 'object' && (parsed as { version?: unknown }).version === 1 && (parsed as { format?: unknown }).format === undefined) {
-    const legacy = validatePortfolio(parsed);
+    validatePortfolio(parsed);
     const before = await readPortfolioSynced(userId);
     await importPortfolio(raw, userId);
     const after = await readPortfolioSynced(userId);
