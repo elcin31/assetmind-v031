@@ -78,10 +78,12 @@ describe('target allocation, rebalancing and what-if', () => {
   });
 
   it('shows whether a hypothetical trade improves target drift', () => {
-    const result = simulateTradeWhatIf(positions, 100, targets, true, true, { symbol: 'AAPL', type: 'SELL', quantity: 1, price: 100 });
+    const whatIfTargets = [{ symbol: 'AAPL', weight: 0.5 }, { symbol: 'MSFT', weight: 0.3 }];
+    const result = simulateTradeWhatIf(positions, 100, whatIfTargets, true, true, { symbol: 'AAPL', type: 'SELL', quantity: 1, price: 100 });
     expect(result.valid).toBe(true);
     expect(result.cashAfter).toBe(200);
     expect(result.targetDriftAfter!).toBeLessThan(result.targetDriftBefore!);
+    expect(result.targetDriftAfter).toBeCloseTo(0);
   });
 
   it('rejects a buy that spends more reconciled cash than available', () => {
