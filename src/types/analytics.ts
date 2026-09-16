@@ -46,7 +46,10 @@ export interface PerformanceMetrics {
   worstDay: number | null;
   positiveDays: number | null;
   negativeDays: number | null;
+  /** Continuous investment performance only. */
   returns: DatedReturn[];
+  /** Clean daily intervals, potentially disconnected; never compound across gaps. */
+  riskReturns: DatedReturn[];
   monthly: MonthlyReturn[];
   reason: string | null;
 }

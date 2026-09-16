@@ -253,7 +253,7 @@ describe("risk, correlation and covariance", () => {
     const result = riskContributions(["A", "B"], [0.6, 0.4], matrix)!;
     expect(
       result.contributions.reduce((s, c) => s + c.absolute, 0),
-    ).toBeCloseTo(Math.sqrt(0.03168));
+    ).toBeCloseTo(0.03168);
     expect(
       result.contributions.reduce((s, c) => s + c.fraction, 0),
     ).toBeCloseTo(1);

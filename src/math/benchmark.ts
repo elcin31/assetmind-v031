@@ -1,6 +1,7 @@
 import type { BenchmarkMetrics, DatedReturn } from "../types/analytics";
 import { cumulativeReturn } from "./performance";
 import {
+  annualToDaily,
   covariance,
   EPSILON,
   finite,
@@ -54,10 +55,11 @@ export function benchmarkMetrics(
   const bm = mean(b);
   const active = p.map((r, i) => r - b[i]);
   const trackingError = volatility(active);
+  const dailyRf = annualToDaily(rf);
   const alpha =
-    beta === null || pm === null || bm === null || !Number.isFinite(rf)
+    beta === null || pm === null || bm === null || dailyRf === null
       ? null
-      : finite(pm * 252 - (rf + beta * (bm * 252 - rf)));
+      : finite(((pm - dailyRf) - beta * (bm - dailyRf)) * 252);
   const averageActive = mean(active);
   const informationRatio =
     averageActive === null

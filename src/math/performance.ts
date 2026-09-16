@@ -137,21 +137,20 @@ export function performanceMetrics(
       positiveDays: null,
       negativeDays: null,
       returns: [],
+      riskReturns: [],
       monthly: [],
       reason: "Некорректная историческая серия.",
     };
   const candidates = points.slice(1);
   const complete =
     candidates.length > 0 && candidates.every((p) => p.dailyReturn !== null);
-  const returns = complete
-    ? candidates.map((p, i) => ({
+  const returns = candidates.flatMap((p, i) => p.dailyReturn === null ? [] : [{
         date: p.date,
         startDate: points[i].date,
-        value: p.dailyReturn!,
-      }))
-    : [];
+        value: p.dailyReturn,
+      }]);
   const values = returns.map((r) => r.value);
-  const totalReturn = cumulativeReturn(values);
+  const totalReturn = complete ? cumulativeReturn(values) : null;
   return {
     totalReturn,
     twr: totalReturn,
@@ -166,7 +165,8 @@ export function performanceMetrics(
     negativeDays: values.length
       ? values.filter((r) => r < 0).length / values.length
       : null,
-    returns,
+    returns: complete ? returns : [],
+    riskReturns: returns,
     monthly: monthlyReturns(points),
     reason: complete
       ? null

@@ -6,21 +6,22 @@ const cache = new Map<string, Entry>();
 export function loadHistory(
   symbol: string,
   period = "5y",
+  refresh = false,
 ): Promise<HistoryBar[]> {
+  symbol = symbol.trim().toUpperCase();
   const key = `${symbol}:${period}`;
+  if (refresh) cache.delete(key);
   const entry = cache.get(key);
   if (entry && entry.expires > Date.now()) return entry.promise;
   const promise = (async () => {
     const response = await fetch(
-      `/api/history?symbol=${encodeURIComponent(symbol)}&period=${period}`,
-      { signal: AbortSignal.timeout(12000) },
+      `/api/history?symbol=${encodeURIComponent(symbol)}&period=${period}${refresh ? "&refresh=1" : ""}`,
+      { signal: AbortSignal.timeout(20000), cache: "no-store" },
     );
-    if (!response.ok)
-      throw new Error(
-        response.status === 404
-          ? "Нет истории у поставщика"
-          : "Ошибка поставщика истории",
-      );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(`История недоступна: HTTP ${response.status}${typeof data.error === "string" ? ` · ${data.error}` : ""}`);
+    }
     const data = await response.json();
     if (data.symbol !== symbol || data.period !== period)
       throw new Error("История другого актива или периода");

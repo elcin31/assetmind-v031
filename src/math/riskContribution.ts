@@ -16,14 +16,14 @@ export function riskContributions(
   const volatility = Math.sqrt(variance);
   const contributions: RiskContribution[] = weights.map((weight, i) => {
     const marginal =
-      matrix[i].reduce((sum, cov, j) => sum + cov * weights[j], 0) / volatility;
+      matrix[i].reduce((sum, cov, j) => sum + cov * weights[j], 0);
     const absolute = weight * marginal;
     return {
       symbol: symbols[i],
       weight,
       marginal,
       absolute,
-      fraction: absolute / volatility,
+      fraction: absolute / variance,
     };
   });
   if (

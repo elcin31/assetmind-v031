@@ -105,7 +105,7 @@ describe("analytics data model", () => {
     );
     expect(a.performance.totalReturn).toBeNull();
     expect(a.performance.twr).toBeNull();
-    expect(a.risk.sharpe).toBeNull();
+    expect(a.risk.sharpe).not.toBeNull();
     expect(a.drawdown).toBeNull();
     expect(a.contributions).toEqual([]);
     expect(a.benchmark.comparison).toEqual([]);

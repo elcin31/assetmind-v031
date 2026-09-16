@@ -1,5 +1,5 @@
 import { finite, MIN_OBSERVATIONS, valid } from "./statistics";
-/** MAR is a daily arithmetic target. Divide an annual arithmetic MAR by 252 at the boundary. */
+/** MAR is a daily arithmetic target. Convert annual effective MAR with annualToDaily at the boundary. */
 export function downsideDeviation(
   returns: number[],
   dailyMar = 0,

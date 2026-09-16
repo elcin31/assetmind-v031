@@ -24,7 +24,7 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot) {
   useEffect(() => {
     let active = true;
     const symbols = symbolsKey.split(",").filter(Boolean);
-    void Promise.allSettled(symbols.map((symbol) => loadHistory(symbol))).then(
+    void Promise.allSettled(symbols.map((symbol) => loadHistory(symbol, "5y", retry > 0))).then(
       (results) => {
         const histories = new Map<string, HistoryBar[]>();
         const errors: string[] = [];
@@ -41,7 +41,7 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot) {
     return () => {
       active = false;
     };
-  }, [key, symbolsKey]);
+  }, [key, symbolsKey, retry]);
   const current = result?.key === key ? result : null;
   const asOf = new Date().toISOString().slice(0, 10);
   const analytics = useMemo(

@@ -28,7 +28,7 @@ import {
   returnAttribution,
 } from "./attribution";
 import { concentration } from "./lab";
-import { volatility } from "./statistics";
+import { annualToDaily, volatility } from "./statistics";
 import { calculatePositions } from "./positions";
 import { buildCurrentHoldingsRiskProxy } from "./returns";
 
@@ -51,9 +51,9 @@ export function calculatePortfolioAnalytics(
   );
   const points = selectPeriod(history.points, period, asOf);
   const performance = performanceMetrics(points);
-  const values = performance.returns.map((r) => r.value);
+  const values = performance.riskReturns.map((r) => r.value);
   let wealth = 100;
-  const returnIndex = performance.returns.length
+  const returnIndex = performance.totalReturn !== null && performance.returns.length
     ? [
         { date: points[0].date, value: wealth },
         ...performance.returns.map((r) => ({
@@ -69,7 +69,7 @@ export function calculatePortfolioAnalytics(
   const tail = historicalTailRisk(values);
   const risk = {
     volatility: volatility(values),
-    downside: downsideDeviation(values, mar / 252),
+    downside: downsideDeviation(values, annualToDaily(mar) ?? NaN),
     sharpe: sharpeRatio(values, rf),
     sortino: sortinoRatio(values, mar),
     calmar: calmarRatio(performance.cagr, drawdown?.max ?? null),
@@ -96,16 +96,10 @@ export function calculatePortfolioAnalytics(
     snapshot.positions,
     rangeHistories,
   );
-  const proxyReturns = proxy.available
-    ? proxy.dailyReturns.map((value, i) => ({
-        value,
-        date: proxy.dates[i + 1],
-        startDate: proxy.dates[i],
-      }))
-    : [];
+  const proxyReturns = proxy.available ? proxy.intervals : [];
   const benchmarkReturns = datedReturns(rangeHistories.get(benchmark) ?? []);
   const benchmarkResult = benchmarkMetrics(
-    performance.returns,
+    performance.riskReturns,
     benchmarkReturns,
     rf,
   );
@@ -141,7 +135,7 @@ export function calculatePortfolioAnalytics(
       ),
     };
   });
-  const linked = returnAttribution(contributionPeriods);
+  const linked = performance.totalReturn === null ? null : returnAttribution(contributionPeriods);
   const contributions = linked
     ? contributionSymbols.map((symbol, i) => ({ symbol, value: linked[i] }))
     : [];

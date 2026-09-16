@@ -4,7 +4,11 @@
  */
 
 import { searchInstruments as fallbackSearch } from '../src/data/instruments.js';
-import type { HistoryBar, Quote, SearchResult } from '../src/types';
+import type { Quote, SearchResult } from '../src/types';
+
+import { fetchHistory, type HistoryPeriod, type HistoryResult } from './historyProvider.js';
+export { HistoryProviderError } from './historyProvider.js';
+export type { HistoryPeriod } from './historyProvider.js';
 
 const FINNHUB_BASE = 'https://finnhub.io/api/v1';
 const PROVIDER_TIMEOUT_MS = 8_000;
@@ -16,7 +20,7 @@ interface CacheEntry<T> {
 
 const searchCache = new Map<string, CacheEntry<SearchResult[]>>();
 const quoteCache = new Map<string, CacheEntry<Quote | null>>();
-const historyCache = new Map<string, CacheEntry<HistoryBar[]>>();
+const historyCache = new Map<string, CacheEntry<HistoryResult>>();
 
 function getApiKey(): string {
   const key = process.env.FINNHUB_API_KEY;
@@ -142,75 +146,21 @@ export async function quote(symbol: string): Promise<Quote | null> {
   }
 }
 
-export type HistoryPeriod = '1m' | '3m' | '6m' | '1y' | '2y' | '5y';
-
-function periodToSeconds(period: HistoryPeriod): number {
-  const day = 86_400;
-  switch (period) {
-    case '1m':
-      return 30 * day;
-    case '3m':
-      return 90 * day;
-    case '6m':
-      return 180 * day;
-    case '1y':
-      return 365 * day;
-    case '2y':
-      return 730 * day;
-    case '5y':
-      return 1_825 * day;
-  }
-}
-
-export async function history(
-  symbol: string,
-  period: HistoryPeriod = '1y'
-): Promise<HistoryBar[]> {
+const historyPending = new Map<string, Promise<HistoryResult>>();
+export async function history(symbol: string, period: HistoryPeriod = '1y', refresh = false): Promise<HistoryResult> {
   const sym = symbol.trim().toUpperCase();
-  if (!sym) return [];
-
   const cacheKey = `${sym}:${period}`;
+  const pending = historyPending.get(cacheKey);
+  if (pending) return pending;
+  if (refresh) historyCache.delete(cacheKey);
   const cached = readCache(historyCache, cacheKey);
   if (cached !== undefined) return cached;
-
-  const key = getApiKey();
-
-  try {
-    const to = Math.floor(Date.now() / 1000);
-    const from = to - periodToSeconds(period);
-    const url = `${FINNHUB_BASE}/stock/candle?symbol=${encodeURIComponent(
-      sym
-    )}&resolution=D&from=${from}&to=${to}&token=${key}`;
-
-    const res = await fetch(url, { signal: providerSignal() });
-    if (!res.ok) return writeCache(historyCache, cacheKey, [], 60_000);
-
-    const data = (await res.json()) as {
-      s?: string;
-      t?: number[];
-      c?: number[];
-    };
-
-    if (data.s !== 'ok' || !data.t || !data.c || data.t.length === 0) {
-      return writeCache(historyCache, cacheKey, [], 60_000);
-    }
-
-    const bars: HistoryBar[] = [];
-    const length = Math.min(data.t.length, data.c.length);
-    for (let i = 0; i < length; i++) {
-      const timestamp = data.t[i];
-      const close = data.c[i];
-      if (!Number.isFinite(timestamp) || !Number.isFinite(close)) continue;
-      bars.push({
-        date: new Date(timestamp * 1000).toISOString().slice(0, 10),
-        close,
-      });
-    }
-
-    return writeCache(historyCache, cacheKey, bars, 15 * 60_000);
-  } catch {
-    return writeCache(historyCache, cacheKey, [], 60_000);
-  }
+  const request = fetchHistory(sym, period).then(result => {
+    if (historyCache.size >= 200) historyCache.delete(historyCache.keys().next().value!);
+    return writeCache(historyCache, cacheKey, result, 15 * 60_000);
+  }).finally(() => { historyPending.delete(cacheKey); });
+  historyPending.set(cacheKey, request);
+  return request;
 }
 
 export const marketData = { search, quote, history };

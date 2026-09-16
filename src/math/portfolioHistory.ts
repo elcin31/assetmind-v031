@@ -63,6 +63,11 @@ export function reconstructPortfolioHistory(
       }
     prices.set(symbol, map);
   }
+  // Union is a session-evidence calendar, NOT permission to value missing prices.
+  // Only held positions are required on each session (closed/not-yet-bought assets
+  // cannot invalidate it). An incomplete session and its outgoing interval are
+  // excluded. Weekends/holidays with no observed bars never enter this calendar.
+  // Intersecting and then differencing closes would incorrectly bridge gaps.
   const dates = [...calendar].filter((d) => d >= sorted[0].day).sort();
   const quantities = new Map<string, number>();
   const points: PortfolioHistoryPoint[] = [];
