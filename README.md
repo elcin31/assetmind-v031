@@ -2,11 +2,9 @@
 
 AssetMind is a personal investment portfolio tracker and quantitative analytics workspace built with React, TypeScript and Vite.
 
-It combines authenticated access, portfolio tracking, market data, interactive price charts and a synchronized quantitative laboratory in one responsive interface.
+It combines authenticated cloud-backed portfolio storage, live market data, transaction-aware analytics, risk research, capital planning and account backup in one responsive interface.
 
-> **Current architecture:** Supabase is connected and actively used for authentication. Portfolio transactions are still stored locally in the browser, isolated by the authenticated Supabase `user.id`. Supabase Database is **not yet** the portfolio data store.
-
-## Current status
+## Current architecture
 
 | Area | Implementation |
 | --- | --- |
@@ -14,143 +12,178 @@ It combines authenticated access, portfolio tracking, market data, interactive p
 | Registration / login | Email + password |
 | Sessions | Persisted and auto-refreshed by Supabase |
 | Password recovery | Supabase recovery flow |
-| Portfolio storage | Browser `localStorage`, scoped per authenticated user |
-| Cloud portfolio sync | Not implemented yet |
-| Market data | Finnhub through server-side Vercel API routes |
-| Price charts | Internal historical-data chart + TradingView fallback |
-| Quant analytics | Local TypeScript calculation layer |
-| Deployment target | Vercel |
+| Portfolio storage | Supabase Database is canonical; validated localStorage is a cache/offline fallback |
+| Cross-device sync | Supported through the authenticated Supabase account |
+| Trades | BUY / SELL transaction ledger |
+| Cash ledger | DEPOSIT / WITHDRAWAL / DIVIDEND / FEE |
+| Target allocation | Persisted per portfolio |
+| Analytics preferences | Persisted per user |
+| Market quotes/search | Finnhub through server-side Vercel API routes |
+| Historical prices | Server-side adjusted-price history with explicit provider failures and fallback |
+| Quant analytics | Pure typed TypeScript calculation layer |
+| Deployment target | Existing Vercel project `assetmind-v031-mpsk` |
+
+The production Vercel project is intentionally fixed to:
+
+```text
+assetmind-v031-mpsk
+project id: prj_0OQTvpMdNFAJFm2Ty0o536nHR7Qx
+```
+
+Do not create replacement projects or deploy this repository to `assetmind-v031` without the `-mpsk` suffix.
 
 ## Features
 
 - Supabase email/password authentication
-- Sign up, sign in, sign out and password recovery
-- Authenticated-session gate before the portfolio interface is rendered
-- User-scoped local portfolio storage
+- sign up, sign in, sign out and password recovery
+- cloud-backed portfolio synchronization
+- validated local cache and legacy localStorage migration
 - BUY and SELL transaction tracking
-- Weighted-average cost basis
-- Position, allocation and unrealized P&L calculations
-- Live quotes and historical market data through server-side endpoints
-- Ticker/name search with a built-in fallback instrument catalog
-- Interactive asset price charts with `1M`, `3M`, `6M`, `1Y` and `5Y` periods
-- TradingView chart fallback when internal historical data is unavailable
-- Transaction-aware portfolio history, performance and benchmark dashboard
-- Segmented laboratory for risk, diversification, attribution and stress scenarios
-- Expandable holdings with position-level analytics
-- Light and dark themes
-- JSON backup export and validated import
-- Responsive desktop/mobile interface
+- DEPOSIT, WITHDRAWAL, DIVIDEND and FEE cash events
+- weighted-average cost basis and realized/unrealized P&L
+- reconciled cash balance and account value
+- XIRR / money-weighted return
+- target allocation and rebalance deltas
+- pre-trade What-If analysis
+- live quotes and ticker/name search
+- historical adjusted-price data through `/api/history`
+- interactive price charts and TradingView visual fallback
+- transaction-aware historical portfolio reconstruction
+- TWR / Total Return / CAGR when the observable return chain is complete
+- volatility, Sharpe, Sortino, Calmar, VaR and Expected Shortfall
+- rolling volatility and rolling Sharpe
+- drawdown and recovery analysis
+- correlation/covariance matrices
+- variance-based risk contribution decomposition
+- benchmark analytics against SPY / QQQ / DIA / IWM
+- P&L and return attribution
+- configurable stress scenarios
+- current-holdings historical risk proxy
+- long-only minimum-variance research portfolio
+- effective risk-bet diagnostics
+- historical worst-window stress for the current-holdings proxy
+- full account JSON backup and conflict-safe restore
+- backward-compatible import of legacy trades-only backups
+- lazy-loaded Laboratory workspace
+- application error boundary for render/runtime recovery
+- light and dark themes
+- responsive desktop/mobile interface
 
 ## Supabase integration
 
-Supabase is already connected to the application through `@supabase/supabase-js`.
+Supabase is used for both authentication and portfolio persistence.
 
-### What Supabase currently does
+### Authentication
 
-Supabase Auth provides:
+`AuthProvider` gates the application behind a valid authenticated session. Supabase Auth handles:
 
-- account registration with email and password
-- login with email and password
+- account registration
+- login
 - persisted sessions
-- automatic token refresh
-- email confirmation when confirmation is enabled in the Supabase project
+- token refresh
+- optional email confirmation
 - sign out
-- password-reset emails
-- password recovery callbacks
-- password updates from recovery mode
+- password-reset email
+- recovery callbacks
+- password updates in recovery mode
 
-`AuthProvider` is mounted at the application root, and `App` requires a valid session and authenticated user before rendering AssetMind.
+### Portfolio data
 
-### What Supabase does **not** currently do
+The authenticated user owns a cloud portfolio. Supabase stores:
 
-Portfolio transactions, positions and backups are **not stored in Supabase Database yet**.
+- portfolio metadata
+- BUY / SELL operations
+- cash events
+- target allocation
+- analytics preferences
 
-The authenticated Supabase user ID is used to isolate browser-local portfolio data:
+Row-level access is scoped by the authenticated user. The browser keeps validated user-scoped local data as a cache/offline fallback rather than as the canonical database.
 
-```text
-Supabase Auth
-     ↓
-session + user.id
-     ↓
-assetmind:<user.id>:portfolio.v1
-     ↓
-localStorage
-```
+### Local cache and migration
 
-As a result, logging into the same account on another browser or device does **not** currently restore the same portfolio.
-
-This is an intentional description of the current code, not a cloud-sync claim disguised by sufficiently enthusiastic README wording.
-
-## Portfolio storage
-
-Transactions are the source of truth for the portfolio.
-
-For an authenticated user, the storage key follows this format:
+Current local portfolio cache key:
 
 ```text
 assetmind:<user-id>:portfolio.v1
 ```
 
-The application validates the user ID before accessing local portfolio data.
-
-### Legacy-data migration
-
-Older builds stored the portfolio under:
+Older builds used:
 
 ```text
 assetmind.portfolio.v1
 ```
 
-If a valid legacy portfolio exists and the authenticated user does not yet have user-scoped data, AssetMind attempts to move the legacy data into that user's private storage key and remove the legacy key.
+Valid legacy data can be migrated into the authenticated user's private cache and then synchronized to the cloud portfolio. Writes are serialized with Web Locks where required, request IDs are idempotent, and corrupted data is not silently overwritten.
 
-The migration is designed to avoid intentionally deleting the original portfolio when isolation fails.
+## Transactions and capital ledger
 
-### Storage safety
+### Trades
 
-- writes are validated before being saved
-- current browsers must support Web Locks for serialized portfolio writes
-- identical retry/request IDs are handled idempotently
-- storage events refresh portfolio state in other tabs
-- an internal `assetmind:changed` event refreshes the active tab after writes
-- storage failures are surfaced instead of being reported as successful saves
-- corrupted stored data is not silently overwritten
+BUY and SELL operations remain strongly typed trading transactions. Positions are derived from the ledger and are never stored as an independent source of truth.
 
-### Important local-storage limitations
+SELL quantity cannot exceed the position available at that point in transaction history.
 
-Because portfolio data remains browser-local:
+### Cash events
 
-- portfolios do not automatically sync between devices
-- different browsers have separate copies
-- preview and production origins have separate storage
-- clearing site data can delete the portfolio
-- private/incognito browsing may discard data after the session ends
-
-Regular JSON backups are recommended until cloud portfolio storage is implemented.
-
-## Backup and import
-
-AssetMind can export the current portfolio to:
+Cash operations are deliberately separate from BUY/SELL:
 
 ```text
-assetmind-backup.json
+DEPOSIT
+WITHDRAWAL
+DIVIDEND
+FEE
 ```
 
-Imports are validated before modifying existing data.
+The cash ledger reconciles those events with trade notionals. It does not invent missing funding. If historical funding is insufficient for recorded purchases, the ledger is marked incomplete instead of silently assuming a deposit.
 
-The importer checks, among other things:
+When current security valuation and the cash ledger are both complete:
 
-- backup version
+```text
+Account Value = Market Value of Securities + Reconciled Cash
+```
+
+### Money-weighted return / XIRR
+
+XIRR uses dated external cash flows and the terminal account value. DEPOSIT and WITHDRAWAL are external investor flows; DIVIDEND and FEE remain internal investment income/cost.
+
+The solver refuses unavailable, invalid or ambiguous cases instead of returning a fabricated rate.
+
+## Target allocation, rebalancing and What-If
+
+Target weights are persisted per portfolio. Any unassigned remainder to 100% is treated as target cash.
+
+The rebalance model reports:
+
+- current weight
+- target weight
+- target value
+- value delta
+- approximate quantity delta when a valid quote exists
+- total allocation drift
+
+It does not automatically execute trades.
+
+Pre-trade What-If simulates a hypothetical BUY or SELL and shows the resulting cash, concentration and target drift. A BUY that exceeds reconciled cash is rejected by the model.
+
+## Backup and restore
+
+P3 introduced a full account backup format:
+
+```text
+assetmind-account-backup-YYYY-MM-DD.json
+```
+
+A full backup includes:
+
 - portfolio metadata
-- transaction IDs
-- ticker format
-- transaction type
-- quantity and price validity
-- timestamps
-- portfolio currency consistency
-- duplicate request IDs
-- historically invalid SELL operations
+- BUY / SELL transactions
+- cash events
+- target allocation
+- analytics preferences
 
-When importing into an existing portfolio, identical transaction IDs are skipped while conflicting transactions are rejected without intentionally changing the current dataset.
+Restore is merge-oriented and idempotent for ledger records. Existing records are not silently deleted. Conflicting IDs or retry IDs are rejected before the corresponding write.
+
+Legacy pre-P3 trades-only JSON backups remain importable.
 
 ## Market data
 
@@ -162,161 +195,228 @@ Market data is accessed through Vercel serverless endpoints:
 /api/history
 ```
 
-The current provider is Finnhub and its API key remains server-side.
+Finnhub remains the quote/search provider. Historical analytics use normalized adjusted-price history; provider authentication, permission, rate-limit, timeout, malformed-response and empty-history failures remain distinct instead of collapsing to an empty array.
 
-Market data powers:
+Historical bars are normalized with these rules:
 
-- extended instrument search
-- current quotes
-- price charts
-- historical portfolio-risk calculations
+- uppercase symbols
+- ISO dates
+- finite positive close values
+- ascending order
+- duplicate dates removed
+- no future bars
+- UTC-safe day handling
+- adjusted prices used consistently when available
+- no forward fill
+- no interpolation
+- no synthetic zero-return gaps
 
-Local transactions remain usable when the market-data provider is unavailable.
+PriceChart and analytics share the client history cache. Failed requests are evicted so retry actually performs a new request.
 
-If current quotes are missing, AssetMind reports an incomplete valuation instead of pretending historical trade prices are current market prices.
+## Portfolio analytics
 
-## Price charts
+AssetMind deliberately separates three concepts:
 
-The application can display historical prices for:
+1. **Historical Portfolio Value**: transaction-aware historical inventory valued on historical prices.
+2. **Observable portfolio performance**: only return intervals that are mathematically known.
+3. **Current Holdings Historical Risk Proxy**: today's quantities applied to historical adjusted prices.
 
-- a selected search result in the Trade section
-- current holdings in the Assets section
-
-Supported periods:
-
-```text
-1M / 3M / 6M / 1Y / 5Y
-```
-
-When internal historical data cannot be rendered, AssetMind can display an official TradingView advanced-chart widget as a visual fallback.
-
-The TradingView widget receives chart configuration such as the ticker, period and current theme. Portfolio quantities and transaction history are not supplied to the widget by AssetMind.
-
-TradingView data may be delayed and does not feed AssetMind's valuation or risk calculations.
-
-## Portfolio Analytics
-
-AssetMind separates **transaction-aware historical asset value**, **actual observable price performance**, and **current-holdings risk models**. Analytics run locally in pure, typed TypeScript modules. Supabase Auth, user-scoped localStorage, persisted BUY/SELL types and the existing Weighted Average Cost engine are unchanged.
+They are not interchangeable.
 
 ### Historical portfolio reconstruction
 
-`src/math/portfolioHistory.ts` replays BUY/SELL in the same `timestamp → created_at → id` order as the position engine. For each end-of-day UTC valuation:
+For each UTC valuation day:
 
 ```text
-q_i(t) = buys through t − sells through t
-V(t) = Σ q_i(t) × close_i(t)
+q_i(t) = buys through t - sells through t
+V(t) = Σ q_i(t) × P_i(t)
 ```
 
-It includes previously closed symbols, multiple buys, partial sells and backdated operations. Today's quantities never replace historical inventory. A symbol needs a price only while held. Missing active-position prices omit that valuation; the next return stays unavailable instead of bridging the missing observation. Future prices and forward filling are never used.
+Closed symbols remain part of historical reconstruction while they were held. Missing active-position prices omit that valuation. The next return is not bridged across the missing observation.
 
-The UI calls this **Историческая стоимость активов / Historical Portfolio Value**. It is the value of reconstructed positions, **not full account NAV**: there is no cash account.
+### TWR / Total Return / CAGR
 
-### Performance, cash flows and TWR
+Known one-period return:
 
 ```text
-r_t = (V_t − V_(t−1) − CF_t) / V_(t−1)
-Total Return = TWR = Π(1 + r_subperiod) − 1
-CAGR = (1 + Total Return)^(365.25 / calendarDays) − 1
+r_t = (V_t - V_(t-1) - CF_t) / V_(t-1)
 ```
 
-The current BUY/SELL ledger cannot distinguish a deposit from reinvestment of cash or identify withdrawals. Therefore **BUY/SELL notional is not treated as external cash flow**. `externalFlow: null` means unknown, not zero. Trade-free intervals measure observable price returns of the reconstructed holdings; intervals containing trades are unavailable. A selected period with any unknown return has no Total Return, TWR, CAGR, performance-based risk or return attribution. The UI explains why and allows choosing a trade-free period. No proxy silently substitutes for actual performance.
-
-`flowAdjustedReturn` accepts explicitly known end-period external flows. It requires a correct flow-timing convention; it is not an exact intraday TWR estimator. `timeWeightedReturn` geometrically links supplied valid subperiod returns; exact flow-aware TWR needs valuations around every cash flow. The separate `CashEvent` boundary anticipates DEPOSIT, WITHDRAWAL, DIVIDEND and FEE without changing persisted transaction types. Dividends/fees are internal investment income/costs, not deposits/withdrawals.
-
-CAGR requires at least 30 calendar days. Its formula explanation warns that annualizing short samples is unstable. Best/worst day and positive/negative day percentages use a complete selected daily-return series; flat days stay in the denominator.
-
-Monthly returns compound available intervals within calendar months. Unknown intervals make the month unavailable. Boundary months may be partial and are labelled as such. Calendar YTD requires a valuation before January 1 and every elapsed month; an incomplete initial January cannot produce a fabricated YTD.
-
-### Drawdown and recovery
-
-Investment drawdown uses a chained return index W, so capital changes are not mistaken for losses:
+Cumulative return:
 
 ```text
-DD(t) = W(t) / max(W through t) − 1
+TWR = Π(1 + r_t) - 1
 ```
 
-Current/max drawdown, underwater chart and episodes expose start, bottom, recovery date, depth, duration and recovery duration. An episode starts on the first below-high observation and ends when the previous high is reached or exceeded. Durations are calendar days; recovery duration is from bottom to recovery. Open episodes remain unrecovered. The separate collapsible **asset-value drawdown** uses V directly and explicitly warns that trades affect it; it is not investment-risk drawdown.
+CAGR:
 
-### Risk and rolling metrics
+```text
+CAGR = (1 + TWR)^(365.25 / calendarDays) - 1
+```
 
-| Metric | Convention / minimum |
+CAGR requires at least 30 calendar days.
+
+Important limitation: the application has a cash ledger and XIRR, but exact intraday/subperiod TWR around every BUY/SELL still requires valuations around the trade/flow timing. A trade-contaminated interval therefore remains unavailable for exact cumulative TWR. Clean market-return intervals before and after it are still retained for risk analytics.
+
+Unknown intervals are `null`, never zero.
+
+### Risk metrics
+
+Risk statistics use clean one-day return intervals only.
+
+| Metric | Convention |
 | --- | --- |
-| Volatility | Sample standard deviation × √252; ≥20 returns |
-| Sharpe | `(252 × mean(r) − Rf) / volatility`; ≥20 returns |
-| Downside deviation | `sqrt(mean(min(r − MAR/252, 0)^2)) × sqrt(252)`; ≥20 returns |
-| Sortino | `(252 × mean(r) − MAR) / annual downside deviation`; ≥20 returns |
-| Calmar | CAGR / absolute max investment drawdown; requires available CAGR and negative drawdown |
-| VaR 95% | `max(0, −r_(ceil(.05n)))`, ascending returns; ≥20 returns |
-| Expected Shortfall 95% | Mean loss in the same worst `ceil(.05n)` observations; ≥20 returns |
-| Rolling volatility | Complete windows of 20 / 60 / 252 trading observations |
-| Rolling Sharpe | Complete windows of 63 / 126 / 252 observations |
+| Volatility | Sample standard deviation × √252 |
+| Sharpe | Annualized excess arithmetic mean / annual volatility |
+| Downside deviation | Downside observations relative to daily-equivalent MAR |
+| Sortino | Annualized excess arithmetic mean / annual downside deviation |
+| Calmar | CAGR / absolute max performance drawdown |
+| VaR 95% | Historical empirical lower-tail loss |
+| Expected Shortfall 95% | Mean loss in the same historical tail |
 
-Rf and MAR are configurable annual **arithmetic** rates, default zero. Numerators use arithmetic annualized mean, not CAGR. Downside MAR is divided by 252, consistently with that convention. Near-zero denominators return null. Rolling warm-up and undefined windows are not plotted. A 20-point minimum is a gate, not a claim of statistical reliability; VaR/ES are particularly unstable with small samples.
+Annual Rf and MAR are converted to daily-equivalent rates consistently where required. Most risk/correlation calculations require at least 20 valid observations.
 
-### Diversification and current-composition risk
+### Drawdown
 
-Returns are aligned by **both start and end dates**. We never pair a multi-day return from a sparse series with a one-day return ending on the same day. A matrix uses the same common sample for every holding (minimum 20 intervals); missing holdings are not silently dropped.
+Performance drawdown is calculated from the chained return index rather than raw account value so contributions are not automatically interpreted as investment gains/losses.
+
+A separate asset-value drawdown can be shown, clearly labelled as affected by portfolio flows and position changes.
+
+### Correlation and covariance
+
+Asset return intervals are matched by both endpoints:
 
 ```text
-correlation_ij = Cov(R_i, R_j) / (sd_i × sd_j)
-Σ_annual = sampleCovariance × 252
-portfolioVariance = wᵀΣw
-portfolioVolatility = sqrt(wᵀΣw)
-MCR_i = (Σw)_i / portfolioVolatility
-RC_i = w_i × MCR_i
-riskShare_i = RC_i / ΣRC
-Diversification Ratio = Σ(w_i × sd_i) / portfolioVolatility
+(startDate, endDate)
 ```
 
-Current market weights require all quotes. Sum of RC equals portfolio volatility; negative contributions can reflect hedging. The matrix shows correlations and a collapsible annual covariance table in squared decimal-return units. Correlation is undefined for zero-variance assets, so a joint correlation/covariance panel is unavailable in that case. A pure portfolio-variance function also validates symmetry and positive semidefiniteness. Average correlation is the unweighted mean of unique asset pairs, with no arbitrary good/bad label. HHI/effective positions measure concentration separately from correlation.
+No multi-day return is paired with a one-day return merely because they end on the same date.
 
-The previous fixed-quantity series remains as `buildCurrentHoldingsRiskProxy` (legacy alias retained) and **Исторический риск текущего состава · proxy**: how today's quantities would have behaved on historical prices. Its volatility/Sharpe are explicitly model metrics, never historical portfolio performance.
+Annual covariance:
 
-### Benchmark
+```text
+Σ_annual = sampleCovariance × 252
+```
 
-SPY is the default; QQQ, DIA and IWM are selectable. Prices use the existing market-history API and shared client cache. The comparison compounds portfolio and benchmark returns from the same start at 100, only with uninterrupted common intervals.
+### Variance-based risk contributions
 
-- **Beta:** `Cov(Rp, Rm) / Var(Rm)`.
-- **Jensen Alpha:** `252mean(Rp) − [Rf + Beta × (252mean(Rm) − Rf)]`.
-- **Tracking Error:** `sampleStdev(Rp − Rm) × sqrt(252)`.
-- **Information Ratio:** `252mean(Rp − Rm) / Tracking Error`.
+For current market weights `w`:
 
-Regression/risk metrics require ≥20 matched intervals. Identical series give Beta 1, Alpha 0 and tracking error 0; Information Ratio is unavailable when tracking error is zero. This is **price-return** comparison, not dividend-reinvested total return.
+```text
+portfolioVariance = w'Σw
+MCR_i = (Σw)_i
+RC_i = w_i × MCR_i
+riskShare_i = RC_i / portfolioVariance
+```
 
-### Attribution and scenarios
+The implementation validates:
 
-P&L attribution reuses WAC, includes closed symbols and shows realized, unrealized and total lifetime P&L. Missing live quotes make the affected total unavailable. Contributors/detractors are sortable and visualized with horizontal bars.
+```text
+Σ RC_i = portfolioVariance
+Σ riskShare_i = 1
+```
 
-Return attribution is separate: `c_i,t = weight_i,t−1 × return_i,t`. It uses reconstructed beginning weights and links contributions with preceding cumulative wealth, `C_i = Σ W_t−1 c_i,t`. This makes the sum equal compounded portfolio return. It is available only for a complete selected period without unknown flows.
+Negative contributions can occur for hedging assets.
 
-Simple stress sliders and per-asset shocks use `V′ = Σ V_i(1 + shock_i)` with current market values. Presets fill shocks only:
+### Benchmark analytics
 
-- broad sell-off: −15% for all holdings;
-- technology correction: −25% for user-selected group, −8% for others;
-- high-volatility shock: −35% for user-selected group, −12% for others;
-- custom/reset: zero shocks before user edits.
+Selectable benchmarks:
 
-Group membership is explicitly selected by the user, not guessed from tickers. Every scenario says **Гипотетический сценарий, не прогноз**. No transactions are changed.
+```text
+SPY / QQQ / DIA / IWM
+```
 
-### Interface and data flow
+Metrics include:
 
-Overview prioritizes value, history, four performance/risk metrics, benchmark, P&L contributors, allocation and open positions. Laboratory renders one of six sections: Доходность, Риск, Диверсификация, Атрибуция, Сценарии, Рынок. Holdings expand into P&L, return, weight, risk contribution, volatility, correlation with the **current-holdings proxy**, Beta and the existing PriceChart.
+- portfolio cumulative return when a continuous aligned chain exists
+- benchmark cumulative return
+- Beta
+- Jensen Alpha
+- Tracking Error
+- Information Ratio
 
-`calculatePortfolioAnalytics` produces view models; components do not build covariance matrices or replay transactions. A public-market-data cache deduplicates in-flight requests and caches successful symbol/period responses for five minutes, with bounded entries and failed-request eviction. Analytics load up to 5 years once per symbol, including closed symbols and the benchmark; period/tab switches reuse those prices. PriceChart shares the cache while retaining its periods, cursor and TradingView fallback.
+Regression metrics use exact common return intervals.
 
-Supported portfolio periods: 1M / 3M / 6M / YTD / 1Y / ALL. The last available close preceding the period boundary is included as a baseline. **ALL means all available API history, at most 5 years**, not a lifetime guarantee. Actual date range and observation counts are displayed. Loading, empty, insufficient, provider-error and partial-data states remain distinct. Tables/heatmaps scroll inside their containers on narrow screens; unavailable numbers use `—`, never fabricated zeros.
+### Attribution
 
-### Methodological limits
+Lifetime monetary P&L attribution uses the existing weighted-average-cost engine.
 
-- No cash ledger, external flow classification, dividend/fee history or full account NAV. Known price returns are not net total returns.
-- UTC day grouping cannot resolve intraday execution/flow timing. Returns start from the first reconstructed close, not the first trade execution price.
-- No split/corporate-action ledger, historical FX conversion or provider adjustment metadata. Inventory reconstruction assumes prices and recorded quantities use compatible units; affected securities need validated price/transaction history before relying on results.
-- Provider observations define the trading calendar. There is no exchange-calendar service; simultaneous missing dates across every series cannot be detected. No forward fill, interpolation or look-ahead is performed.
-- Provider coverage may start after the first transaction, end before today or be unavailable for a closed/delisted ticker. The displayed range is authoritative. PriceChart's TradingView fallback does not supply analytics prices.
-- Current-composition covariance/proxy risk and historical performance are different models. Return attribution and monetary P&L use different time horizons, clearly labelled.
-- All newly exposed ratios validate inputs and return null for insufficient/invalid data or near-zero denominators. No optimizer, options analytics, Monte Carlo or AI recommendations are included.
+Return attribution is separate and only available when the selected performance chain is complete enough to support beginning-period weights and linked contributions.
 
-### Verification
+### Stress testing
+
+Interactive scenarios revalue current holdings under user-defined shocks:
+
+```text
+V' = Σ V_i(1 + shock_i)
+```
+
+Presets only populate hypothetical shocks. They are not forecasts.
+
+The historical stress engine also scans the Current Holdings Historical Risk Proxy for the worst contiguous compounded windows such as 1D, 5D, 20D and 63D. Windows never bridge missing return intervals.
+
+## Portfolio Intelligence research
+
+P2 adds research tools based on the observed covariance matrix.
+
+### Long-only minimum-variance portfolio
+
+The optimizer solves a long-only, fully-invested securities allocation on the exact common covariance sample:
+
+```text
+minimize w'Σw
+subject to w_i >= 0
+           Σ w_i = 1
+```
+
+The implementation uses projected optimization on the simplex and checks that the optimized variance does not exceed the current feasible portfolio variance within numerical tolerance.
+
+It does **not** estimate expected returns and therefore does not pretend to produce a statistically meaningful max-Sharpe portfolio.
+
+The panel compares:
+
+- current vs minimum-variance weights
+- current vs optimized volatility
+- turnover
+- diversification ratio
+- effective risk bets
+
+This is research output, not an investment recommendation.
+
+## Data Quality Center
+
+The UI distinguishes:
+
+- provider failures
+- partial current valuation
+- insufficient clean portfolio intervals
+- insufficient common asset intervals
+- benchmark alignment sample
+- current-holdings proxy sample
+- cash-ledger completeness
+
+Unavailable numbers render as `—`, not fabricated zeros.
+
+## Interface and performance
+
+Main sections:
+
+```text
+Overview
+Assets
+Trades
+Laboratory
+```
+
+The Laboratory contains performance, risk, diversification, attribution, scenarios and benchmark/research views.
+
+P3 lazy-loads the Laboratory bundle so the initial portfolio screen does not need to download the entire analytical workspace before first render.
+
+`AppErrorBoundary` provides a recovery screen for unexpected render errors instead of leaving a blank application.
+
+## Verification
+
+Main verification pipeline:
 
 ```bash
 npm ci
@@ -327,34 +427,29 @@ npm run build
 npm run verify
 ```
 
-Unit/integration tests cover historical inventory/order, missing/future data, flow-adjusted returns, TWR/CAGR/monthly/YTD, drawdown episodes, downside/ratios/tails, correlation/covariance/variance/RC identities, benchmark identities, attribution, scenarios, numerical guards and shared-cache behavior.
+`npm run verify` gates TypeScript, unit/integration tests, lint and production build.
 
-Optional browser regressions (Playwright with Chromium installed):
+Tests cover, among other things:
 
-```bash
-node tests/browser/analytics.mjs
-node tests/browser/search-selection.mjs
-```
+- historical transaction ordering and inventory
+- missing/future market data
+- history normalization and provider failures
+- flow-adjusted performance
+- drawdown
+- risk ratios and tail risk
+- exact interval correlation/covariance
+- benchmark alignment
+- variance risk-contribution identities
+- cash reconciliation
+- XIRR
+- target allocation and rebalancing
+- What-If cash constraints
+- minimum-variance optimization
+- gap-safe historical stress windows
+- full-account backup validation
+- idempotent/conflict-safe cash restore planning
 
-The scripts start isolated Vite fixtures. `PLAYWRIGHT_MODULE_PATH` and `BROWSER_EXECUTABLE` may select runtime-owned installations. Analytics checks cover 320/375/390/430/768/1440 px, navigation, periods, benchmark, scrubber, holding details, scenarios, request deduplication, empty/partial/provider-error states and console exceptions. Fixtures use synthetic market data; they do not validate live provider credentials, subscription access or authenticated production sessions.
-
-## Portfolio calculations
-
-### Positions
-
-Positions are derived from transaction history rather than stored as an independent source of truth.
-
-BUY and SELL operations are processed chronologically. SELL quantities cannot exceed the position available at that point in history.
-
-### Cost basis
-
-Open positions use weighted-average cost accounting.
-
-### Market valuation
-
-When all required quotes are available, the application calculates current market value and unrealized P&L.
-
-When one or more quotes are missing, valuation is marked incomplete rather than silently substituting trade prices.
+Production dependency audit currently reports no high-severity production dependency vulnerability. Development/transitive tooling may report advisories that require breaking dependency changes and are therefore reviewed separately rather than force-upgraded blindly.
 
 ## Authentication configuration
 
@@ -362,98 +457,77 @@ Create `.env.local` for local development:
 
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your_supabase-publishable-or-anon-key
+VITE_SUPABASE_ANON_KEY=your-supabase-publishable-or-anon-key
 FINNHUB_API_KEY=your-finnhub-api-key
 ```
 
-Or copy the included template:
-
-```bash
-cp .env.example .env.local
-```
-
-### Required variables
-
-`VITE_SUPABASE_URL`
-
-Supabase project URL used by the browser authentication client.
-
-`VITE_SUPABASE_ANON_KEY`
-
-Supabase public/publishable or legacy anon key used by the browser authentication client.
-
-### Optional variable
-
-`FINNHUB_API_KEY`
-
-Used server-side for live quotes, extended search and historical market data.
-
-### Security note
-
-Never put a Supabase `service_role`, secret key or other privileged server credential in a `VITE_*` variable. Vite exposes `VITE_*` values to the browser bundle.
-
-The Supabase public/publishable key is intended for client-side use. Authorization still depends on Supabase Auth configuration and, when database access is introduced, correct Row Level Security policies.
-
-## Supabase dashboard configuration
-
-For production authentication, configure Supabase Auth with the deployed AssetMind URL.
-
-The project's Site URL and allowed redirect URLs must support:
-
-- email-confirmation redirects
-- password-reset redirects
-- recovery callbacks
-
-Whether sign-up requires email confirmation depends on the Supabase project's authentication settings and email delivery configuration.
+Never put a Supabase `service_role` or other privileged secret in a `VITE_*` variable. Vite exposes `VITE_*` variables to the browser bundle.
 
 ## Local development
 
-### Requirements
+Requirements:
 
-- Node.js `22.22.2+` or `24.15.0+`
-- npm `12+`
+- Node.js 22+
+- npm 12+
 
-Install dependencies:
+Install and run:
 
 ```bash
 npm ci
-```
-
-Start the Vite development server:
-
-```bash
 npm run dev
 ```
 
-The plain Vite dev server is enough for the frontend, authentication and local portfolio functionality.
+Use Vercel's local environment when testing the serverless `/api/*` market-data routes.
 
-For the Vercel serverless market-data routes, use Vercel's local development environment.
-
-## Scripts
-
-```bash
-npm run dev
-npm run build
-npm run preview
-npm run typecheck
-npm test
-npm run test:watch
-npm run lint
-npm run smoke
-npm run verify
-```
-
-`npm run verify` executes the main verification pipeline:
+## Project structure
 
 ```text
-TypeScript typecheck → tests → lint → production build
+src/
+├── auth/          Supabase authentication/session/recovery
+├── analytics/     analytics controller, history cache and preferences
+├── components/    portfolio UI, charts and analytical panels
+├── data/          fallback instrument metadata
+├── math/          pure portfolio/performance/risk/planning/research math
+├── pages/         login and authenticated portfolio screens
+├── storage/       cloud/local persistence, planning and account backup
+├── theme/         light/dark theme persistence
+├── types/         shared TypeScript models
+└── utils/         formatting and helpers
+
+api/               Vercel serverless search/quote/history endpoints
+server/            server-side market-data providers and normalization
+tests/             persistence, math and integration tests
+scripts/           smoke and verification utilities
+docs/              deployment and methodology notes
+supabase/           Supabase-related project files and retained SQL/history
 ```
+
+## Methodological limits
+
+AssetMind intentionally reports unavailable data rather than filling gaps with convenient fiction.
+
+Current limitations include:
+
+- no historical FX conversion for multi-currency portfolios
+- no dedicated corporate-action ledger for transaction quantities
+- no exchange-calendar service; provider observations define available trading intervals
+- exact intraday TWR around trades/flows is not reconstructed from end-of-day prices alone
+- historical coverage depends on the upstream provider and may be shorter than a user's transaction history
+- current-composition covariance, proxy stress and actual historical portfolio performance are different models
+- the minimum-variance optimizer uses historical covariance only and has no expected-return model
+- no options analytics or Monte Carlo engine
+- no AI-generated trade recommendation is treated as quantitative fact
 
 ## Deployment
 
-AssetMind is designed to deploy on Vercel.
+Production is deployed only to the existing Vercel project:
 
-Production environment variables:
+```text
+assetmind-v031-mpsk
+prj_0OQTvpMdNFAJFm2Ty0o536nHR7Qx
+```
+
+Environment variables:
 
 ```env
 VITE_SUPABASE_URL
@@ -461,67 +535,8 @@ VITE_SUPABASE_ANON_KEY
 FINNHUB_API_KEY
 ```
 
-`FINNHUB_API_KEY` must remain server-side.
-
-After changing environment variables in Vercel, a new deployment is required for the frontend build to receive updated `VITE_*` values.
-
-Additional deployment notes are available in [`docs/DEPLOYMENT_RU.md`](docs/DEPLOYMENT_RU.md).
-
-## Project structure
-
-```text
-src/
-├── auth/          Supabase authentication, session and recovery logic
-├── components/    Portfolio UI, charts, search and laboratory components
-├── data/          Built-in instrument data and local fallback search
-├── analytics/     Shared history cache, analytics hook and metric explanations
-├── math/          Pure history, performance, risk, diversification, benchmark and attribution modules
-├── pages/         Login and authenticated portfolio screens
-├── storage/       Versioned local persistence, migration and backup logic
-├── theme/         Light/dark theme persistence
-├── types/         Shared TypeScript models
-└── utils/         Formatting and shared helpers
-
-api/               Vercel serverless search/quote/history endpoints
-server/            Server-side market-data helpers
-tests/             Persistence and financial-calculation tests
-scripts/           Local verification/smoke utilities
-docs/              Deployment and project documentation
-supabase/          Supabase-related project files and retained SQL/history
-```
-
-## Tech stack
-
-- React 19
-- TypeScript 6
-- Vite 8
-- Supabase JS / Supabase Auth
-- Vercel serverless functions
-- Finnhub market data
-- TradingView embedded charts
-- Vitest
-- Oxlint
-
-## Current limitations
-
-The current version deliberately does not claim capabilities that are not implemented.
-
-- portfolio data is not yet stored in Supabase Database
-- there is no cross-device portfolio synchronization
-- there is no full cash ledger
-- there is no deposit/withdrawal model
-- there is no automatic FX conversion
-- portfolios currently default to USD
-- reconstructed historical asset value excludes cash; transaction-aware positions do not imply full account NAV
-- HHI/effective-position metrics do not model asset correlations
-- market valuation and historical analytics depend on external market-data availability
-
-## Data model direction
-
-A natural next architectural step is to move portfolio persistence from browser-only storage to Supabase Database while keeping local storage as an optional cache/offline layer.
-
-A cloud-backed version would allow authenticated users to access the same portfolios and transactions across devices, but that migration is **not implemented in the current repository yet**.
+See [`docs/DEPLOYMENT_RU.md`](docs/DEPLOYMENT_RU.md) for deployment notes.
 
 ---
 
-AssetMind is an actively developed personal investment analytics project. Financial calculations, scenarios and market data are provided for analytical purposes and should not be treated as investment advice.
+AssetMind is an actively developed personal investment analytics project. Financial calculations, research portfolios, scenarios and market data are analytical tools and are not investment advice.
