@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import type { PortfolioSnapshot } from '../types';
 import { HoldingsList } from '../components/HoldingsList';
 import { AllocationCard } from '../components/AllocationCard';
@@ -7,7 +7,6 @@ import { TransactionHistory } from '../components/TransactionHistory';
 import { SearchPanel } from '../components/SearchPanel';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { PriceChart } from '../components/PriceChart';
-import { Laboratory } from '../components/Laboratory';
 import { DataQualityPanel } from '../components/DataQualityPanel';
 import { CapitalSummary } from '../components/CapitalSummary';
 import { CashLedgerPanel } from '../components/CashLedgerPanel';
@@ -19,6 +18,8 @@ import { AnalyticsMetric } from '../components/AnalyticsMetric';
 import { pct } from '../utils/analyticsFormat';
 import { BenchmarkPanel } from '../components/BenchmarkPanel';
 import { AttributionPanel } from '../components/AttributionPanel';
+
+const Laboratory = lazy(() => import('../components/Laboratory').then((module) => ({ default: module.Laboratory })));
 
 type Tab = 'overview' | 'holdings' | 'trade' | 'lab';
 const tabs: { id: Tab; label: string; path: string }[] = [
@@ -82,7 +83,7 @@ export function PortfolioScreen({ snapshot: s, userId, onRefresh, onSignOut, loa
         </>}
         {tab === 'holdings' && <>{holdingSymbol && <section className="card"><label className="field-label" htmlFor="chart-asset">Актив для графика</label><select id="chart-asset" className="input" value={holdingSymbol} onChange={e => setChartSymbol(e.target.value)}>{s.positions.map(p => <option key={p.symbol} value={p.symbol}>{p.symbol}</option>)}</select><PriceChart key={holdingSymbol} symbol={holdingSymbol} /></section>}<HoldingsList positions={s.positions} currency={s.portfolio.base_currency} analytics={analytics} benchmark={controller.benchmark} />{s.valuation.complete ? <AllocationCard allocation={s.allocation}/> : <p className="notice">Для распределения нужны котировки всех позиций.</p>}<PlanningPanel snapshot={s} userId={userId} onChanged={afterTransactionChange} onError={setError}/></>}
         {tab === 'trade' && <><div className="trade-grid"><div className="trade-discovery"><SearchPanel onSelect={r => setSymbol(r.symbol)} />{symbol && <section className="card"><PriceChart key={symbol} symbol={symbol} /></section>}</div><TransactionForm userId={userId} currency={s.portfolio.base_currency} initialSymbol={symbol} onSuccess={() => { setSymbol(null); afterTransactionChange(); }} onError={message => setError(message || null)} /></div><TransactionHistory transactions={s.transactions} userId={userId} currency={s.portfolio.base_currency} onChanged={afterTransactionChange} onError={setError}/><CashLedgerPanel snapshot={s} userId={userId} onChanged={afterTransactionChange} onError={setError}/></>}
-        {tab === 'lab' && <Laboratory snapshot={s} controller={controller} />}
+        {tab === 'lab' && <Suspense fallback={<section className="card"><p>Загрузка Лаборатории…</p></section>}><Laboratory snapshot={s} controller={controller} /></Suspense>}
         <footer className="site-footer"><span>assetmind / personal finance</span><span>Расчёты по данным вашего портфеля</span></footer>
       </main>
     </div>
