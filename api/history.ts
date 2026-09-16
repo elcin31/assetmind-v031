@@ -44,15 +44,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const result = await marketData.history(symbol, period);
-    const finnhub = diagnostics ? await diagnoseFinnhubHistory(symbol, period) : undefined;
-    res.setHeader('Cache-Control', diagnostics ? 'no-store' : 'private, max-age=300');
+    const finnhub = diagnostics
+      ? await diagnoseFinnhubHistory(symbol, period)
+      : undefined;
+    const bars = result.bars;
+    const duplicateDates = bars.length - new Set(bars.map((bar) => bar.date)).size;
+    const sorted = bars.every(
+      (bar, index) => index === 0 || bar.date > bars[index - 1].date,
+    );
+    const meta = {
+      count: bars.length,
+      firstDate: bars[0]?.date ?? null,
+      lastDate: bars.at(-1)?.date ?? null,
+      duplicateDates,
+      sorted,
+    };
+    res.setHeader(
+      'Cache-Control',
+      diagnostics ? 'no-store' : 'private, max-age=300',
+    );
     return res.status(200).json({
       symbol,
       period,
-      bars: result.bars,
       provider: result.provider,
       priceType: result.priceType,
+      meta,
       ...(finnhub ? { diagnostics: { finnhub } } : {}),
+      bars,
     });
   } catch (error) {
     const failure = providerFailure(error);
