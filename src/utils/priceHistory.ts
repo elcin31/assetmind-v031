@@ -1,13 +1,14 @@
-import type { HistoryBar } from '../types';
+import type { HistoryBar } from '../types/index.js';
 
 /** Discard invalid provider points, deduplicate days and sort chronologically. */
-export function normalizePriceHistory(value: unknown): HistoryBar[] {
+export function normalizePriceHistory(value: unknown, asOf = new Date().toISOString().slice(0, 10)): HistoryBar[] {
   if (!Array.isArray(value)) return [];
   const days = new Map<string, HistoryBar>();
   for (const item of value) {
-    if (!item || typeof item.date !== 'string' || !Number.isFinite(Date.parse(item.date)) ||
+    if (!item || typeof item.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.date) || !Number.isFinite(Date.parse(item.date)) ||
         typeof item.close !== 'number' || !Number.isFinite(item.close) || item.close <= 0) continue;
     const date = new Date(item.date).toISOString().slice(0, 10);
+    if (date !== item.date || date > asOf) continue;
     days.set(date, { date, close: item.close });
   }
   return [...days.values()].sort((a, b) => a.date.localeCompare(b.date));

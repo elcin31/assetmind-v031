@@ -1,5 +1,6 @@
 import { downsideDeviation } from "./downside";
 import {
+  annualToDaily,
   finite,
   mean,
   MIN_OBSERVATIONS,
@@ -9,17 +10,19 @@ import {
 } from "./statistics";
 export function sharpeRatio(returns: number[], rf = 0): number | null {
   const average = mean(returns);
-  return average === null || !Number.isFinite(rf) || returns.some((r) => r < -1)
+  const dailyRf = annualToDaily(rf);
+  return average === null || dailyRf === null || returns.some((r) => r < -1)
     ? null
-    : safeRatio(average * 252 - rf, volatility(returns));
+    : safeRatio((average - dailyRf) * 252, volatility(returns));
 }
 export function sortinoRatio(returns: number[], annualMar = 0): number | null {
   const average = mean(returns);
-  return average === null
+  const dailyMar = annualToDaily(annualMar);
+  return average === null || dailyMar === null
     ? null
     : safeRatio(
-        average * 252 - annualMar,
-        downsideDeviation(returns, annualMar / 252),
+        (average - dailyMar) * 252,
+        downsideDeviation(returns, dailyMar),
       );
 }
 export function calmarRatio(

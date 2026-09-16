@@ -8,11 +8,14 @@
  */
 
 import type { HistoryBar, Position } from '../types';
+import type { DatedReturn } from '../types/analytics';
+import { datedReturns } from './performance';
 
 export interface PortfolioReturnSeries {
   dates: string[];
   values: number[];
   dailyReturns: number[];
+  intervals: DatedReturn[];
   available: boolean;
   reason?: string;
 }
@@ -89,8 +92,13 @@ export function buildCurrentHoldingsRiskProxy(
     return unavailable('insufficient_clean_history');
   }
 
+  // Intersect original intervals, not just dates: missing sessions must never
+  // turn two daily observations into a fabricated multi-session daily return.
+  const intervalSets = positions.map(p => new Set(datedReturns(historyBySymbol.get(p.symbol) ?? []).map(r => `${r.startDate}/${r.date}`)));
   const dailyReturns: number[] = [];
+  const intervals: DatedReturn[] = [];
   for (let i = 1; i < values.length; i++) {
+    if (!intervalSets.every(set => set.has(`${dates[i - 1]}/${dates[i]}`))) continue;
     const prev = values[i - 1];
     const current = values[i];
     const dailyReturn = (current - prev) / prev;
@@ -98,9 +106,10 @@ export function buildCurrentHoldingsRiskProxy(
       return unavailable('invalid_return_series');
     }
     dailyReturns.push(dailyReturn);
+    intervals.push({ startDate: dates[i - 1], date: dates[i], value: dailyReturn });
   }
 
-  return { dates, values, dailyReturns, available: true };
+  return { dates, values, dailyReturns, intervals, available: true };
 }
 
 function unavailable(reason: string): PortfolioReturnSeries {
@@ -108,6 +117,7 @@ function unavailable(reason: string): PortfolioReturnSeries {
     dates: [],
     values: [],
     dailyReturns: [],
+    intervals: [],
     available: false,
     reason,
   };

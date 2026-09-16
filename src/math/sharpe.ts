@@ -1,3 +1,5 @@
+import { annualToDaily } from "./statistics";
+
 /**
  * Sharpe Ratio.
  *
@@ -43,7 +45,9 @@ export function calculateSharpe(
     return null;
   }
 
-  const excess = annualizedReturn - riskFreeRate;
+  const dailyRf = annualToDaily(riskFreeRate);
+  if (dailyRf === null) return null;
+  const excess = annualizedReturn - dailyRf * 252;
   const sharpe = excess / annualizedVol;
 
   if (!Number.isFinite(sharpe)) {

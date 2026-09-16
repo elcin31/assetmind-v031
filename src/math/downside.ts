@@ -1,5 +1,5 @@
 import { finite, MIN_OBSERVATIONS, valid } from "./statistics";
-/** MAR is a daily arithmetic target. Divide an annual arithmetic MAR by 252 at the boundary. */
+/** MAR is a daily arithmetic target. Convert annual effective MAR with annualToDaily at the boundary. */
 export function downsideDeviation(
   returns: number[],
   dailyMar = 0,
@@ -10,10 +10,12 @@ export function downsideDeviation(
     !Number.isFinite(dailyMar)
   )
     return null;
+  const downside = returns.filter(r => r < dailyMar);
+  if (downside.length < 2) return null;
   return finite(
     Math.sqrt(
-      returns.reduce(
-        (sum, r) => sum + Math.min(r - dailyMar, 0) ** 2 / returns.length,
+      downside.reduce(
+        (sum, r) => sum + (r - dailyMar) ** 2 / downside.length,
         0,
       ),
     ) * Math.sqrt(252),

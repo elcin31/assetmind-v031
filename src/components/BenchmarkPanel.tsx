@@ -33,7 +33,7 @@ export function BenchmarkPanel({
         format={numeric}
         loading={c.loading}
         reason={
-          c.analytics.performance.reason ??
+          (c.errors.length ? c.errors.join("; ") : null) ?? c.analytics.performance.reason ??
           "Недостаточно непрерывной общей истории benchmark и портфеля."
         }
       />
@@ -51,6 +51,8 @@ export function BenchmarkPanel({
         )}
         {detailed && (
           <>
+            <AnalyticsMetric metric="correlation" value={b.correlation} sample={sample} ratio />
+            <AnalyticsMetric metric="excessReturn" value={b.excessReturn} sample={sample} reason={c.analytics.performance.reason} />
             <AnalyticsMetric
               metric="trackingError"
               value={b.trackingError}

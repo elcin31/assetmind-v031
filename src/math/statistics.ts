@@ -46,3 +46,8 @@ export function validDate(date: string): boolean {
     new Date(date).toISOString().slice(0, 10) === date
   );
 }
+
+/** Annual effective rate; 252 trading-day equivalent, shared by RF and MAR. */
+export function annualToDaily(rate: number): number | null {
+  return Number.isFinite(rate) && rate > -1 ? finite(Math.expm1(Math.log1p(rate) / TRADING_DAYS)) : null;
+}

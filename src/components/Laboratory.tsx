@@ -31,14 +31,18 @@ export function Laboratory({
   const [volWindow, setVolWindow] = useState(20);
   const [sharpeWindow, setSharpeWindow] = useState(63);
   const a = c.analytics;
+  const providerReason = c.errors.length ? c.errors.join("; ") : null;
+  const riskReason = c.loading ? "Загрузка истории…" : providerReason ?? (a.performance.riskReturns.length < 20
+    ? `Недостаточно наблюдений: ${a.performance.riskReturns.length}; нужно минимум 20 чистых интервалов.`
+    : "Метрика математически не определена: проверьте дисперсию и число наблюдений ниже MAR (минимум 2).");
   const sample = `${a.sample} · Rf ${c.rf}% · MAR ${c.mar}%`;
   const vol =
     tab === "risk"
-      ? rollingMetric(a.performance.returns, volWindow, "volatility")
+      ? rollingMetric(a.performance.riskReturns, volWindow, "volatility")
       : [];
   const rollingSharpe =
     tab === "risk"
-      ? rollingMetric(a.performance.returns, sharpeWindow, "sharpe", c.rf / 100)
+      ? rollingMetric(a.performance.riskReturns, sharpeWindow, "sharpe", c.rf / 100)
       : [];
   return (
     <>
@@ -90,10 +94,11 @@ export function Laboratory({
           />
         </label>
       </div>
+      {tab !== "performance" && c.loading && <p role="status">Загрузка истории…</p>}
       {tab !== "performance" && <PeriodSelector controller={c} />}
       {(tab === "performance" || tab === "risk" || tab === "benchmark") &&
         a.performance.reason &&
-        !c.loading && <p className="notice">{a.performance.reason}</p>}
+        !c.loading && !c.errors.length && <p className="caption">{a.performance.reason}</p>}
       {tab === "performance" && (
         <>
           <PortfolioHistoryChart
@@ -118,7 +123,7 @@ export function Laboratory({
                   metric={metric}
                   value={a.performance[metric]}
                   sample={sample}
-                  reason={a.performance.reason}
+                  reason={providerReason ?? a.performance.reason}
                 />
               ))}
             </div>
@@ -134,6 +139,7 @@ export function Laboratory({
         <>
           <section className="card">
             <h2>Риск исторического портфеля</h2>
+            <p className="caption">Чистые наблюдаемые интервалы: {a.performance.riskReturns.length}. Интервалы со сделками и пропусками исключены; доходности через них не соединяются.</p>
             <div className="analytics-metrics">
               {(
                 [
@@ -152,7 +158,7 @@ export function Laboratory({
                   value={a.risk[metric]}
                   sample={sample}
                   ratio={["sharpe", "sortino", "calmar"].includes(metric)}
-                  reason={a.performance.reason}
+                  reason={metric === "calmar" ? providerReason ?? a.performance.reason ?? "Calmar требует CAGR и ненулевую просадку." : riskReason}
                 />
               ))}
               <AnalyticsMetric
@@ -187,7 +193,7 @@ export function Laboratory({
               label="Скользящая волатильность"
               format={pct}
               loading={c.loading}
-              reason={a.performance.reason}
+              reason={providerReason ?? a.performance.reason}
             />
             <Formula
               name="Окно волатильности"
@@ -216,11 +222,11 @@ export function Laboratory({
               label="Скользящий Sharpe"
               format={(v) => v.toFixed(2)}
               loading={c.loading}
-              reason={a.performance.reason}
+              reason={providerReason ?? a.performance.reason}
             />
             <Formula
               name="Окно Sharpe"
-              formula="(252mean(r_window) − Rf) / σ_window"
+              formula="252(mean(r_window) − ((1+Rf)^(1/252)−1)) / σ_window"
             >
               Полное окно {sharpeWindow} доходностей, Rf {c.rf}% в год. При
               нулевой волатильности участок недоступен. Данные: {sample}.
@@ -244,6 +250,7 @@ export function Laboratory({
                 sample={`proxy · Rf ${c.rf}%`}
                 ratio
               />
+              <AnalyticsMetric metric="maxDrawdown" value={a.proxy.drawdown?.max} sample="Current Holdings Historical Risk Proxy · не фактическая просадка" />
             </div>
             <Formula
               name="Текущие количества"
@@ -295,14 +302,14 @@ export function Laboratory({
             matrix={a.matrix}
             loading={c.loading}
             reason={
-              a.history.missingSymbols.length
+              providerReason ?? (a.history.missingSymbols.length
                 ? `Нет полной истории: ${a.history.missingSymbols.join(", ")}.`
-                : "Недостаточно общей истории или нулевая дисперсия."
+                : "Недостаточно общей истории или нулевая дисперсия.")
             }
           />
           <section className="card">
             <h2>Вклад в риск текущего состава</h2>
-            {!a.currentRisk && (
+            {!a.currentRisk && !c.loading && !c.errors.length && (
               <p className="notice">
                 Нужны котировки всех позиций, общая история и ненулевая
                 волатильность портфеля.
@@ -316,7 +323,7 @@ export function Laboratory({
                     <th>Вес</th>
                     <th>Вклад в риск</th>
                     <th>MCR</th>
-                    <th>RC · σ год</th>
+                    <th>RC · дисперсия</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -326,7 +333,7 @@ export function Laboratory({
                       <td>{pct(c.weight)}</td>
                       <td>{pct(c.fraction)}</td>
                       <td>{c.marginal.toFixed(4)}</td>
-                      <td>{pct(c.absolute)}</td>
+                      <td>{c.absolute.toFixed(6)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -334,10 +341,10 @@ export function Laboratory({
             </div>
             <Formula
               name="Разложение риска"
-              formula="MCRᵢ = (Σw)ᵢ/σp; RCᵢ = wᵢMCRᵢ; shareᵢ = RCᵢ/ΣRC"
+              formula="MCRᵢ = (Σw)ᵢ; RCᵢ = wᵢMCRᵢ; shareᵢ = RCᵢ/(wᵀΣw)"
             >
               Годовая ковариация и текущие рыночные веса. Сумма RC равна
-              волатильности портфеля. Отрицательный вклад возможен у
+              дисперсии портфеля. Отрицательный вклад возможен у
               хеджирующего актива. Данные: {a.matrix?.observations ?? 0} общих
               интервалов.
             </Formula>

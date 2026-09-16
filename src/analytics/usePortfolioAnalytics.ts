@@ -24,7 +24,7 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot) {
   useEffect(() => {
     let active = true;
     const symbols = symbolsKey.split(",").filter(Boolean);
-    void Promise.allSettled(symbols.map((symbol) => loadHistory(symbol))).then(
+    void Promise.allSettled(symbols.map((symbol) => loadHistory(symbol, "5y", retry > 0))).then(
       (results) => {
         const histories = new Map<string, HistoryBar[]>();
         const errors: string[] = [];
@@ -41,9 +41,17 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot) {
     return () => {
       active = false;
     };
-  }, [key, symbolsKey]);
+  }, [key, symbolsKey, retry]);
   const current = result?.key === key ? result : null;
   const asOf = new Date().toISOString().slice(0, 10);
+  const coverageNotices = current ? [...current.histories].flatMap(([symbol, bars]) => {
+    const first = bars[0]?.date;
+    const last = bars.at(-1)?.date;
+    if (!first || !last) return [];
+    const short = Date.parse(asOf) - Date.parse(first) < 4.9 * 365.25 * 86400000;
+    const stale = Date.parse(asOf) - Date.parse(last) > 10 * 86400000;
+    return short || stale ? [`${symbol}: ${first} — ${last}, ${bars.length} цен. Доступна только эта история; возможна недавняя дата листинга или неполный ответ поставщика.`] : [];
+  }) : [];
   const analytics = useMemo(
     () =>
       calculatePortfolioAnalytics(
@@ -68,6 +76,8 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot) {
     mar,
     setMar,
     loading: !current,
+    historyState: !current ? "loading" : current.errors.length ? (current.histories.size ? "partial_provider_history" : "provider_unavailable") : coverageNotices.length ? "partial_provider_history" : "ready",
+    coverageNotices,
     errors: current?.errors ?? [],
     retry: () => setRetry((n) => n + 1),
   };

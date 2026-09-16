@@ -49,14 +49,14 @@ export function PortfolioHistoryChart({
         label="Историческая стоимость активов"
         format={(v) => formatCurrency(v, currency)}
         loading={c.loading}
-        reason={a.history.reason}
+        reason={c.errors.length ? c.errors.join("; ") : a.history.reason}
       />
       <p className="caption">
         Стоимость позиций, восстановленная по истории операций. Денежный остаток
         не учтён — это не полная стоимость счёта. ALL: вся доступная история
         API, максимум 5 лет. Данные: {a.sample}.
       </p>
-      {a.history.missingSymbols.length > 0 && (
+      {!c.loading && !c.errors.length && a.history.missingSymbols.length > 0 && (
         <p className="notice">
           Неполная история: {a.history.missingSymbols.join(", ")}. Пропущено
           дат: {a.history.missingDates.length}; стоимость неполного набора
