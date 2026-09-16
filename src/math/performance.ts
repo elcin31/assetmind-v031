@@ -188,7 +188,7 @@ export function performanceMetrics(
     reason: complete
       ? null
       : candidates.some((p) => p.traded)
-        ? 'Период содержит BUY/SELL: cumulative performance/TWR через загрязнённый интервал недоступны без внешних cash flows. Чистые интервалы сохраняются для risk analytics.'
+        ? 'Период содержит BUY/SELL: exact TWR через trade-day требует subperiod valuation в момент сделки. AssetMind не выдаёт EOD approximation за фактическую доходность; чистые интервалы сохраняются для risk analytics, а MWR/XIRR считается отдельно по cash ledger.'
         : 'Cumulative performance недоступна из-за разрыва рыночной истории; пропущенные интервалы не считаются нулевыми и не соединяются.',
   };
 }
