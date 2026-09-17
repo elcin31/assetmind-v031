@@ -18,24 +18,27 @@ export function TransactionForm({
   onSuccess,
   onError,
 }: Props) {
-  const [symbol, setSymbol] = useState(initialSymbol ?? '');
+  const [symbolState, setSymbolState] = useState(() => ({
+    source: initialSymbol,
+    value: initialSymbol ?? '',
+  }));
   const [type, setType] = useState<'BUY' | 'SELL'>('BUY');
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
   const [date, setDate] = useState(() => toLocalDateTimeInputValue());
   const [submitting, setSubmitting] = useState(false);
   const idempotencyKey = useRef<string | null>(null);
+  const symbol = symbolState.source === initialSymbol
+    ? symbolState.value
+    : initialSymbol ?? '';
 
   useEffect(() => {
-    if (initialSymbol) {
-      setSymbol(initialSymbol);
-      idempotencyKey.current = null;
-    }
+    idempotencyKey.current = null;
   }, [initialSymbol]);
 
   useEffect(() => {
     const normalized = symbol.trim().toUpperCase();
-    if (!/^[A-Z0-9.\-]{1,20}$/.test(normalized)) return;
+    if (!/^[A-Z0-9.-]{1,20}$/.test(normalized)) return;
 
     const controller = new AbortController();
     const timeout = window.setTimeout(async () => {
@@ -76,7 +79,7 @@ export function TransactionForm({
     const px = Number(price);
     const timestamp = new Date(date);
 
-    if (!/^[A-Z0-9.\-]{1,20}$/.test(normalizedSymbol)) {
+    if (!/^[A-Z0-9.-]{1,20}$/.test(normalizedSymbol)) {
       onError('Please enter a valid symbol.');
       return;
     }
@@ -118,7 +121,7 @@ export function TransactionForm({
             className="input"
             value={symbol}
             onChange={(e) => {
-              setSymbol(e.target.value.toUpperCase());
+              setSymbolState({ source: initialSymbol, value: e.target.value.toUpperCase() });
               resetIdempotency();
             }}
             placeholder="AAPL"
