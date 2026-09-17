@@ -41,22 +41,23 @@ export function PortfolioHistoryChart({
   return (
     <section className="card portfolio-history">
       <div className="section-heading">
-        <h2>Историческая стоимость активов</h2>
-        <span className="tag">По операциям</span>
+        <h2>Историческая стоимость счёта</h2>
+        <span className="tag">Transaction-aware</span>
       </div>
       <PeriodSelector controller={c} />
       <AnalyticsChart
         key={c.period}
         points={points}
-        label="Историческая стоимость активов"
+        label="Историческая стоимость счёта"
         format={(v) => formatCurrency(v, currency)}
         loading={c.loading}
         reason={c.errors.length ? c.errors.join('; ') : a.history.reason}
       />
       <p className="caption">
-        Стоимость позиций, восстановленная по истории операций и adjusted close.
-        Денежный остаток не учтён, поэтому это не полная стоимость счёта. ALL:
-        вся доступная API-история, максимум 5 лет. Данные: {a.sample}.
+        Фактическая EOD-оценка счёта: reconciled cash + позиции по adjusted close.
+        BUY/SELL изменяют состав и cash, но сами по себе не являются внешним
+        денежным потоком. ALL: вся доступная API-история, максимум 5 лет. Данные:{' '}
+        {a.sample}.
       </p>
       {a.history.missingSymbols.length > 0 && !c.errors.length && (
         <p className="notice">
@@ -66,16 +67,18 @@ export function PortfolioHistoryChart({
         </p>
       )}
       <Formula
-        name="История и денежные потоки"
-        formula="qᵢ(t) = Σ BUYᵢ − Σ SELLᵢ; V(t) = Σqᵢ(t)Pᵢ(t); rₜ = (Vₜ − Vₜ₋₁ − CFₜ)/Vₜ₋₁"
+        name="История счёта и денежные потоки"
+        formula="qᵢ(t) = Σ BUYᵢ − Σ SELLᵢ; A(t) = Cash(t) + Σqᵢ(t)Pᵢ(t)"
       >
         Операции упорядочены по timestamp, created_at, id. Оценка на конец дня
-        UTC. Pᵢ(t) — нормализованный adjusted close только соответствующей
-        торговой даты, без forward fill. BUY/SELL не определяют внешний поток
-        CF; trade-интервалы не используются как cumulative investment return.
-        Adjusted close последовательно отражает provider adjustments для split и
-        dividend events, но отдельного cash/fee/FX ledger и отдельного split
-        ledger для количества акций пока нет.
+        UTC. BUY уменьшает cash на фактический execution notional, SELL увеличивает
+        его; DIVIDEND/FEE отражаются в cash как доход/расход. DEPOSIT/WITHDRAWAL
+        являются внешними потоками. Если такой поток попадает между двумя EOD
+        оценками, exact TWR для этого интервала не рассчитывается без subperiod
+        valuation в момент потока. Pᵢ(t) — adjusted close соответствующей торговой
+        даты, без forward fill и без подстановки нулей. При неполном funding/cash
+        ledger фактическая история счёта остаётся недоступной; Current Holdings
+        Historical Risk Proxy остаётся отдельной proxy-моделью.
       </Formula>
     </section>
   );
