@@ -2,10 +2,10 @@ import type { HistoryBar } from "../types";
 import type { CorrelationMatrix } from "../types/analytics";
 import { datedReturns } from "./performance";
 import { covariance, EPSILON, MIN_OBSERVATIONS, safeRatio } from "./statistics";
-export function correlation(a: number[], b: number[]): number | null {
-  const cov = covariance(a, b);
-  const va = covariance(a, a);
-  const vb = covariance(b, b);
+export function correlation(a: number[], b: number[], minimum = MIN_OBSERVATIONS): number | null {
+  const cov = covariance(a, b, minimum);
+  const va = covariance(a, a, minimum);
+  const vb = covariance(b, b, minimum);
   const value = safeRatio(
     cov,
     va === null || vb === null || va <= EPSILON || vb <= EPSILON
