@@ -61,7 +61,7 @@ export function TransactionHistory({
     const quantity = Number(draft.quantity);
     const price = Number(draft.price);
     const date = new Date(draft.timestamp);
-    if (!/^[A-Z0-9.\-]{1,20}$/.test(symbol) || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(price) || price <= 0 || Number.isNaN(date.getTime())) {
+    if (!/^[A-Z0-9.-]{1,20}$/.test(symbol) || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(price) || price <= 0 || Number.isNaN(date.getTime())) {
       onError('Проверьте тикер, количество, цену и дату сделки.');
       return;
     }
