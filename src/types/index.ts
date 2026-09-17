@@ -93,6 +93,15 @@ export interface HistoryBar {
   close: number;
 }
 
+/** Provider-reported split. It is detected for correctness, not silently applied to the transaction ledger. */
+export interface StockSplit {
+  date: string; // YYYY-MM-DD
+  timestamp: string; // ISO provider event time
+  numerator: number;
+  denominator: number;
+  ratio: number;
+}
+
 export interface PortfolioSnapshot {
   history?: { dates: string[]; values: number[]; dailyReturns: number[] };
   portfolio: Portfolio;
