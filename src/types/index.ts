@@ -74,9 +74,11 @@ export interface Position {
 export interface Quote {
   symbol: string;
   price: number;
-  change: number;
-  changePercent: number;
-  timestamp: number;
+  /** Null means the provider did not supply a reliable value. Zero is a real flat move. */
+  change: number | null;
+  changePercent: number | null;
+  /** Provider timestamp in Unix seconds; null when unavailable. */
+  timestamp: number | null;
 }
 
 export interface SearchResult {
