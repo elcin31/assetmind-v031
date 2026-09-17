@@ -22,13 +22,15 @@ export function DataQualityPanel({
   const datedProxyReturns = a.proxy.returns;
   const lastProxyDate = datedProxyReturns.length ? datedProxyReturns[datedProxyReturns.length - 1].date : null;
   const cleanIntervals = a.performance.riskReturns.length;
-  const commonIntervals = a.matrix?.observations ?? 0;
+  const commonIntervals = a.riskMatrix.commonObservations;
+  const requiredRiskIntervals = a.riskMatrix.required;
   const benchmarkIntervals = a.benchmark.observations;
   const historyNotStarted = Boolean(firstTransaction && lastProxyDate && firstTransaction > lastProxyDate && cleanIntervals === 0);
   const providerPartial = c.errors.length > 0;
   const valuationPartial = !snapshot.valuation.complete;
   const cashIncomplete = Boolean(snapshot.cashLedger && !snapshot.cashLedger.complete && (snapshot.transactions.length || snapshot.cashEvents?.length));
-  const needsAttention = providerPartial || valuationPartial || cashIncomplete || historyNotStarted || (snapshot.transactions.length > 0 && cleanIntervals < 20);
+  const riskUnavailable = !a.riskMatrix.matrix || !a.actualRiskWindow.available;
+  const needsAttention = providerPartial || valuationPartial || cashIncomplete || historyNotStarted || riskUnavailable;
 
   return (
     <section className="card data-quality-card">
@@ -45,10 +47,11 @@ export function DataQualityPanel({
           Первая сделка датирована {day(firstTransaction)}, а последняя завершённая рыночная история заканчивается {day(lastProxyDate)}. Фактическая история портфеля ещё не имеет ни одного полного return-интервала. Proxy текущего состава при этом может рассчитываться по более ранним ценам.
         </p>
       )}
-      {!historyNotStarted && snapshot.transactions.length > 0 && cleanIntervals < 20 && !c.loading && (
-        <p className="notice">
-          Для большинства risk-метрик нужно минимум 20 чистых однодневных интервалов. Сейчас доступно {cleanIntervals}/20. BUY/SELL и неизвестные ценовые разрывы не подменяются нулевой доходностью.
-        </p>
+      {!historyNotStarted && !a.actualRiskWindow.available && snapshot.transactions.length > 0 && !c.loading && (
+        <p className="notice">{a.actualRiskWindow.reason}</p>
+      )}
+      {!a.riskMatrix.matrix && snapshot.positions.length > 0 && !c.loading && (
+        <p className="notice">{a.riskMatrix.reason}</p>
       )}
       {cashIncomplete && <p className="notice">{snapshot.cashLedger?.reason}</p>}
       {providerPartial && <p className="notice">История поставщика загружена частично: {c.errors.join('; ')}</p>}
@@ -57,11 +60,15 @@ export function DataQualityPanel({
         <div><span>Рыночная оценка</span><b>{snapshot.valuation.pricedPositions}/{snapshot.valuation.totalPositions} позиций</b></div>
         <div><span>Cash ledger</span><b>{snapshot.cashLedger?.complete ? 'reconciled' : 'incomplete'}</b></div>
         <div><span>Первая сделка</span><b>{day(firstTransaction)}</b></div>
-        <div><span>Чистые portfolio returns</span><b>{cleanIntervals}</b></div>
-        <div><span>Общие интервалы активов</span><b>{commonIntervals}</b></div>
+        <div><span>Фактический {c.riskHorizon} Risk</span><b>{a.actualRiskWindow.availableObservations}/{a.actualRiskWindow.required}</b></div>
+        <div><span>{c.riskHorizon} Risk Matrix</span><b>{commonIntervals}/{requiredRiskIntervals} · {a.riskMatrix.matrix ? 'Ready' : 'Unavailable'}</b></div>
         <div><span>Benchmark aligned</span><b>{benchmarkIntervals}</b></div>
         <div><span>Current-holdings proxy</span><b>{proxyReturns.length}</b></div>
       </div>
+
+      {a.riskMatrix.limitingSymbols.length > 0 && !a.riskMatrix.matrix && (
+        <p className="caption">Ограничивающая история: {a.riskMatrix.limitingSymbols.join(', ')}.</p>
+      )}
 
       {(providerPartial || valuationPartial) && (
         <button className="btn btn-ghost" type="button" onClick={c.retry}>Повторить загрузку рынка</button>
