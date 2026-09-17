@@ -11,6 +11,8 @@ export interface PortfolioHistoryPoint {
   value: number;
   /** null means unknown, never infer external cash flows from trades. */
   externalFlow: number | null;
+  /** True when one or more deposit/withdrawal flows occurred since the previous valid valuation. */
+  externalFlowOccurred?: boolean;
   dailyReturn: number | null;
   traded: boolean;
 }
