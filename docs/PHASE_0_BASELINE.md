@@ -4,37 +4,39 @@ Date: 2026-09-17
 
 ## Scope
 
-Phase 0 freezes the current production baseline before broader product work. The goal is to verify that repository, CI, Vercel target, runtime APIs and operational documentation all point to the same system before changing portfolio math or architecture.
+Phase 0 freezes and verifies the production baseline before broader product work. The goal is to ensure repository, CI, Vercel, Supabase, market-data routes and operational documentation refer to the same system before changing portfolio math or product architecture.
 
 ## Verified production identity
 
 - GitHub repository: `elcin31/assetmind-v031`
-- Baseline `main` commit: `31e10094cd51edbebd9767748b0b7f36539e3c3c`
+- Baseline commit before hardening: `31e10094cd51edbebd9767748b0b7f36539e3c3c`
+- Phase 0 merge commit: `bd2acdddaee5397a2c7996ec7f974a91bbd89c9a`
 - Vercel project: `assetmind-v031-mpsk`
 - Vercel project ID: `prj_0OQTvpMdNFAJFm2Ty0o536nHR7Qx`
 - Production domain: `https://assetmind-v031-mpsk.vercel.app`
-- Baseline production deployment: `dpl_2oZW1Sf4sHzRfjpqDaNQLHXAYLhe`
-- Production deployment state at audit: `READY`
+- Phase 0 production deployment: `dpl_3tVeqxwKYPN3cB3bjw7GmmQCXfXh`
 - Production branch: `main`
 - Production Node major: `24`
+- Active Supabase project: `AssetMind 31` (`qxajgfbacdoxwnssmjth`)
 
-The baseline production deployment is tied to the same GitHub commit as `main`.
+No new Vercel project was created. Production continues to deploy only to `assetmind-v031-mpsk`.
 
-## Verification status at baseline
+## Verification status
 
-GitHub Verify for the baseline commit completed successfully.
+The post-merge GitHub Verify workflow completed successfully on Node 24.
 
 - 17 test files passed
 - 125 tests passed
-- TypeScript build passed
+- TypeScript typecheck passed
+- Oxlint passed with 0 warnings and 0 errors
 - Vite production build passed
-- Production dependency audit is part of CI
+- production dependency audit (`npm audit --omit=dev --audit-level=high`) reports 0 vulnerabilities
 
-The baseline lint step completed with 6 warnings and 0 errors. Phase 0 removes those warnings and changes lint verification so future warnings fail CI.
+The full development dependency tree still reports advisories in tooling dependencies, primarily around `@vercel/node` and transitive development packages. They are not production dependency vulnerabilities and should not be “fixed” with a forced downgrade that would destabilize the runtime toolchain.
 
 ## Live production smoke checks
 
-The permanent production domain was checked directly.
+The permanent production domain was checked after the Phase 0 deployment.
 
 | Check | Result |
 | --- | --- |
@@ -43,41 +45,50 @@ The permanent production domain was checked directly.
 | `GET /api/quote?symbol=AAPL` | HTTP 200 |
 | `GET /api/history?symbol=AAPL&period=1m` | HTTP 200 |
 
-For the history smoke check at audit time:
+The history endpoint returned adjusted Yahoo history with 22 observations, no duplicate dates and sorted output during the audit.
 
-- provider: Yahoo
-- price type: adjusted
-- observations: 22
-- duplicate dates: 0
-- sorted: true
+## Supabase baseline
 
-These checks prove that the current production shell and core public market-data endpoints are reachable. They do not replace authenticated browser QA for Supabase session restore, transaction persistence or analytics UI.
+The active `AssetMind 31` project contains the current application tables (`profiles`, `portfolios`, `transactions`, `user_settings`) with RLS enabled. `positions` also has RLS enabled but is not used by the current application and has no client policy, so it remains inaccessible through the Data API.
 
-## Phase 0 corrections
+Phase 0 found two actionable function-security warnings:
 
-Work is isolated in `chore/phase-0-preflight` until CI and preview are green.
+1. `public.handle_new_user()` was a `SECURITY DEFINER` trigger function directly executable by `anon` and `authenticated` through RPC.
+2. `public.set_updated_at()` had a mutable/default `search_path`.
 
-1. Align local/CI Node major with production Node 24.
-2. Fail CI when Oxlint emits warnings.
-3. Remove the six lint warnings present in the baseline build.
-4. Replace stale deployment documentation that incorrectly described the app as localStorage-only.
-5. Keep the production target explicitly pinned in operational documentation.
+Production migration `20260917101444_phase0_supabase_function_security` fixed both findings by:
+
+- setting an empty function `search_path`;
+- revoking direct execution from `PUBLIC`, `anon` and `authenticated`;
+- revoking automatic execute grants for future functions created by `postgres` in `public`.
+
+After the migration, those security-advisor warnings disappeared.
+
+## Corrections completed in Phase 0
+
+1. Aligned local and CI Node with production Node 24.
+2. Made lint warnings fail verification.
+3. Removed all six existing lint warnings.
+4. Fixed selected-symbol synchronization without synchronous state changes in a React effect.
+5. Replaced stale localStorage-only deployment documentation with the actual Supabase + local cache architecture.
+6. Verified the correct GitHub-to-Vercel production binding.
+7. Verified market-data search, quote and history routes in production.
+8. Audited active Supabase tables/RLS and closed exposed trigger-function RPC access.
+9. Recorded the production database security migration in source control.
 
 ## Known follow-up items
 
-These are recorded but intentionally not mixed into the preflight patch unless they block verification:
+These are not hidden and should be handled in the next hardening/product phases:
 
-- Production runtime emits Node `DEP0169` warnings on market-data routes. No direct `url.parse()` usage exists in the repository, so dependency/runtime attribution is required before changing application code.
-- Main client bundle is approximately 559 kB minified and exceeds Vite's 500 kB warning threshold. This is a performance/code-splitting task, not a correctness blocker for Phase 0.
-- Authenticated end-to-end browser QA is required before an investor-ready release because static/API smoke tests cannot validate session restoration and cloud portfolio persistence.
+- Supabase Auth leaked-password protection is disabled. This is an Auth project setting rather than an application-code defect and should be enabled before broader external user onboarding.
+- `public.positions` is a legacy/unused table with RLS enabled and no policies. It is currently closed to clients; decide later whether to remove it or formally model ownership if it becomes part of the architecture.
+- Production runtime emits Node `DEP0169` warnings on market-data routes. AssetMind source does not call `url.parse()` directly; the same deprecation appears in external Node/tooling paths, so it must not be “fixed” by suppressing errors in application code.
+- Main client bundle is approximately 559 kB minified and exceeds Vite's 500 kB warning threshold. This is a performance/code-splitting task.
+- Authenticated browser E2E QA is still required for session restoration, signup/email flows, transaction persistence and cross-device Supabase sync.
+- Supabase has historical migration drift: some older production migrations are recorded remotely while one repository migration was originally applied outside the tracked migration history. The current schema matches the application, but migration history should be normalized before substantial schema evolution.
 
-## Exit criteria
+## Phase 0 status
 
-Phase 0 is complete only when:
+**Phase 0 is complete for production baseline and preflight hardening.**
 
-- the preflight branch passes GitHub Verify on Node 24;
-- lint reports zero warnings;
-- Vercel preview is `READY`;
-- root/search/quote/history smoke checks pass on preview;
-- no new runtime error cluster is introduced;
-- only then is the patch eligible to merge into `main` and update the existing production project.
+The application has a reproducible Node/CI baseline, strict lint gate, passing tests/build, verified production routing, documented infrastructure identity and materially safer Supabase function permissions. The remaining items are explicitly tracked and move into the next hardening and product phases rather than being mistaken for completed work.
