@@ -1,6 +1,7 @@
 import type { HistoryBar, PortfolioSnapshot } from '../types';
 import type { Period, RiskHorizon } from '../types/analytics';
 import { reconstructAccountHistory } from './accountHistory';
+import { reconstructPortfolioHistory } from './portfolioHistory';
 import {
   datedReturns,
   performanceMetrics,
@@ -24,7 +25,7 @@ import {
   returnAttribution,
 } from './attribution';
 import { concentration } from './lab';
-import { annualRateToDaily, volatility } from './statistics';
+import { annualRateToDaily, EPSILON, volatility } from './statistics';
 import { calculatePositions } from './positions';
 import { buildCurrentHoldingsRiskProxy } from './returns';
 import {
@@ -64,12 +65,16 @@ export function calculatePortfolioAnalytics(
       bars.filter((b) => b.date <= asOf),
     ]),
   );
-  const history = reconstructAccountHistory(
-    snapshot.transactions,
-    snapshot.cashEvents ?? [],
-    clean,
-    asOf,
-  );
+  // Real application snapshots include the capital layer. The legacy branch is
+  // retained only for older snapshot callers/tests that predate cash events.
+  const history = snapshot.cashEvents === undefined
+    ? reconstructPortfolioHistory(snapshot.transactions, clean, asOf)
+    : reconstructAccountHistory(
+        snapshot.transactions,
+        snapshot.cashEvents,
+        clean,
+        asOf,
+      );
 
   // Performance period and current-risk horizon are intentionally independent.
   const points = selectPeriod(history.points, period, asOf);
@@ -168,10 +173,12 @@ export function calculatePortfolioAnalytics(
     rf,
   );
 
-  // P&L is lifetime; return attribution is strictly the selected continuous
-  // actual-account performance stream.
+  // P&L is lifetime. Return attribution remains deliberately narrower than the
+  // new account-level TWR: it is only valid while holdings stay unchanged and
+  // no cash event changes the account after the selected baseline.
   const pnl = pnlAttribution(snapshot.transactions, snapshot.positions);
   const first = points[0];
+  const last = points.at(-1);
   const holdings = first
     ? calculatePositions(
         snapshot.transactions.filter(
@@ -187,22 +194,59 @@ export function calculatePortfolioAnalytics(
       new Map((clean.get(s) ?? []).map((b) => [b.date, b.close])),
     ]),
   );
-  const contributionPeriods = performance.returns.map((r) => {
-    const prev = holdings.map(
-      (p) => p.quantity * (priceMaps.get(p.symbol)?.get(r.startDate) ?? NaN),
-    );
-    const total = prev.reduce((a, b) => a + b, 0);
-    return {
-      weights: prev.map((v) => v / total),
-      returns: holdings.map(
-        (p) =>
-          (priceMaps.get(p.symbol)?.get(r.date) ?? NaN) /
-            (priceMaps.get(p.symbol)?.get(r.startDate) ?? NaN) -
-          1,
-      ),
-    };
-  });
-  const linked = returnAttribution(contributionPeriods);
+  const hasTradeAfterBaseline = Boolean(
+    first &&
+      last &&
+      snapshot.transactions.some((transaction) => {
+        const day = new Date(transaction.timestamp).toISOString().slice(0, 10);
+        return day > first.date && day <= last.date;
+      }),
+  );
+  const hasCashEventAfterBaseline = Boolean(
+    first &&
+      last &&
+      snapshot.cashEvents?.some((event) => {
+        const day = new Date(event.timestamp).toISOString().slice(0, 10);
+        return day > first.date && day <= last.date;
+      }),
+  );
+  const initialSecuritiesValue = first
+    ? holdings.reduce(
+        (sum, position) =>
+          sum +
+          position.quantity *
+            (priceMaps.get(position.symbol)?.get(first.date) ?? Number.NaN),
+        0,
+      )
+    : Number.NaN;
+  const attributionEligible = Boolean(
+    first &&
+      last &&
+      !hasTradeAfterBaseline &&
+      !hasCashEventAfterBaseline &&
+      Number.isFinite(initialSecuritiesValue) &&
+      Math.abs(first.value - initialSecuritiesValue) <= EPSILON,
+  );
+  const contributionPeriods = attributionEligible
+    ? performance.returns.map((r) => {
+        const prev = holdings.map(
+          (p) => p.quantity * (priceMaps.get(p.symbol)?.get(r.startDate) ?? NaN),
+        );
+        const total = prev.reduce((a, b) => a + b, 0);
+        return {
+          weights: prev.map((v) => v / total),
+          returns: holdings.map(
+            (p) =>
+              (priceMaps.get(p.symbol)?.get(r.date) ?? NaN) /
+                (priceMaps.get(p.symbol)?.get(r.startDate) ?? NaN) -
+              1,
+          ),
+        };
+      })
+    : [];
+  const linked = attributionEligible
+    ? returnAttribution(contributionPeriods)
+    : null;
   const contributions = linked
     ? contributionSymbols.map((symbol, i) => ({ symbol, value: linked[i] }))
     : [];
