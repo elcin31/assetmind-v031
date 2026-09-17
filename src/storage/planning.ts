@@ -1,6 +1,7 @@
 import { supabase } from '../auth/supabase';
 import type { CashEvent, CashEventKind, TargetAllocation } from '../types';
 import { normalizeTargetAllocation } from '../math/rebalancing';
+import { cloudErrorMessage, requireCloudRow } from './cloudMutation';
 
 const CASH_TYPES: CashEventKind[] = ['DEPOSIT', 'WITHDRAWAL', 'DIVIDEND', 'FEE'];
 
@@ -75,8 +76,15 @@ function writeLocal(userId: string, state: LocalPlanning, notify = true) {
   if (notify && typeof window !== 'undefined') window.dispatchEvent(new Event('assetmind:changed'));
 }
 
-function cloudMessage(error: { message?: string } | null | undefined) {
-  return error?.message ? `Capital data sync failed: ${error.message}` : 'Capital data sync failed.';
+function cloudMessage(error: { code?: string; message?: string } | null | undefined) {
+  return cloudErrorMessage(error, 'Capital data sync failed');
+}
+
+function requireCapitalRow<T>(
+  result: { data: T | null; error: { code?: string; message?: string } | null },
+  notFoundMessage: string,
+) {
+  return requireCloudRow(result, 'Capital data sync failed', notFoundMessage);
 }
 
 function fromCloud(row: CloudCashRow): CashEvent | null {
@@ -206,8 +214,9 @@ export async function updateCashEvent(eventId: string, inputRaw: NewCashEvent, u
         date: updated.timestamp.slice(0, 10), type: updated.kind, symbol: updated.symbol ?? null,
         amount: updated.amount, fees: updated.kind === 'FEE' ? updated.amount : null,
         currency: updated.currency, executed_at: updated.timestamp,
-      }).eq('user_id', userId).eq('portfolio_id', portfolioId).eq('transaction_id', eventId);
-      if (result.error) throw new Error(cloudMessage(result.error));
+      }).eq('user_id', userId).eq('portfolio_id', portfolioId).eq('transaction_id', eventId)
+        .select('transaction_id').maybeSingle();
+      requireCapitalRow(result, 'Денежная операция не найдена в облаке. Обновите портфель перед редактированием.');
     }
     const cashEvents = [...state.cashEvents]; cashEvents[index] = updated;
     writeLocal(userId, { version: 1, portfolioId, currency, targetAllocation: state.targetAllocation, cashEvents });
@@ -220,8 +229,10 @@ export async function deleteCashEvent(eventId: string, userId: string, portfolio
     const state = await readPlanningState(userId, portfolioId, currency);
     if (!state.cashEvents.some((event) => event.id === eventId)) throw new Error('Денежная операция не найдена. Обновите портфель.');
     if (supabase) {
-      const result = await supabase.from('transactions').delete().eq('user_id', userId).eq('portfolio_id', portfolioId).eq('transaction_id', eventId);
-      if (result.error) throw new Error(cloudMessage(result.error));
+      const result = await supabase.from('transactions').delete()
+        .eq('user_id', userId).eq('portfolio_id', portfolioId).eq('transaction_id', eventId)
+        .select('transaction_id').maybeSingle();
+      requireCapitalRow(result, 'Денежная операция не найдена в облаке. Обновите портфель перед удалением.');
     }
     writeLocal(userId, { ...state, version: 1, portfolioId, currency, cashEvents: state.cashEvents.filter((event) => event.id !== eventId) });
   });
@@ -232,8 +243,11 @@ export async function updateTargetAllocation(targetsInput: TargetAllocation[], u
   return withLock(userId, async () => {
     const state = await readPlanningState(userId, portfolioId, currency);
     if (supabase) {
-      const result = await supabase.from('portfolios').update({ target_allocation: targets, updated_at: new Date().toISOString() }).eq('id', portfolioId).eq('user_id', userId);
-      if (result.error) throw new Error(cloudMessage(result.error));
+      const result = await supabase.from('portfolios')
+        .update({ target_allocation: targets, updated_at: new Date().toISOString() })
+        .eq('id', portfolioId).eq('user_id', userId)
+        .select('id').maybeSingle();
+      requireCapitalRow(result, 'Портфель не найден в облаке. Обновите страницу перед изменением target allocation.');
     }
     writeLocal(userId, { ...state, version: 1, portfolioId, currency, targetAllocation: targets });
     return targets;

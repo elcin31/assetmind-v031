@@ -1,6 +1,7 @@
 import type { Portfolio, Transaction } from '../types';
 import { supabase } from '../auth/supabase';
 import { calculatePositions } from '../math/positions';
+import { cloudErrorMessage, requireCloudRow } from './cloudMutation';
 
 export const LEGACY_STORAGE_KEY = 'assetmind.portfolio.v1';
 export interface LocalPortfolio { version: 1; portfolio: Portfolio; transactions: Transaction[] }
@@ -116,8 +117,8 @@ function writePortfolio(data: LocalPortfolio, userId: string, notify = true) {
   if (notify && typeof window !== 'undefined') window.dispatchEvent(new Event('assetmind:changed'));
 }
 
-function cloudMessage(error: { message?: string } | null | undefined): string {
-  return error?.message ? `Cloud portfolio sync failed: ${error.message}` : 'Cloud portfolio sync failed.';
+function cloudMessage(error: { code?: string; message?: string } | null | undefined): string {
+  return cloudErrorMessage(error, 'Cloud portfolio sync failed');
 }
 
 async function withStorageLock<T>(userId: string, action: () => Promise<T> | T): Promise<T> {
@@ -337,8 +338,14 @@ export async function updateTransaction(transactionId: string, input: NewTransac
         })
         .eq('user_id', userId)
         .eq('portfolio_id', data.portfolio.id)
-        .eq('transaction_id', transactionId);
-      if (result.error) throw new Error(cloudMessage(result.error));
+        .eq('transaction_id', transactionId)
+        .select('transaction_id')
+        .maybeSingle();
+      requireCloudRow(
+        result,
+        'Cloud portfolio sync failed',
+        'Transaction was not found in cloud. Refresh the portfolio before editing it.',
+      );
     }
 
     writePortfolio(next, userId);
@@ -367,8 +374,14 @@ export async function deleteTransaction(transactionId: string, userId: string) {
         .delete()
         .eq('user_id', userId)
         .eq('portfolio_id', data.portfolio.id)
-        .eq('transaction_id', transactionId);
-      if (result.error) throw new Error(cloudMessage(result.error));
+        .eq('transaction_id', transactionId)
+        .select('transaction_id')
+        .maybeSingle();
+      requireCloudRow(
+        result,
+        'Cloud portfolio sync failed',
+        'Transaction was not found in cloud. Refresh the portfolio before deleting it.',
+      );
     }
 
     writePortfolio(next, userId);
