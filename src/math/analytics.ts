@@ -34,16 +34,30 @@ import {
   selectRiskWindow,
 } from './riskHorizon';
 
+const RISK_HORIZONS = new Set<RiskHorizon>(['20D', '60D', '1Y']);
+
+/**
+ * The final arguments retain compatibility with the pre-risk-horizon call shape
+ * so older integration callers safely receive the new 20D default.
+ */
 export function calculatePortfolioAnalytics(
   snapshot: PortfolioSnapshot,
   histories: Map<string, HistoryBar[]>,
   benchmark: string,
   period: Period,
-  riskHorizon: RiskHorizon,
-  asOf: string,
-  rf: number,
-  mar: number,
+  riskHorizonOrAsOf: RiskHorizon | string,
+  asOfOrRf: string | number,
+  rfOrMar: number,
+  maybeMar?: number,
 ) {
+  const explicitRiskHorizon = RISK_HORIZONS.has(riskHorizonOrAsOf as RiskHorizon);
+  const riskHorizon: RiskHorizon = explicitRiskHorizon
+    ? (riskHorizonOrAsOf as RiskHorizon)
+    : '20D';
+  const asOf = explicitRiskHorizon ? String(asOfOrRf) : riskHorizonOrAsOf;
+  const rf = explicitRiskHorizon ? rfOrMar : Number(asOfOrRf);
+  const mar = explicitRiskHorizon ? (maybeMar ?? 0) : rfOrMar;
+
   const clean = new Map(
     [...histories].map(([s, bars]) => [
       s,
@@ -81,7 +95,11 @@ export function calculatePortfolioAnalytics(
   const valueDrawdown = drawdowns(
     points.map((p) => ({ date: p.date, value: p.value })),
   );
-  const tail = historicalTailRisk(riskValues);
+  const tail = historicalTailRisk(
+    riskValues,
+    0.95,
+    HISTORICAL_TAIL_MIN_OBSERVATIONS,
+  );
   const dailyMar = annualRateToDaily(mar);
   const risk = {
     volatility: volatility(riskValues),
