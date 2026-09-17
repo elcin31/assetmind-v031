@@ -1,6 +1,6 @@
 import type { HistoryBar, PortfolioSnapshot } from '../types';
 import type { Period, RiskHorizon } from '../types/analytics';
-import { reconstructPortfolioHistory } from './portfolioHistory';
+import { reconstructAccountHistory } from './accountHistory';
 import {
   datedReturns,
   performanceMetrics,
@@ -64,8 +64,9 @@ export function calculatePortfolioAnalytics(
       bars.filter((b) => b.date <= asOf),
     ]),
   );
-  const history = reconstructPortfolioHistory(
+  const history = reconstructAccountHistory(
     snapshot.transactions,
+    snapshot.cashEvents ?? [],
     clean,
     asOf,
   );
@@ -168,7 +169,7 @@ export function calculatePortfolioAnalytics(
   );
 
   // P&L is lifetime; return attribution is strictly the selected continuous
-  // no-trade historical performance stream.
+  // actual-account performance stream.
   const pnl = pnlAttribution(snapshot.transactions, snapshot.positions);
   const first = points[0];
   const holdings = first
