@@ -52,6 +52,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       lastDate: bars.length ? bars[bars.length - 1].date : null,
       duplicateDates,
       sorted,
+      valuationCount: result.valuationBars.length,
+      splitCount: result.splits.length,
     };
     res.setHeader('Cache-Control', diagnostics ? 'no-store' : 'private, max-age=300');
     return res.status(200).json({
@@ -59,9 +61,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       period,
       provider: result.provider,
       priceType: result.priceType,
+      valuationPriceType: result.valuationPriceType,
       meta,
       ...(finnhub ? { diagnostics: { finnhub } } : {}),
       bars,
+      valuationBars: result.valuationBars,
+      splits: result.splits,
     });
   } catch (error) {
     const failure = providerFailure(error);
