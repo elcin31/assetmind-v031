@@ -141,8 +141,8 @@ describe('actual portfolio risk and tail risk', () => {
       traded: false,
       dailyReturn: index === 0 ? null : 0.001 + (index % 3) * 0.0001,
     }));
-    points[10] = { ...points[10], dailyReturn: null, traded: true, externalFlow: null };
-    // The null is older than the latest 20 slots here, so it is legitimately outside 20D.
+    points[4] = { ...points[4], dailyReturn: null, traded: true, externalFlow: null };
+    // This unknown return is before the latest 20 slots and therefore outside 20D.
     expect(selectActualPortfolioRiskWindow(points, '20D').available).toBe(true);
 
     points[20] = { ...points[20], dailyReturn: null, traded: true, externalFlow: null };
