@@ -18,6 +18,7 @@ import { AnalyticsMetric } from '../components/AnalyticsMetric';
 import { pct } from '../utils/analyticsFormat';
 import { BenchmarkPanel } from '../components/BenchmarkPanel';
 import { AttributionPanel } from '../components/AttributionPanel';
+import { RiskHorizonSelector } from '../components/RiskHorizonSelector';
 
 const Laboratory = lazy(() => import('../components/Laboratory').then((module) => ({ default: module.Laboratory })));
 
@@ -78,7 +79,7 @@ export function PortfolioScreen({ snapshot: s, userId, onRefresh, onSignOut, loa
           {analytics.performance.reason && !controller.loading && <p className="notice">{analytics.performance.reason}</p>}
           <section className="card"><div className="analytics-metrics"><AnalyticsMetric metric="cagr" value={analytics.performance.cagr} sample={analytics.sample}/><AnalyticsMetric metric="sharpe" value={analytics.risk.sharpe} sample={analytics.riskSample} ratio reason={analytics.riskReason}/><AnalyticsMetric metric="sortino" value={analytics.risk.sortino} sample={analytics.riskSample} ratio reason={analytics.sortinoReason}/><AnalyticsMetric metric="maxDrawdown" value={analytics.drawdown?.max} sample={analytics.sample}/></div></section>
           <section className="card">
-            <div className="section-heading"><div><h2>Текущий риск</h2><p className="caption">Current Holdings Historical Risk Proxy / covariance model. Performance period не меняется.</p></div><span className="tag">{controller.riskHorizon} Risk</span></div>
+            <div className="section-heading"><div><h2>Текущий риск</h2><p className="caption">Current Holdings Historical Risk Proxy / covariance model. Performance period не меняется.</p></div><RiskHorizonSelector controller={controller}/></div>
             <div className="analytics-metrics">
               <AnalyticsMetric metric="covarianceVol" value={analytics.currentRisk?.volatility} sample={analytics.matrixSample} reason={analytics.riskMatrix.reason}/>
               <AnalyticsMetric metric="diversificationRatio" value={analytics.currentRisk?.diversificationRatio} sample={analytics.matrixSample} ratio reason={analytics.riskMatrix.reason}/>
