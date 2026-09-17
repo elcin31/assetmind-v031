@@ -104,6 +104,10 @@ function writeCache<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T,
   return value;
 }
 
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 async function fetchWithTimeout(url: string): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
@@ -165,16 +169,18 @@ export async function quote(symbol: string): Promise<Quote | null> {
     if (!res.ok) return writeCache(quoteCache, sym, null, 5_000);
 
     const data = (await res.json()) as { c?: number; d?: number; dp?: number; t?: number };
-    if (data.c === undefined || data.c === 0 || !Number.isFinite(data.c)) {
+    const price = finiteNumber(data.c);
+    if (price === null || price <= 0) {
       return writeCache(quoteCache, sym, null, 5_000);
     }
 
+    const timestamp = finiteNumber(data.t);
     return writeCache(quoteCache, sym, {
       symbol: sym,
-      price: data.c,
-      change: data.d ?? 0,
-      changePercent: data.dp ?? 0,
-      timestamp: data.t ?? Math.floor(Date.now() / 1000),
+      price,
+      change: finiteNumber(data.d),
+      changePercent: finiteNumber(data.dp),
+      timestamp: timestamp !== null && timestamp > 0 ? timestamp : null,
     }, 15_000);
   } catch {
     return writeCache(quoteCache, sym, null, 5_000);
