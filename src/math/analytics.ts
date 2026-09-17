@@ -1,5 +1,5 @@
 import type { HistoryBar, PortfolioSnapshot } from '../types';
-import type { Period } from '../types/analytics';
+import type { Period, RiskHorizon } from '../types/analytics';
 import { reconstructPortfolioHistory } from './portfolioHistory';
 import {
   datedReturns,
@@ -15,11 +15,7 @@ import {
   sharpeRatio,
   sortinoRatio,
 } from './ratios';
-import {
-  correlation,
-  correlationMatrix,
-  averageCorrelation,
-} from './correlation';
+import { correlation, averageCorrelation } from './correlation';
 import { riskContributions } from './riskContribution';
 import { benchmarkMetrics, alignReturns } from './benchmark';
 import {
@@ -28,19 +24,22 @@ import {
   returnAttribution,
 } from './attribution';
 import { concentration } from './lab';
-import {
-  annualRateToDaily,
-  MIN_OBSERVATIONS,
-  volatility,
-} from './statistics';
+import { annualRateToDaily, volatility } from './statistics';
 import { calculatePositions } from './positions';
 import { buildCurrentHoldingsRiskProxy } from './returns';
+import {
+  HISTORICAL_TAIL_MIN_OBSERVATIONS,
+  buildRiskReturnMatrix,
+  selectActualPortfolioRiskWindow,
+  selectRiskWindow,
+} from './riskHorizon';
 
 export function calculatePortfolioAnalytics(
   snapshot: PortfolioSnapshot,
   histories: Map<string, HistoryBar[]>,
   benchmark: string,
   period: Period,
+  riskHorizon: RiskHorizon,
   asOf: string,
   rf: number,
   mar: number,
@@ -56,9 +55,17 @@ export function calculatePortfolioAnalytics(
     clean,
     asOf,
   );
+
+  // Performance period and current-risk horizon are intentionally independent.
   const points = selectPeriod(history.points, period, asOf);
   const performance = performanceMetrics(points);
-  const riskValues = performance.riskReturns.map((r) => r.value);
+  const actualRiskWindow = selectActualPortfolioRiskWindow(
+    history.points,
+    riskHorizon,
+  );
+  const riskValues = actualRiskWindow.available
+    ? actualRiskWindow.returns.map((r) => r.value)
+    : [];
 
   let wealth = 100;
   const returnIndex = performance.returns.length
@@ -87,11 +94,17 @@ export function calculatePortfolioAnalytics(
     es95: tail?.es ?? null,
   };
   const riskReason =
-    riskValues.length < MIN_OBSERVATIONS
-      ? `Недостаточно чистых return-интервалов для risk analytics: ${riskValues.length}/${MIN_OBSERVATIONS}. Загрязнённые trade/gap интервалы исключены, а не заменены нулём.`
-      : risk.volatility === null
-        ? 'Волатильность математически не определена: дисперсия ряда нулевая или некорректна.'
-        : null;
+    actualRiskWindow.reason ??
+    (risk.volatility === null
+      ? `${riskHorizon} volatility математически не определена: дисперсия ряда нулевая или некорректна.`
+      : null);
+  const tailRiskReason =
+    actualRiskWindow.reason ??
+    (riskValues.length < HISTORICAL_TAIL_MIN_OBSERVATIONS
+      ? `Для historical VaR / Expected Shortfall требуется минимум ${HISTORICAL_TAIL_MIN_OBSERVATIONS} валидных return-интервалов. В ${riskHorizon} окне доступно: ${riskValues.length}.`
+      : tail === null
+        ? 'Historical VaR / Expected Shortfall математически не определены для текущей выборки.'
+        : null);
   const sortinoReason =
     risk.sortino === null && riskReason === null
       ? 'Sortino недоступен: недостаточно downside-наблюдений относительно дневного MAR или downside deviation равна нулю.'
@@ -101,7 +114,8 @@ export function calculatePortfolioAnalytics(
     [...clean].map(([s, bars]) => [s, selectPeriod(bars, period, asOf)]),
   );
   const symbols = snapshot.positions.map((p) => p.symbol);
-  const matrix = correlationMatrix(symbols, rangeHistories);
+  const riskMatrix = buildRiskReturnMatrix(symbols, clean, riskHorizon);
+  const matrix = riskMatrix.matrix;
   const complete =
     snapshot.valuation.complete &&
     snapshot.positions.length > 0 &&
@@ -114,11 +128,14 @@ export function calculatePortfolioAnalytics(
       ? riskContributions(symbols, weights, matrix.covariance)
       : null;
 
-  const proxy = buildCurrentHoldingsRiskProxy(
-    snapshot.positions,
-    rangeHistories,
-  );
+  // Proxy always starts from full available history; only current-risk metrics use
+  // the selected horizon. Historical stress continues to use the full proxy series.
+  const proxy = buildCurrentHoldingsRiskProxy(snapshot.positions, clean);
   const proxyReturns = proxy.available ? proxy.returns : [];
+  const proxyRiskWindow = selectRiskWindow(proxyReturns, riskHorizon);
+  const proxyRiskValues = proxyRiskWindow.available
+    ? proxyRiskWindow.returns.map((r) => r.value)
+    : [];
   const proxyDrawdown = proxy.available
     ? drawdowns(
         proxy.dates.map((date, i) => ({ date, value: proxy.values[i] })),
@@ -173,19 +190,29 @@ export function calculatePortfolioAnalytics(
 
   const details = Object.fromEntries(
     snapshot.positions.map((p) => {
-      const returns = datedReturns(rangeHistories.get(p.symbol) ?? []);
-      const aligned = alignReturns(returns, proxyReturns);
+      const symbolRiskWindow = selectRiskWindow(
+        datedReturns(clean.get(p.symbol) ?? []),
+        riskHorizon,
+      );
+      const selectedReturns = symbolRiskWindow.available
+        ? symbolRiskWindow.returns
+        : [];
+      const aligned = alignReturns(selectedReturns, proxyRiskWindow.returns);
       return [
         p.symbol,
         {
           weight: complete ? p.marketValue! / snapshot.portfolioValue : null,
           positionReturn: positionReturn(p.marketPrice, p.averageCost),
-          volatility: volatility(returns.map((r) => r.value)),
+          volatility: volatility(selectedReturns.map((r) => r.value)),
           correlation: correlation(
             aligned.map((r) => r.portfolio),
             aligned.map((r) => r.benchmark),
           ),
-          beta: benchmarkMetrics(returns, benchmarkReturns, rf).beta,
+          beta: benchmarkMetrics(
+            datedReturns(rangeHistories.get(p.symbol) ?? []),
+            benchmarkReturns,
+            rf,
+          ).beta,
           riskContribution:
             currentRisk?.contributions.find((c) => c.symbol === p.symbol)
               ?.fraction ?? null,
@@ -200,10 +227,14 @@ export function calculatePortfolioAnalytics(
     readouts: historyReadouts(points),
     performance,
     risk,
+    riskHorizon,
+    actualRiskWindow,
     riskReason,
+    tailRiskReason,
     sortinoReason,
     drawdown,
     valueDrawdown,
+    riskMatrix,
     matrix,
     currentRisk,
     averageCorrelation: matrix ? averageCorrelation(matrix.correlation) : null,
@@ -214,11 +245,14 @@ export function calculatePortfolioAnalytics(
     details,
     proxy: {
       ...proxy,
-      volatility: volatility(proxy.dailyReturns),
-      sharpe: sharpeRatio(proxy.dailyReturns, rf),
+      riskWindow: proxyRiskWindow,
+      volatility: volatility(proxyRiskValues),
+      sharpe: sharpeRatio(proxyRiskValues, rf),
       drawdown: proxyDrawdown,
     },
-    sample: `${points[0]?.date ?? '—'} — ${points.at(-1)?.date ?? '—'} · ${riskValues.length} чистых return-интервалов`,
+    sample: `${points[0]?.date ?? '—'} — ${points.at(-1)?.date ?? '—'} · ${performance.riskReturns.length} чистых return-интервалов`,
+    riskSample: `${riskHorizon} · ${actualRiskWindow.availableObservations}/${actualRiskWindow.required} фактических валидных интервалов`,
+    matrixSample: `${riskHorizon} · ${riskMatrix.commonObservations}/${riskMatrix.required} общих интервалов`,
   };
 }
 
