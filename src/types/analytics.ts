@@ -1,4 +1,5 @@
 export type Period = "1M" | "3M" | "6M" | "YTD" | "1Y" | "ALL";
+export type RiskHorizon = "20D" | "60D" | "1Y";
 export type BenchmarkSymbol = "SPY" | "QQQ" | "DIA" | "IWM";
 export interface DatedReturn {
   date: string;
