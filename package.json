@@ -24,7 +24,7 @@
   "scripts": {
     "build": "tsc -b && vite build",
     "dev": "vite",
-    "lint": "oxlint",
+    "lint": "oxlint --deny-warnings",
     "preview": "vite preview",
     "smoke": "node scripts/smoke.mjs",
     "test": "vitest run",
