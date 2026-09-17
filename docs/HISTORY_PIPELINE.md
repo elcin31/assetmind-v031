@@ -35,14 +35,46 @@ Weekends and exchange holidays are not gaps because analytics operate on provide
 
 Multi-asset statistics align returns by the exact pair `(startDate, endDate)`. If one asset misses a trading observation, only intervals that cannot be matched exactly are removed. The application never bridges that missing observation and never substitutes `0`.
 
+## Actual account history
+
+Production analytics reconstruct end-of-day account value from two explicit components:
+
+```text
+accountValue_t = cashBalance_t + Σ(quantity_i,t × adjustedClose_i,t)
+```
+
+The cash balance is transaction-aware:
+
+- `BUY` reduces cash by the actual execution notional and increases holdings;
+- `SELL` increases cash by the actual execution notional and reduces holdings;
+- `DEPOSIT` and `WITHDRAWAL` are external cash flows;
+- `DIVIDEND` and `FEE` change account performance as income/expense;
+- no deposit is inferred from a purchase and no missing cash is fabricated.
+
+If the explicit cash ledger would become negative, actual account performance is unavailable until the missing funding history is entered. The securities-only reconstruction remains a diagnostic/legacy calculation, not the production definition of actual portfolio performance.
+
 ## Performance versus risk returns
 
-Two return concepts are deliberately separate:
+Return semantics are deliberately conservative:
 
-1. **Cumulative investment performance** requires a continuous chain. A BUY/SELL interval with unknown external cash flow, or a missing-price interval, makes Total Return/TWR/CAGR unavailable across that break.
-2. **Historical risk returns** retain every other clean one-day market-return interval. A single BUY/SELL does not erase a year of volatility, Sharpe, Sortino, VaR/ES, correlation, covariance, beta, or tracking statistics.
+1. **BUY/SELL are internal account transfers.** When the cash ledger is complete, they do not break an account return merely because holdings changed.
+2. **DEPOSIT/WITHDRAWAL intervals are not assigned an exact TWR return from EOD data.** Exact TWR requires a portfolio valuation immediately around the external-flow timestamp. AssetMind does not silently impose an end-of-day timing assumption or label Modified Dietz as exact TWR.
+3. **Missing-price intervals remain gaps.** They are never bridged and never converted to zero return.
+4. **Historical risk returns** retain every clean observed account-return interval around those breaks, so one external flow or provider gap does not erase all usable risk observations.
 
-Current Holdings Historical Risk Proxy remains explicitly labelled as a proxy. Its return intervals are also aligned by exact start/end dates and are never presented as actual transaction-aware performance.
+MWR/XIRR remains a separate cash-flow-aware metric. It is not relabelled as TWR.
+
+Current Holdings Historical Risk Proxy remains explicitly labelled as a proxy. Its return intervals are aligned by exact start/end dates and are never presented as actual transaction-aware performance.
+
+## Return attribution boundary
+
+Account-level performance can remain valid through internal BUY/SELL, but securities return attribution is intentionally narrower. AssetMind only publishes linked security return contributions when:
+
+- holdings are unchanged after the selected baseline;
+- no cash event changes the account after the baseline;
+- baseline account value is fully explained by the priced securities (no unallocated cash component).
+
+Otherwise return attribution is unavailable instead of forcing a securities-only decomposition onto a changing cash-aware account.
 
 ## Rate convention
 

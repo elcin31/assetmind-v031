@@ -124,8 +124,9 @@ export function selectPeriod<T extends { date: string }>(
 
 /**
  * Cumulative performance and historical risk deliberately use different streams.
- * A trade/gap makes cumulative TWR unavailable across that break, but clean
- * one-day market-return intervals before/after it remain valid for risk statistics.
+ * Exact account-level BUY/SELL intervals are valid when cash is reconstructed;
+ * missing valuations and external-flow intervals remain breaks. Clean observed
+ * intervals on either side remain eligible for risk statistics.
  */
 export function performanceMetrics(
   points: PortfolioHistoryPoint[],
@@ -166,6 +167,12 @@ export function performanceMetrics(
   const cumulativeValues = returns.map((r) => r.value);
   const riskValues = riskReturns.map((r) => r.value);
   const totalReturn = complete ? cumulativeReturn(cumulativeValues) : null;
+  const hasExternalFlowBreak = candidates.some(
+    (p) =>
+      p.dailyReturn === null &&
+      (p.externalFlowOccurred === true ||
+        (p.externalFlow !== null && Math.abs(p.externalFlow) > EPSILON)),
+  );
 
   return {
     totalReturn,
@@ -187,9 +194,11 @@ export function performanceMetrics(
     monthly: monthlyReturns(points),
     reason: complete
       ? null
-      : candidates.some((p) => p.traded)
-        ? 'Период содержит BUY/SELL: exact TWR через trade-day требует subperiod valuation в момент сделки. AssetMind не выдаёт EOD approximation за фактическую доходность; чистые интервалы сохраняются для risk analytics, а MWR/XIRR считается отдельно по cash ledger.'
-        : 'Cumulative performance недоступна из-за разрыва рыночной истории; пропущенные интервалы не считаются нулевыми и не соединяются.',
+      : hasExternalFlowBreak
+        ? 'Период содержит DEPOSIT/WITHDRAWAL. Для exact TWR нужна оценка счёта непосредственно вокруг момента внешнего денежного потока; AssetMind не подменяет её EOD timing assumption. MWR/XIRR остаётся доступен отдельно, если cash ledger полный.'
+        : candidates.some((p) => p.traded && p.dailyReturn === null)
+          ? 'Период содержит BUY/SELL без полной cash-aware оценки счёта. AssetMind не выдаёт securities-only approximation за фактическую доходность.'
+          : 'Cumulative performance недоступна из-за разрыва рыночной истории; пропущенные интервалы не считаются нулевыми и не соединяются.',
   };
 }
 
