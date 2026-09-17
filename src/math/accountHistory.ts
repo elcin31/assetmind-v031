@@ -1,4 +1,4 @@
-import type { CashEvent, HistoryBar, Transaction } from '../types';
+import type { CashEvent, HistoryBar, StockSplit, Transaction } from '../types';
 import type { PortfolioHistory, PortfolioHistoryPoint } from '../types/analytics';
 import { buildCashLedger } from './cashLedger';
 import { compareTransactions } from './positions';
@@ -23,6 +23,13 @@ type AccountOperation =
       event: CashEvent;
     };
 
+export interface AccountHistoryMarketData {
+  /** Provider-reported splits. Relevant held splits block actual history until corporate actions are ledger-aware. */
+  splits?: Map<string, StockSplit[]>;
+  /** First date requested from the raw-price provider for each symbol. */
+  coverageStarts?: Map<string, string>;
+}
+
 function operationOrder(a: AccountOperation, b: AccountOperation): number {
   const byTimestamp = Date.parse(a.timestamp) - Date.parse(b.timestamp);
   if (Number.isFinite(byTimestamp) && byTimestamp !== 0) return byTimestamp;
@@ -44,21 +51,59 @@ function cashDelta(event: CashEvent): { delta: number; external: number; externa
   return { delta: -event.amount, external: 0, externalFlow: false };
 }
 
+function quantityHeldBeforeSplit(
+  transactions: Transaction[],
+  symbol: string,
+  split: StockSplit,
+): number {
+  const splitTime = Date.parse(split.timestamp);
+  if (!Number.isFinite(splitTime)) return 0;
+  let quantity = 0;
+  for (const transaction of [...transactions].sort(compareTransactions)) {
+    if (transaction.symbol.trim().toUpperCase() !== symbol) continue;
+    const transactionTime = Date.parse(transaction.timestamp);
+    if (!Number.isFinite(transactionTime) || transactionTime >= splitTime) break;
+    quantity += transaction.type === 'BUY' ? transaction.quantity : -transaction.quantity;
+  }
+  return quantity;
+}
+
+function relevantHeldSplit(
+  transactions: Transaction[],
+  marketData: AccountHistoryMarketData,
+  asOf: string,
+): { symbol: string; split: StockSplit } | null {
+  for (const [rawSymbol, splits] of marketData.splits ?? []) {
+    const symbol = rawSymbol.trim().toUpperCase();
+    for (const split of splits) {
+      if (split.date > asOf) continue;
+      if (quantityHeldBeforeSplit(transactions, symbol, split) > EPSILON) {
+        return { symbol, split };
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Reconstruct actual end-of-day account value from historical holdings plus the
- * explicit cash ledger. BUY/SELL are internal transfers between cash and
- * securities and therefore do not break returns by themselves.
+ * explicit cash ledger.
  *
- * A DEPOSIT/WITHDRAWAL interval deliberately receives `dailyReturn = null`.
- * Without an intraday valuation at the external-flow timestamp, exact TWR is not
- * identifiable. AssetMind refuses to replace that missing subperiod valuation
- * with an EOD timing assumption.
+ * IMPORTANT: `histories` must be RAW exchange close, never adjusted close.
+ * Adjusted close is correct for return/risk analytics but would double-count
+ * explicit dividends and can distort account value around corporate actions.
+ *
+ * BUY/SELL are internal transfers between cash and securities and therefore do
+ * not break returns by themselves. A DEPOSIT/WITHDRAWAL interval deliberately
+ * receives `dailyReturn = null`: without an intraday valuation at the external
+ * flow timestamp, exact TWR is not identifiable.
  */
 export function reconstructAccountHistory(
   transactions: Transaction[],
   cashEvents: CashEvent[],
   histories: Map<string, HistoryBar[]>,
   asOf: string,
+  marketData: AccountHistoryMarketData = {},
 ): PortfolioHistory {
   const empty = (reason: string, missingSymbols: string[] = []): PortfolioHistory => ({
     points: [],
@@ -118,6 +163,43 @@ export function reconstructAccountHistory(
 
   if (!eligibleTransactions.length) return empty('До даты оценки нет сделок.');
 
+  const symbols = [...new Set(eligibleTransactions.map((transaction) => transaction.symbol))];
+  const unavailableRawSymbols = symbols.filter((symbol) => !(histories.get(symbol)?.length));
+  if (unavailableRawSymbols.length) {
+    return empty(
+      `Фактическая история счёта недоступна: нет raw close для ${unavailableRawSymbols.join(', ')}. Adjusted close не подставляется вместо фактической цены.`,
+      unavailableRawSymbols,
+    );
+  }
+
+  if (marketData.coverageStarts) {
+    for (const symbol of symbols) {
+      const firstTransaction = eligibleTransactions.find((transaction) => transaction.symbol === symbol);
+      const coverageStart = marketData.coverageStarts.get(symbol);
+      if (!firstTransaction || !coverageStart || !validDate(coverageStart)) {
+        return empty(
+          `Фактическая история счёта недоступна: не подтверждена полная raw-price coverage для ${symbol}.`,
+          [symbol],
+        );
+      }
+      if (firstTransaction.day < coverageStart) {
+        return empty(
+          `Фактическая история счёта недоступна: первая сделка ${symbol} (${firstTransaction.day}) старше доступной raw-price/corporate-action истории (${coverageStart}).`,
+          [symbol],
+        );
+      }
+    }
+  }
+
+  const heldSplit = relevantHeldSplit(eligibleTransactions, marketData, asOf);
+  if (heldSplit) {
+    const { symbol, split } = heldSplit;
+    return empty(
+      `Фактическая история счёта недоступна: обнаружен stock split ${symbol} ${split.numerator}:${split.denominator} от ${split.date}. Corporate actions должны быть учтены одновременно в transaction ledger, position engine и database integrity; AssetMind не подменяет это локальной поправкой графика.`,
+      [symbol],
+    );
+  }
+
   const ledger = buildCashLedger(eligibleTransactions, eligibleCashEvents, cutoff);
   if (!ledger.complete) {
     return empty(
@@ -126,7 +208,6 @@ export function reconstructAccountHistory(
     );
   }
 
-  const symbols = [...new Set(eligibleTransactions.map((transaction) => transaction.symbol))];
   const prices = new Map<string, Map<string, number>>();
   const calendar = new Set<string>();
   const missingSymbols = new Set<string>();
@@ -244,6 +325,6 @@ export function reconstructAccountHistory(
     missingSymbols: [...missingSymbols],
     reason: points.length
       ? null
-      : 'Недостаточно полной истории цен для восстановления стоимости счёта.',
+      : 'Недостаточно полной raw-close истории цен для восстановления стоимости счёта.',
   };
 }
