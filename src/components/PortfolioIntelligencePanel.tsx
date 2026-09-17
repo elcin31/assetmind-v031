@@ -20,7 +20,7 @@ export function PortfolioIntelligencePanel({ analytics: a }: { analytics: Portfo
     : null;
   const stress = historicalStressWindows(a.proxy.returns, [1, 5, 20, 63]);
   const optimizerReason = !a.matrix
-    ? 'Optimizer требует минимум 20 строго общих return-интервалов для всех текущих активов.'
+    ? (a.riskMatrix.reason ?? `Optimizer требует полное ${a.riskHorizon} окно общей covariance matrix.`)
     : !a.currentRisk
       ? 'Optimizer требует полной текущей рыночной оценки и положительной portfolio variance.'
       : !optimizer
@@ -35,7 +35,7 @@ export function PortfolioIntelligencePanel({ analytics: a }: { analytics: Portfo
             <h2>Minimum-Variance Research</h2>
             <p className="caption">Long-only оптимизация по общей исторической covariance matrix. Никаких guessed expected returns.</p>
           </div>
-          <span className="tag">{optimizer ? `${a.matrix?.observations ?? 0} intervals` : 'Unavailable'}</span>
+          <span className="tag">{optimizer ? `${a.riskHorizon} · ${a.matrix?.observations ?? 0} intervals` : 'Unavailable'}</span>
         </div>
         {optimizerReason && <p className="notice">{optimizerReason}</p>}
         {optimizer && <>
@@ -64,7 +64,7 @@ export function PortfolioIntelligencePanel({ analytics: a }: { analytics: Portfo
           </div>
         </>}
         <Formula name="Long-only minimum variance" formula="min w′Σw;  wᵢ ≥ 0;  Σwᵢ = 1">
-          Σ — annualized covariance matrix на строго общих интервалах. Решение ищется projected-gradient методом на simplex. Это research benchmark, а не торговая рекомендация: модель не учитывает cash, налоги, комиссии, ограничения лотов и будущие expected returns. Если sample covariance изменится, решение тоже изменится.
+          Σ — annualized covariance matrix на последних {a.riskMatrix.required} строго общих интервалах выбранного {a.riskHorizon} Risk Horizon. Решение ищется projected-gradient методом на simplex. Это research benchmark, а не торговая рекомендация: модель не учитывает cash, налоги, комиссии, ограничения лотов и будущие expected returns. Если sample covariance изменится, решение тоже изменится.
         </Formula>
       </section>
 
@@ -83,7 +83,7 @@ export function PortfolioIntelligencePanel({ analytics: a }: { analytics: Portfo
           <small>{dateRange(item.startDate, item.endDate)}</small>
         </div>)}</div>}
         <Formula name="Worst rolling stress" formula="R₍t,w₎ = Πₖ₌₁ʷ(1+rₖ) − 1;  stress_w = minₜ R₍t,w₎">
-          Окно допускается только если каждый следующий return-интервал начинается в точной конечной дате предыдущего. Provider gaps не соединяются и не заполняются нулями. Фиксируются сегодняшние количества активов, поэтому результат относится к current-holdings proxy.
+          Окно допускается только если каждый следующий return-интервал начинается в точной конечной дате предыдущего. Provider gaps не соединяются и не заполняются нулями. Фиксируются сегодняшние количества активов, поэтому результат относится к current-holdings proxy. Risk Horizon selector этот блок не обрезает.
         </Formula>
       </section>
     </>
