@@ -21,6 +21,8 @@ const disposableConfirmation = process.env.ASSETMIND_E2E_CONFIRM_DISPOSABLE;
 
 assert.equal(base.protocol, 'https:', 'Authenticated E2E requires HTTPS.');
 assert.equal(base.pathname, '/', 'ASSETMIND_E2E_URL must be the app origin only.');
+assert.equal(base.search, '', 'ASSETMIND_E2E_URL must not include query parameters.');
+assert.equal(base.hash, '', 'ASSETMIND_E2E_URL must not include a fragment.');
 assert.ok(email && email.includes('@'), 'ASSETMIND_E2E_EMAIL is required.');
 assert.ok(password && password.length >= 8, 'ASSETMIND_E2E_PASSWORD is required.');
 assert.equal(
@@ -65,8 +67,10 @@ async function openLabRisk() {
   await page.getByRole('group', { name: 'Risk Horizon' }).waitFor();
 }
 
-async function waitForCloudRefresh() {
-  await page.waitForTimeout(900);
+async function waitForPreferenceSave() {
+  // Production preference writes are debounced by 250 ms. Leave enough room for
+  // the cloud write and UI scheduling before reloading.
+  await page.waitForTimeout(1_000);
 }
 
 try {
@@ -89,7 +93,7 @@ try {
   assert.ok(['20D', '60D', '1Y'].includes(originalHorizon), 'recognized original Risk Horizon');
   const alternateHorizon = originalHorizon === '60D' ? '20D' : '60D';
   await horizonGroup.getByRole('button', { name: alternateHorizon, exact: true }).click();
-  await waitForCloudRefresh();
+  await waitForPreferenceSave();
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForPortfolio();
@@ -100,16 +104,15 @@ try {
     'Risk Horizon persisted across reload',
   );
   await page.getByRole('group', { name: 'Risk Horizon' }).getByRole('button', { name: originalHorizon, exact: true }).click();
-  await waitForCloudRefresh();
+  await waitForPreferenceSave();
 
   // Mutation tests are permitted only for an empty disposable account.
   await page.getByRole('button', { name: 'Сделки', exact: true }).click();
-  const tradeHistory = page.getByRole('heading', { name: /История сделок/ }).locator('..').locator('..');
   const tradeHeading = await page.getByRole('heading', { name: /История сделок/ }).innerText();
   assert.match(tradeHeading, /\b0\b/, 'disposable account must start with zero trades');
 
-  const cashCard = page.getByRole('heading', { name: /Cash ledger/ }).locator('..').locator('..');
-  const cashHeading = await page.getByRole('heading', { name: /Cash ledger/ }).innerText();
+  const cashCard = page.locator('section.cash-ledger-card');
+  const cashHeading = await cashCard.getByRole('heading', { name: /Cash ledger/ }).innerText();
   assert.match(cashHeading, /\b0\b/, 'disposable account must start with zero cash events');
 
   // Create funding so the account history is explicit rather than inferred.
@@ -119,9 +122,9 @@ try {
 
   // Create a synthetic BUY. E2E intentionally has no market quote, which also
   // exercises partial valuation / unavailable-market-data handling.
-  await page.getByLabel('Тикер', { exact: true }).first().fill('E2E');
-  await page.getByLabel('Количество', { exact: true }).fill('1');
-  await page.getByLabel(/Цена \(/).fill('10');
+  await page.locator('#transaction-symbol').fill('E2E');
+  await page.locator('#transaction-quantity').fill('1');
+  await page.locator('#transaction-price').fill('10');
   await page.getByRole('button', { name: 'Добавить покупку', exact: true }).click();
   const e2eRow = page.getByRole('row').filter({ hasText: 'E2E' }).first();
   await e2eRow.waitFor({ timeout: 20_000 });
@@ -151,7 +154,7 @@ try {
   await persistedRow.waitFor({ state: 'detached', timeout: 20_000 });
 
   // Cleanup funding event.
-  const cashCardAfterReload = page.getByRole('heading', { name: /Cash ledger/ }).locator('..').locator('..');
+  const cashCardAfterReload = page.locator('section.cash-ledger-card');
   const depositRow = cashCardAfterReload.getByRole('row').filter({ hasText: 'DEPOSIT' }).first();
   await depositRow.getByRole('button', { name: 'Удалить', exact: true }).click();
   await depositRow.getByRole('button', { name: 'Подтвердить', exact: true }).click();
