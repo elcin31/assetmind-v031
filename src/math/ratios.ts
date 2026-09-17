@@ -3,20 +3,19 @@ import {
   annualRateToDaily,
   finite,
   mean,
-  MIN_OBSERVATIONS,
   safeRatio,
   valid,
   volatility,
 } from './statistics';
+import { HISTORICAL_TAIL_MIN_OBSERVATIONS } from './riskHorizon';
 
 export function sharpeRatio(returns: number[], annualRf = 0): number | null {
-  if (returns.some((r) => r < -1)) return null;
-  const dailyRf = annualRateToDaily(annualRf);
-  if (dailyRf === null) return null;
-  const averageExcess = mean(returns.map((r) => r - dailyRf));
-  return averageExcess === null
+  if (returns.some((r) => r < -1) || !Number.isFinite(annualRf)) return null;
+  const average = mean(returns);
+  const sigma = volatility(returns);
+  return average === null || sigma === null
     ? null
-    : safeRatio(averageExcess * 252, volatility(returns));
+    : safeRatio(average * 252 - annualRf, sigma);
 }
 
 export function sortinoRatio(returns: number[], annualMar = 0): number | null {
@@ -43,7 +42,7 @@ export function calmarRatio(
 
 export function historicalTailRisk(returns: number[], confidence = 0.95) {
   if (
-    !valid(returns, MIN_OBSERVATIONS) ||
+    !valid(returns, HISTORICAL_TAIL_MIN_OBSERVATIONS) ||
     returns.some((r) => r < -1) ||
     !Number.isFinite(confidence) ||
     confidence <= 0 ||
