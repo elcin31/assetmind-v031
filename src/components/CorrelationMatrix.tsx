@@ -8,7 +8,7 @@ export function CorrelationMatrix({
 }: {
   matrix: Matrix | null;
   loading: boolean;
-  reason: string;
+  reason: string | null;
 }) {
   return (
     <section className="card">
@@ -17,8 +17,7 @@ export function CorrelationMatrix({
         <p className="empty">Загрузка…</p>
       ) : !matrix ? (
         <p className="notice">
-          {reason} Нужно минимум 20 общих интервалов и ненулевая дисперсия
-          каждого актива.
+          {reason ?? "Матрица недоступна для выбранного Risk Horizon."}
         </p>
       ) : (
         <>
