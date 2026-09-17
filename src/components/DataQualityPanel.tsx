@@ -29,8 +29,9 @@ export function DataQualityPanel({
   const providerPartial = c.errors.length > 0;
   const valuationPartial = !snapshot.valuation.complete;
   const cashIncomplete = Boolean(snapshot.cashLedger && !snapshot.cashLedger.complete && (snapshot.transactions.length || snapshot.cashEvents?.length));
+  const actualHistoryUnavailable = Boolean(a.history.reason && snapshot.transactions.length > 0 && !c.loading);
   const riskUnavailable = !a.riskMatrix.matrix || !a.actualRiskWindow.available;
-  const needsAttention = providerPartial || valuationPartial || cashIncomplete || historyNotStarted || riskUnavailable;
+  const needsAttention = providerPartial || valuationPartial || cashIncomplete || actualHistoryUnavailable || historyNotStarted || riskUnavailable;
 
   return (
     <section className="card data-quality-card">
@@ -42,12 +43,13 @@ export function DataQualityPanel({
         <span className="tag">{c.loading ? 'Проверка…' : needsAttention ? 'Требует внимания' : 'Готово'}</span>
       </div>
 
+      {actualHistoryUnavailable && <p className="notice">{a.history.reason}</p>}
       {historyNotStarted && (
         <p className="notice">
           Первая сделка датирована {day(firstTransaction)}, а последняя завершённая рыночная история заканчивается {day(lastProxyDate)}. Фактическая история портфеля ещё не имеет ни одного полного return-интервала. Proxy текущего состава при этом может рассчитываться по более ранним ценам.
         </p>
       )}
-      {!historyNotStarted && !a.actualRiskWindow.available && snapshot.transactions.length > 0 && !c.loading && (
+      {!actualHistoryUnavailable && !historyNotStarted && !a.actualRiskWindow.available && snapshot.transactions.length > 0 && !c.loading && (
         <p className="notice">{a.actualRiskWindow.reason}</p>
       )}
       {!a.riskMatrix.matrix && snapshot.positions.length > 0 && !c.loading && (

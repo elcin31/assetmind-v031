@@ -1,7 +1,19 @@
-import type { HistoryBar } from '../types';
+import type { HistoryBar, StockSplit } from '../types';
 import { normalizePriceHistory } from '../utils/priceHistory';
 
-type Entry = { expires: number; promise: Promise<HistoryBar[]> };
+export interface HistoricalMarketData {
+  /** Adjusted close for returns/risk. */
+  bars: HistoryBar[];
+  /** Raw close for actual account valuation. Empty means unavailable. */
+  valuationBars: HistoryBar[];
+  /** Corporate-action splits detected by the market-data provider. */
+  splits: StockSplit[];
+  provider: string | null;
+  priceType: string | null;
+  valuationPriceType: string | null;
+}
+
+type Entry = { expires: number; promise: Promise<HistoricalMarketData> };
 const cache = new Map<string, Entry>();
 
 export interface HistoryRequestIssue {
@@ -54,6 +66,39 @@ function keyFor(symbol: string, period: string) {
   return `${symbol.trim().toUpperCase()}:${period}`;
 }
 
+function normalizeSplits(value: unknown): StockSplit[] {
+  if (!Array.isArray(value)) return [];
+  const normalized: StockSplit[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const split = item as Partial<StockSplit>;
+    if (
+      typeof split.date !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(split.date) ||
+      typeof split.timestamp !== 'string' ||
+      !Number.isFinite(Date.parse(split.timestamp)) ||
+      typeof split.numerator !== 'number' ||
+      !Number.isFinite(split.numerator) ||
+      split.numerator <= 0 ||
+      typeof split.denominator !== 'number' ||
+      !Number.isFinite(split.denominator) ||
+      split.denominator <= 0 ||
+      typeof split.ratio !== 'number' ||
+      !Number.isFinite(split.ratio) ||
+      split.ratio <= 0 ||
+      Math.abs(split.ratio - split.numerator / split.denominator) > 1e-9
+    ) continue;
+    normalized.push({
+      date: split.date,
+      timestamp: split.timestamp,
+      numerator: split.numerator,
+      denominator: split.denominator,
+      ratio: split.ratio,
+    });
+  }
+  return normalized.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+}
+
 /** Evict one cached request, or all historical requests when symbol is omitted. */
 export function clearHistoryCache(symbol?: string, period = '5y') {
   if (!symbol) {
@@ -63,12 +108,15 @@ export function clearHistoryCache(symbol?: string, period = '5y') {
   cache.delete(keyFor(symbol, period));
 }
 
-/** Public market data only. Pending requests are shared; failures are never retained. */
-export function loadHistory(
+/**
+ * Public market data only. One cached response carries both adjusted returns data
+ * and raw valuation data so charts/risk/account-history do not duplicate requests.
+ */
+export function loadHistoricalMarketData(
   symbol: string,
   period = '5y',
   options: { force?: boolean } = {},
-): Promise<HistoryBar[]> {
+): Promise<HistoricalMarketData> {
   const normalizedSymbol = symbol.trim().toUpperCase();
   const key = keyFor(normalizedSymbol, period);
   if (options.force) cache.delete(key);
@@ -103,8 +151,12 @@ export function loadHistory(
       symbol?: string;
       period?: string;
       bars?: unknown;
+      valuationBars?: unknown;
+      splits?: unknown;
       code?: string;
       provider?: string;
+      priceType?: string;
+      valuationPriceType?: string | null;
       upstreamStatus?: number | null;
       retryable?: boolean;
     } = {};
@@ -160,7 +212,16 @@ export function loadHistory(
         ),
       });
     }
-    return bars;
+
+    return {
+      bars,
+      valuationBars: normalizePriceHistory(data.valuationBars),
+      splits: normalizeSplits(data.splits),
+      provider: typeof data.provider === 'string' ? data.provider : null,
+      priceType: typeof data.priceType === 'string' ? data.priceType : null,
+      valuationPriceType:
+        typeof data.valuationPriceType === 'string' ? data.valuationPriceType : null,
+    } satisfies HistoricalMarketData;
   })();
 
   cache.set(key, { expires: Date.now() + 300_000, promise });
@@ -169,4 +230,13 @@ export function loadHistory(
   });
   if (cache.size > 200) cache.delete(cache.keys().next().value!);
   return promise;
+}
+
+/** Backward-compatible adjusted-close consumer for price charts and risk-only callers. */
+export async function loadHistory(
+  symbol: string,
+  period = '5y',
+  options: { force?: boolean } = {},
+): Promise<HistoryBar[]> {
+  return (await loadHistoricalMarketData(symbol, period, options)).bars;
 }

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import type { CashEvent, HistoryBar, Transaction } from '../src/types';
+import type { CashEvent, HistoryBar, StockSplit, Transaction } from '../src/types';
 import { reconstructAccountHistory } from '../src/math/accountHistory';
 import { performanceMetrics } from '../src/math/performance';
 
@@ -137,4 +137,82 @@ it('refuses actual performance when explicit funding is incomplete', () => {
   const performance = performanceMetrics(history.points);
   expect(performance.twr).toBeNull();
   expect(performance.totalReturn).toBeNull();
+});
+
+it('never substitutes adjusted history when raw close is unavailable', () => {
+  const history = reconstructAccountHistory(
+    [trade('buy', '2026-01-02', 'BUY', 1, 100)],
+    [cash('funding', '2026-01-02', 'DEPOSIT', 200)],
+    new Map(),
+    '2026-01-06',
+  );
+
+  expect(history.points).toEqual([]);
+  expect(history.missingSymbols).toEqual(['AAPL']);
+  expect(history.reason).toContain('raw close');
+  expect(history.reason).toContain('Adjusted close не подставляется');
+});
+
+it('blocks actual account history across a held stock split until corporate actions are ledger-aware', () => {
+  const split: StockSplit = {
+    date: '2026-01-05',
+    timestamp: '2026-01-05T13:30:00Z',
+    numerator: 2,
+    denominator: 1,
+    ratio: 2,
+  };
+  const rawBars: HistoryBar[] = [
+    { date: '2026-01-02', close: 100 },
+    { date: '2026-01-05', close: 50 },
+    { date: '2026-01-06', close: 51 },
+  ];
+  const history = reconstructAccountHistory(
+    [trade('buy', '2026-01-02', 'BUY', 1, 100)],
+    [cash('funding', '2026-01-02', 'DEPOSIT', 100)],
+    new Map([['AAPL', rawBars]]),
+    '2026-01-06',
+    { splits: new Map([['AAPL', [split]]]) },
+  );
+
+  expect(history.points).toEqual([]);
+  expect(history.missingSymbols).toEqual(['AAPL']);
+  expect(history.reason).toContain('stock split AAPL 2:1');
+  expect(history.reason).toContain('transaction ledger');
+});
+
+it('does not block a split that occurs after the position was fully closed', () => {
+  const split: StockSplit = {
+    date: '2026-01-06',
+    timestamp: '2026-01-06T13:30:00Z',
+    numerator: 2,
+    denominator: 1,
+    ratio: 2,
+  };
+  const history = reconstructAccountHistory(
+    [
+      trade('buy', '2026-01-02', 'BUY', 1, 100),
+      trade('sell', '2026-01-05', 'SELL', 1, 110),
+    ],
+    [cash('funding', '2026-01-02', 'DEPOSIT', 100)],
+    histories,
+    '2026-01-07',
+    { splits: new Map([['AAPL', [split]]]) },
+  );
+
+  expect(history.reason).toBeNull();
+  expect(history.points.at(-1)?.value).toBe(110);
+});
+
+it('refuses inventory older than the verified raw-price and corporate-action window', () => {
+  const history = reconstructAccountHistory(
+    [trade('buy', '2026-01-02', 'BUY', 1, 100)],
+    [cash('funding', '2026-01-02', 'DEPOSIT', 200)],
+    histories,
+    '2026-01-07',
+    { coverageStarts: new Map([['AAPL', '2026-01-03']]) },
+  );
+
+  expect(history.points).toEqual([]);
+  expect(history.missingSymbols).toEqual(['AAPL']);
+  expect(history.reason).toContain('старше доступной raw-price/corporate-action истории');
 });

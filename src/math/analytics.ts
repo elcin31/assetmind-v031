@@ -1,4 +1,4 @@
-import type { HistoryBar, PortfolioSnapshot } from '../types';
+import type { HistoryBar, PortfolioSnapshot, StockSplit } from '../types';
 import type { Period, RiskHorizon } from '../types/analytics';
 import { reconstructAccountHistory } from './accountHistory';
 import { reconstructPortfolioHistory } from './portfolioHistory';
@@ -37,6 +37,12 @@ import {
 
 const RISK_HORIZONS = new Set<RiskHorizon>(['20D', '60D', '1Y']);
 
+export interface AccountAnalyticsMarketData {
+  valuationHistories: Map<string, HistoryBar[]>;
+  splits: Map<string, StockSplit[]>;
+  coverageStarts: Map<string, string>;
+}
+
 /**
  * The final arguments retain compatibility with the pre-risk-horizon call shape
  * so older integration callers safely receive the new 20D default.
@@ -50,6 +56,7 @@ export function calculatePortfolioAnalytics(
   asOfOrRf: string | number,
   rfOrMar: number,
   maybeMar?: number,
+  accountMarketData?: AccountAnalyticsMarketData,
 ) {
   const explicitRiskHorizon = RISK_HORIZONS.has(riskHorizonOrAsOf as RiskHorizon);
   const riskHorizon: RiskHorizon = explicitRiskHorizon
@@ -65,15 +72,29 @@ export function calculatePortfolioAnalytics(
       bars.filter((b) => b.date <= asOf),
     ]),
   );
-  // Real application snapshots include the capital layer. The legacy branch is
-  // retained only for older snapshot callers/tests that predate cash events.
+  const valuationClean = new Map(
+    [...(accountMarketData?.valuationHistories ?? new Map<string, HistoryBar[]>())].map(
+      ([s, bars]) => [s, bars.filter((b) => b.date <= asOf)],
+    ),
+  );
+
+  // Adjusted close remains the return/risk series. Actual cash-aware account
+  // history receives raw exchange close only and never silently falls back to
+  // adjusted prices. Older snapshots/tests without the capital layer retain the
+  // legacy transaction-only reconstruction path.
   const history = snapshot.cashEvents === undefined
     ? reconstructPortfolioHistory(snapshot.transactions, clean, asOf)
     : reconstructAccountHistory(
         snapshot.transactions,
         snapshot.cashEvents,
-        clean,
+        valuationClean,
         asOf,
+        accountMarketData
+          ? {
+              splits: accountMarketData.splits,
+              coverageStarts: accountMarketData.coverageStarts,
+            }
+          : undefined,
       );
 
   // Performance period and current-risk horizon are intentionally independent.
@@ -152,8 +173,9 @@ export function calculatePortfolioAnalytics(
       ? riskContributions(symbols, weights, matrix.covariance)
       : null;
 
-  // Proxy always starts from full available history; only current-risk metrics use
-  // the selected horizon. Historical stress continues to use the full proxy series.
+  // Proxy always starts from full available adjusted history; only current-risk
+  // metrics use the selected horizon. This remains explicitly a current-holdings
+  // historical risk proxy, not actual account performance.
   const proxy = buildCurrentHoldingsRiskProxy(snapshot.positions, clean);
   const proxyReturns = proxy.available ? proxy.returns : [];
   const proxyRiskWindow = selectRiskWindow(proxyReturns, riskHorizon);
