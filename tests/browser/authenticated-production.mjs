@@ -42,6 +42,10 @@ const context = await browser.newContext({ viewport: { width: 1440, height: 1000
 const page = await context.newPage();
 const consoleErrors = [];
 const failedRequests = [];
+let originalHorizon = null;
+let horizonNeedsRestore = false;
+let createdDeposit = false;
+let createdTrade = false;
 
 page.on('pageerror', error => consoleErrors.push(error.message));
 page.on('console', message => {
@@ -73,6 +77,58 @@ async function waitForPreferenceSave() {
   await page.waitForTimeout(1_000);
 }
 
+async function ensureTradeTab() {
+  const tradeButton = page.getByRole('button', { name: 'Сделки', exact: true });
+  if (await tradeButton.count()) await tradeButton.click();
+}
+
+async function cleanupSyntheticData() {
+  try {
+    if (createdTrade || createdDeposit) {
+      await ensureTradeTab();
+
+      if (createdTrade) {
+        const cancelEdit = page.locator('.transaction-edit-row').getByRole('button', { name: 'Отмена', exact: true });
+        if (await cancelEdit.count()) await cancelEdit.click();
+        const row = page.getByRole('row').filter({ hasText: 'E2E' }).first();
+        if (await row.count()) {
+          const deleteButton = row.getByRole('button', { name: 'Удалить', exact: true });
+          if (await deleteButton.count()) await deleteButton.click();
+          const confirmButton = row.getByRole('button', { name: 'Подтвердить удаление', exact: true });
+          if (await confirmButton.count()) await confirmButton.click();
+          await row.waitFor({ state: 'detached', timeout: 20_000 }).catch(() => {});
+        }
+        createdTrade = false;
+      }
+
+      if (createdDeposit) {
+        const cashCard = page.locator('section.cash-ledger-card');
+        const row = cashCard.getByRole('row').filter({ hasText: 'DEPOSIT' }).first();
+        if (await row.count()) {
+          const deleteButton = row.getByRole('button', { name: 'Удалить', exact: true });
+          if (await deleteButton.count()) await deleteButton.click();
+          const confirmButton = row.getByRole('button', { name: 'Подтвердить', exact: true });
+          if (await confirmButton.count()) await confirmButton.click();
+          await row.waitFor({ state: 'detached', timeout: 20_000 }).catch(() => {});
+        }
+        createdDeposit = false;
+      }
+    }
+
+    if (horizonNeedsRestore && originalHorizon) {
+      await openLabRisk();
+      const button = page.getByRole('group', { name: 'Risk Horizon' }).getByRole('button', { name: originalHorizon, exact: true });
+      if (await button.count()) {
+        await button.click();
+        await waitForPreferenceSave();
+      }
+      horizonNeedsRestore = false;
+    }
+  } catch (error) {
+    console.error('Authenticated E2E best-effort cleanup failed:', error);
+  }
+}
+
 try {
   await page.goto(base.href, { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: 'Sign in', exact: true }).waitFor({ timeout: 30_000 });
@@ -89,10 +145,11 @@ try {
   // Risk Horizon persistence. Preserve and restore the account's original value.
   await openLabRisk();
   const horizonGroup = page.getByRole('group', { name: 'Risk Horizon' });
-  const originalHorizon = await horizonGroup.locator('button[aria-pressed="true"]').innerText();
+  originalHorizon = await horizonGroup.locator('button[aria-pressed="true"]').innerText();
   assert.ok(['20D', '60D', '1Y'].includes(originalHorizon), 'recognized original Risk Horizon');
   const alternateHorizon = originalHorizon === '60D' ? '20D' : '60D';
   await horizonGroup.getByRole('button', { name: alternateHorizon, exact: true }).click();
+  horizonNeedsRestore = true;
   await waitForPreferenceSave();
 
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -105,9 +162,10 @@ try {
   );
   await page.getByRole('group', { name: 'Risk Horizon' }).getByRole('button', { name: originalHorizon, exact: true }).click();
   await waitForPreferenceSave();
+  horizonNeedsRestore = false;
 
   // Mutation tests are permitted only for an empty disposable account.
-  await page.getByRole('button', { name: 'Сделки', exact: true }).click();
+  await ensureTradeTab();
   const tradeHeading = await page.getByRole('heading', { name: /История сделок/ }).innerText();
   assert.match(tradeHeading, /\b0\b/, 'disposable account must start with zero trades');
 
@@ -119,6 +177,7 @@ try {
   await cashCard.getByLabel('Сумма', { exact: true }).fill('1000');
   await cashCard.getByRole('button', { name: 'Добавить cash event', exact: true }).click();
   await cashCard.getByText('DEPOSIT', { exact: true }).waitFor({ timeout: 20_000 });
+  createdDeposit = true;
 
   // Create a synthetic BUY. E2E intentionally has no market quote, which also
   // exercises partial valuation / unavailable-market-data handling.
@@ -128,6 +187,7 @@ try {
   await page.getByRole('button', { name: 'Добавить покупку', exact: true }).click();
   const e2eRow = page.getByRole('row').filter({ hasText: 'E2E' }).first();
   await e2eRow.waitFor({ timeout: 20_000 });
+  createdTrade = true;
   assert.match(await e2eRow.innerText(), /BUY/);
 
   // Edit the canonical row and verify the refreshed server-backed state.
@@ -143,7 +203,7 @@ try {
   // Hard reload proves Supabase persistence rather than transient React state.
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForPortfolio();
-  await page.getByRole('button', { name: 'Сделки', exact: true }).click();
+  await ensureTradeTab();
   const persistedRow = page.getByRole('row').filter({ hasText: 'E2E' }).first();
   await persistedRow.waitFor({ timeout: 20_000 });
   assert.match(await persistedRow.innerText(), /\b2\b/, 'edited transaction persisted after reload');
@@ -152,6 +212,7 @@ try {
   await persistedRow.getByRole('button', { name: 'Удалить', exact: true }).click();
   await persistedRow.getByRole('button', { name: 'Подтвердить удаление', exact: true }).click();
   await persistedRow.waitFor({ state: 'detached', timeout: 20_000 });
+  createdTrade = false;
 
   // Cleanup funding event.
   const cashCardAfterReload = page.locator('section.cash-ledger-card');
@@ -159,11 +220,12 @@ try {
   await depositRow.getByRole('button', { name: 'Удалить', exact: true }).click();
   await depositRow.getByRole('button', { name: 'Подтвердить', exact: true }).click();
   await depositRow.waitFor({ state: 'detached', timeout: 20_000 });
+  createdDeposit = false;
 
   // Final reload verifies cleanup persisted and no user data was left behind.
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForPortfolio();
-  await page.getByRole('button', { name: 'Сделки', exact: true }).click();
+  await ensureTradeTab();
   assert.match(await page.getByRole('heading', { name: /История сделок/ }).innerText(), /\b0\b/);
   assert.match(await page.getByRole('heading', { name: /Cash ledger/ }).innerText(), /\b0\b/);
 
@@ -177,6 +239,7 @@ try {
   assert.deepEqual(failedRequests, [], `unexpected failed requests: ${failedRequests.join('\n')}`);
   console.log('PASS authenticated session restore, Risk Horizon persistence, cash funding, BUY/edit/delete persistence, cleanup, sign out');
 } finally {
+  await cleanupSyntheticData();
   await context.close();
   await browser.close();
 }
