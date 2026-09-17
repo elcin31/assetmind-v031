@@ -3,11 +3,11 @@ import {
   annualRateToDaily,
   finite,
   mean,
+  MIN_OBSERVATIONS,
   safeRatio,
   valid,
   volatility,
 } from './statistics';
-import { HISTORICAL_TAIL_MIN_OBSERVATIONS } from './riskHorizon';
 
 export function sharpeRatio(returns: number[], annualRf = 0): number | null {
   if (returns.some((r) => r < -1) || !Number.isFinite(annualRf)) return null;
@@ -40,9 +40,13 @@ export function calmarRatio(
     : safeRatio(growth, Math.abs(maxDrawdown));
 }
 
-export function historicalTailRisk(returns: number[], confidence = 0.95) {
+export function historicalTailRisk(
+  returns: number[],
+  confidence = 0.95,
+  minimum = MIN_OBSERVATIONS,
+) {
   if (
-    !valid(returns, HISTORICAL_TAIL_MIN_OBSERVATIONS) ||
+    !valid(returns, minimum) ||
     returns.some((r) => r < -1) ||
     !Number.isFinite(confidence) ||
     confidence <= 0 ||
