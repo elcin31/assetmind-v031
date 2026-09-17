@@ -2,12 +2,12 @@
  * Server-only market data abstraction.
  *
  * Quote/search remain on Finnhub. Historical analytics use Yahoo adjusted close
- * because the currently configured Finnhub account does not reliably expose
- * stock/candle. Finnhub history can still be probed explicitly for diagnostics.
+ * for return/risk calculations. The same Yahoo response also exposes raw close
+ * for actual account valuation and split events for correctness checks.
  */
 
 import { searchInstruments as fallbackSearch } from '../src/data/instruments.js';
-import type { HistoryBar, Quote, SearchResult } from '../src/types/index.js';
+import type { HistoryBar, Quote, SearchResult, StockSplit } from '../src/types/index.js';
 import { normalizePriceHistory } from '../src/utils/priceHistory.js';
 
 const FINNHUB_BASE = 'https://finnhub.io/api/v1';
@@ -46,9 +46,15 @@ export interface ProviderFailure {
 }
 
 export interface HistoryResult {
+  /** Adjusted close. Use for returns, volatility, covariance and benchmark analytics. */
   bars: HistoryBar[];
+  /** Raw exchange close. Use for actual historical account valuation only. */
+  valuationBars: HistoryBar[];
+  /** Split events are surfaced so callers never silently mis-value transaction inventory. */
+  splits: StockSplit[];
   provider: HistoryProvider;
   priceType: HistoryPriceType;
+  valuationPriceType: 'close' | null;
 }
 
 export class MarketDataProviderError extends Error {
@@ -222,7 +228,35 @@ async function safeResponseText(response: Response): Promise<string> {
   try { return await response.text(); } catch { return ''; }
 }
 
-async function yahooAdjustedHistory(symbol: string, period: HistoryPeriod): Promise<HistoryResult> {
+function normalizeSplits(
+  value: Record<string, { date?: number; numerator?: number; denominator?: number; splitRatio?: string }> | undefined,
+  lastAllowedDate: string,
+): StockSplit[] {
+  if (!value) return [];
+  const splits: StockSplit[] = [];
+  for (const event of Object.values(value)) {
+    const epoch = finiteNumber(event.date);
+    const numerator = finiteNumber(event.numerator);
+    const denominator = finiteNumber(event.denominator);
+    if (epoch === null || numerator === null || denominator === null || numerator <= 0 || denominator <= 0) continue;
+    const dateObject = new Date(epoch * 1000);
+    if (!Number.isFinite(dateObject.getTime())) continue;
+    const date = dateObject.toISOString().slice(0, 10);
+    if (date > lastAllowedDate) continue;
+    const ratio = numerator / denominator;
+    if (!Number.isFinite(ratio) || ratio <= 0 || Math.abs(ratio - 1) < 1e-12) continue;
+    splits.push({
+      date,
+      timestamp: dateObject.toISOString(),
+      numerator,
+      denominator,
+      ratio,
+    });
+  }
+  return splits.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+}
+
+async function yahooHistory(symbol: string, period: HistoryPeriod): Promise<HistoryResult> {
   const bounds = historyBounds(period);
   const params = new URLSearchParams({
     period1: String(bounds.fromSeconds),
@@ -254,7 +288,16 @@ async function yahooAdjustedHistory(symbol: string, period: HistoryPeriod): Prom
   const chart = payload as {
     chart?: {
       error?: { code?: string; description?: string } | null;
-      result?: Array<{ timestamp?: Array<number | null>; indicators?: { adjclose?: Array<{ adjclose?: Array<number | null> }> } }> | null;
+      result?: Array<{
+        timestamp?: Array<number | null>;
+        indicators?: {
+          adjclose?: Array<{ adjclose?: Array<number | null> }>;
+          quote?: Array<{ close?: Array<number | null> }>;
+        };
+        events?: {
+          splits?: Record<string, { date?: number; numerator?: number; denominator?: number; splitRatio?: string }>;
+        };
+      }> | null;
     };
   };
   const chartError = chart.chart?.error;
@@ -267,24 +310,42 @@ async function yahooAdjustedHistory(symbol: string, period: HistoryPeriod): Prom
   const result = chart.chart?.result?.[0];
   const timestamps = result?.timestamp;
   const adjusted = result?.indicators?.adjclose?.[0]?.adjclose;
+  const rawClose = result?.indicators?.quote?.[0]?.close;
   if (!Array.isArray(timestamps) || !Array.isArray(adjusted)) {
     throw new MarketDataProviderError('yahoo', 'PROVIDER_MALFORMED_RESPONSE', 'Yahoo historical response has no adjusted-close series', { upstreamStatus: response.status, retryable: true });
   }
 
-  const rawBars: HistoryBar[] = [];
-  const length = Math.min(timestamps.length, adjusted.length);
+  const adjustedInput: HistoryBar[] = [];
+  const rawInput: HistoryBar[] = [];
+  const length = timestamps.length;
   for (let i = 0; i < length; i++) {
     const timestamp = timestamps[i];
-    const close = adjusted[i];
-    if (!Number.isFinite(timestamp) || !Number.isFinite(close) || (close as number) <= 0) continue;
-    rawBars.push({ date: new Date((timestamp as number) * 1000).toISOString().slice(0, 10), close: close as number });
+    if (!Number.isFinite(timestamp)) continue;
+    const date = new Date((timestamp as number) * 1000).toISOString().slice(0, 10);
+    const adjustedClose = adjusted[i];
+    if (Number.isFinite(adjustedClose) && (adjustedClose as number) > 0) {
+      adjustedInput.push({ date, close: adjustedClose as number });
+    }
+    const close = Array.isArray(rawClose) ? rawClose[i] : null;
+    if (Number.isFinite(close) && (close as number) > 0) {
+      rawInput.push({ date, close: close as number });
+    }
   }
 
-  const bars = normalizePriceHistory(rawBars, bounds.lastAllowedDate);
+  const bars = normalizePriceHistory(adjustedInput, bounds.lastAllowedDate);
   if (!bars.length) {
     throw new MarketDataProviderError('yahoo', 'PROVIDER_EMPTY_HISTORY', `Yahoo returned no usable adjusted daily history for ${symbol}`, { upstreamStatus: response.status, retryable: true });
   }
-  return { bars, provider: 'yahoo', priceType: 'adjusted' };
+  const valuationBars = normalizePriceHistory(rawInput, bounds.lastAllowedDate);
+  const splits = normalizeSplits(result?.events?.splits, bounds.lastAllowedDate);
+  return {
+    bars,
+    valuationBars,
+    splits,
+    provider: 'yahoo',
+    priceType: 'adjusted',
+    valuationPriceType: valuationBars.length ? 'close' : null,
+  };
 }
 
 export async function diagnoseFinnhubHistory(symbol: string, period: HistoryPeriod): Promise<{ ok: true; bars: number; status: 'ok' } | { ok: false; failure: ProviderFailure }> {
@@ -333,11 +394,11 @@ export async function history(symbol: string, period: HistoryPeriod = '1y'): Pro
   const sym = symbol.trim().toUpperCase();
   if (!sym) throw new MarketDataProviderError('yahoo', 'SYMBOL_NOT_FOUND', 'Missing history symbol', { retryable: false });
 
-  const cacheKey = `${sym}:${period}:yahoo-adjusted`;
+  const cacheKey = `${sym}:${period}:yahoo-adjusted-raw-splits-v1`;
   const cached = readCache(historyCache, cacheKey);
   if (cached !== undefined) return cached;
 
-  const result = await yahooAdjustedHistory(sym, period);
+  const result = await yahooHistory(sym, period);
   return writeCache(historyCache, cacheKey, result, HISTORY_TTL_MS);
 }
 
