@@ -24,13 +24,15 @@
   "scripts": {
     "build": "tsc -b && vite build",
     "dev": "vite",
+    "e2e:auth": "node tests/browser/authenticated-production.mjs",
+    "e2e:auth:check": "node --check tests/browser/authenticated-production.mjs",
     "lint": "oxlint --deny-warnings",
     "preview": "vite preview",
     "smoke": "node scripts/smoke.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
-    "verify": "npm run typecheck && npm test && npm run lint && npm run build"
+    "verify": "npm run typecheck && npm test && npm run lint && npm run e2e:auth:check && npm run build"
   },
   "type": "module",
   "version": "0.1.0"
