@@ -83,13 +83,14 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
   }, [userId]);
 
   useEffect(() => {
+    const generationRef = generation;
     const storageKey = getPortfolioStorageKey(userId);
     const update = () => { void loadPortfolio(); };
     const storage = (event: StorageEvent) => { if (event.key === storageKey || event.key === null) update(); };
     update();
     window.addEventListener('storage', storage);
     window.addEventListener('assetmind:changed', update);
-    return () => { ++generation.current; window.removeEventListener('storage', storage); window.removeEventListener('assetmind:changed', update); };
+    return () => { ++generationRef.current; window.removeEventListener('storage', storage); window.removeEventListener('assetmind:changed', update); };
   }, [loadPortfolio, userId]);
 
   const handleExport = async () => {
