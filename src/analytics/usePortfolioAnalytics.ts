@@ -21,8 +21,17 @@ interface HistoryResult {
   /** Raw-close series for actual historical account valuation. */
   valuationHistories: Map<string, HistoryBar[]>;
   splits: Map<string, StockSplit[]>;
+  /** Start of the requested 5Y provider window, used to reject unverifiable older inventory. */
+  coverageStarts: Map<string, string>;
   errors: string[];
   issues: HistoryRequestIssue[];
+}
+
+function fiveYearCoverageStart(): string {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  start.setUTCFullYear(start.getUTCFullYear() - 5);
+  return start.toISOString().slice(0, 10);
 }
 
 export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: string) {
@@ -72,11 +81,13 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: stri
   useEffect(() => {
     let active = true;
     const symbols = symbolsKey.split(',').filter(Boolean);
+    const coverageStart = fiveYearCoverageStart();
     void Promise.allSettled(symbols.map((symbol) => loadHistoricalMarketData(symbol))).then(
       (results) => {
         const histories = new Map<string, HistoryBar[]>();
         const valuationHistories = new Map<string, HistoryBar[]>();
         const splits = new Map<string, StockSplit[]>();
+        const coverageStarts = new Map<string, string>();
         const errors: string[] = [];
         const issues: HistoryRequestIssue[] = [];
         results.forEach((r, i) => {
@@ -84,6 +95,7 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: stri
             histories.set(symbols[i], r.value.bars);
             valuationHistories.set(symbols[i], r.value.valuationBars);
             splits.set(symbols[i], r.value.splits);
+            coverageStarts.set(symbols[i], coverageStart);
             return;
           }
           if (r.reason instanceof HistoryRequestError) {
@@ -95,7 +107,7 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: stri
             );
           }
         });
-        if (active) setResult({ key, histories, valuationHistories, splits, errors, issues });
+        if (active) setResult({ key, histories, valuationHistories, splits, coverageStarts, errors, issues });
       },
     );
     return () => {
@@ -120,6 +132,7 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: stri
           ? {
               valuationHistories: current.valuationHistories,
               splits: current.splits,
+              coverageStarts: current.coverageStarts,
             }
           : undefined,
       ),
