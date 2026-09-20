@@ -5,8 +5,6 @@
  * BUY increases quantity and updates averageCost.
  * SELL reduces quantity at current averageCost and realizes P&L.
  * SPLIT changes quantity and average cost inversely while preserving cost basis.
- * Invalid SELLs are flagged and ignored so corrupted history does not create
- * negative positions silently.
  */
 
 import type { Position, StockSplit, Transaction } from '../types';
@@ -14,7 +12,6 @@ import { applyStockSplit } from './corporateActions';
 
 export interface PositionEngineResult {
   positions: Position[];
-  /** True if any SELL exceeded the quantity available at that point in history. */
   hadInvalidSell: boolean;
 }
 
@@ -25,10 +22,8 @@ interface PositionEngineWithTotalsResult extends PositionEngineResult {
 export function compareTransactions(a: Transaction, b: Transaction): number {
   const timestampDiff = Date.parse(a.timestamp) - Date.parse(b.timestamp);
   if (Number.isFinite(timestampDiff) && timestampDiff !== 0) return timestampDiff;
-
   const createdAtDiff = Date.parse(a.created_at) - Date.parse(b.created_at);
   if (Number.isFinite(createdAtDiff) && createdAtDiff !== 0) return createdAtDiff;
-
   return a.id.localeCompare(b.id);
 }
 
@@ -44,7 +39,6 @@ function splitFromTransaction(tx: Extract<Transaction, { type: 'SPLIT' }>): Stoc
 
 function runPositionEngine(transactions: Transaction[]): PositionEngineWithTotalsResult {
   const bySymbol = new Map<string, Transaction[]>();
-
   for (const tx of transactions) {
     const symbol = tx.symbol.trim().toUpperCase();
     const list = bySymbol.get(symbol) ?? [];
@@ -69,7 +63,6 @@ function runPositionEngine(transactions: Transaction[]): PositionEngineWithTotal
         averageCost = quantity > 0 ? totalCost / quantity : 0;
         continue;
       }
-
       if (tx.type === 'SPLIT') {
         const adjusted = applyStockSplit(quantity, averageCost, splitFromTransaction(tx));
         if (adjusted) {
@@ -78,15 +71,15 @@ function runPositionEngine(transactions: Transaction[]): PositionEngineWithTotal
         }
         continue;
       }
-
-      if (tx.quantity > quantity + 1e-10) {
+      // At this point the discriminated union guarantees SELL.
+      const sellQuantity = tx.quantity;
+      const sellPrice = tx.price;
+      if (sellQuantity > quantity + 1e-10) {
         hadInvalidSell = true;
         continue;
       }
-
-      realizedPnL += tx.quantity * (tx.price - averageCost);
-      quantity -= tx.quantity;
-
+      realizedPnL += sellQuantity * (sellPrice - averageCost);
+      quantity -= sellQuantity;
       if (quantity < 1e-10) {
         quantity = 0;
         averageCost = 0;
@@ -94,59 +87,29 @@ function runPositionEngine(transactions: Transaction[]): PositionEngineWithTotal
     }
 
     totalRealizedPnL += realizedPnL;
-
     if (quantity > 1e-10) {
-      positions.push({
-        symbol,
-        quantity: roundQty(quantity),
-        averageCost: roundPrice(averageCost),
-        costBasis: roundPrice(quantity * averageCost),
-        realizedPnL: roundPrice(realizedPnL),
-      });
+      positions.push({ symbol, quantity: roundQty(quantity), averageCost: roundPrice(averageCost), costBasis: roundPrice(quantity * averageCost), realizedPnL: roundPrice(realizedPnL) });
     }
   }
-
-  return {
-    positions,
-    totalRealizedPnL: roundPrice(totalRealizedPnL),
-    hadInvalidSell,
-  };
+  return { positions, totalRealizedPnL: roundPrice(totalRealizedPnL), hadInvalidSell };
 }
 
-/** Calculate open positions from transaction history. Ordering is normalized internally. */
 export function calculatePositions(transactions: Transaction[]): PositionEngineResult {
   const { positions, hadInvalidSell } = runPositionEngine(transactions);
   return { positions, hadInvalidSell };
 }
 
-/** Calculate open positions plus realized P&L across open and closed symbols. */
 export function calculatePositionsWithTotals(transactions: Transaction[]): PositionEngineWithTotalsResult {
   return runPositionEngine(transactions);
 }
 
-/**
- * Convenience helper for a SELL at the end of the existing history.
- * Backdated/concurrent writes must be validated atomically by the database.
- */
-export function canSell(
-  transactions: Transaction[],
-  symbol: string,
-  sellQuantity: number
-): boolean {
+export function canSell(transactions: Transaction[], symbol: string, sellQuantity: number): boolean {
   if (!Number.isFinite(sellQuantity) || sellQuantity <= 0) return false;
-
   const normalized = symbol.trim().toUpperCase();
-  const { positions } = calculatePositions(
-    transactions.filter((t) => t.symbol.trim().toUpperCase() === normalized)
-  );
+  const { positions } = calculatePositions(transactions.filter((t) => t.symbol.trim().toUpperCase() === normalized));
   const pos = positions.find((p) => p.symbol === normalized);
   return Boolean(pos && pos.quantity + 1e-10 >= sellQuantity);
 }
 
-function roundQty(n: number): number {
-  return Math.round(n * 1e8) / 1e8;
-}
-
-function roundPrice(n: number): number {
-  return Math.round(n * 1e6) / 1e6;
-}
+function roundQty(n: number): number { return Math.round(n * 1e8) / 1e8; }
+function roundPrice(n: number): number { return Math.round(n * 1e6) / 1e6; }
