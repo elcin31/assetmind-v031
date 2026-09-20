@@ -4,11 +4,13 @@
  *
  * BUY increases quantity and updates averageCost.
  * SELL reduces quantity at current averageCost and realizes P&L.
+ * SPLIT changes quantity and average cost inversely while preserving cost basis.
  * Invalid SELLs are flagged and ignored so corrupted history does not create
  * negative positions silently.
  */
 
-import type { Position, Transaction } from '../types';
+import type { Position, StockSplit, Transaction } from '../types';
+import { applyStockSplit } from './corporateActions';
 
 export interface PositionEngineResult {
   positions: Position[];
@@ -28,6 +30,16 @@ export function compareTransactions(a: Transaction, b: Transaction): number {
   if (Number.isFinite(createdAtDiff) && createdAtDiff !== 0) return createdAtDiff;
 
   return a.id.localeCompare(b.id);
+}
+
+function splitFromTransaction(tx: Extract<Transaction, { type: 'SPLIT' }>): StockSplit {
+  return {
+    date: tx.timestamp.slice(0, 10),
+    timestamp: tx.timestamp,
+    numerator: tx.split_numerator,
+    denominator: tx.split_denominator,
+    ratio: tx.split_numerator / tx.split_denominator,
+  };
 }
 
 function runPositionEngine(transactions: Transaction[]): PositionEngineWithTotalsResult {
@@ -55,6 +67,15 @@ function runPositionEngine(transactions: Transaction[]): PositionEngineWithTotal
         const totalCost = quantity * averageCost + tx.quantity * tx.price;
         quantity += tx.quantity;
         averageCost = quantity > 0 ? totalCost / quantity : 0;
+        continue;
+      }
+
+      if (tx.type === 'SPLIT') {
+        const adjusted = applyStockSplit(quantity, averageCost, splitFromTransaction(tx));
+        if (adjusted) {
+          quantity = adjusted.quantity;
+          averageCost = adjusted.averageCost;
+        }
         continue;
       }
 
