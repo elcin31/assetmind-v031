@@ -52,7 +52,7 @@ export function buildCashLedger(
   const currencyMismatch =
     currencies.size > 1 ||
     (normalizedExpected !== null &&
-      (currencies.size === 0 || [...currencies].some((currency) => currency !== normalizedExpected)));
+      [...currencies].some((currency) => currency !== normalizedExpected));
 
   if (currencyMismatch) {
     return {
