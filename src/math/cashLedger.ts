@@ -2,6 +2,7 @@ import type { CashEvent, CashLedgerSummary, Transaction } from '../types';
 
 const EPS = 1e-6;
 const round = (value: number) => Math.round(value * 1e8) / 1e8;
+const normalizeCurrency = (value: string) => value.trim().toUpperCase();
 
 interface LedgerOperation {
   id: string;
@@ -29,14 +30,45 @@ export interface CashLedgerResult extends CashLedgerSummary {
  * Reconstruct the account cash balance from explicit funding/cash events and
  * trade executions. A negative running balance means the funding ledger is
  * incomplete; AssetMind refuses to infer the missing deposit.
+ *
+ * No FX conversion is performed here. Mixed currencies, or a currency that
+ * differs from an explicitly supplied portfolio base currency, make the ledger
+ * unavailable instead of silently adding unlike monetary units.
  */
 export function buildCashLedger(
   transactions: Transaction[],
   cashEvents: CashEvent[],
   asOf = new Date().toISOString(),
+  expectedCurrency?: string,
 ): CashLedgerResult {
   const cutoff = Date.parse(asOf);
   const operations: LedgerOperation[] = [];
+  const normalizedExpected = expectedCurrency ? normalizeCurrency(expectedCurrency) : null;
+  const currencies = new Set(
+    [...transactions.map((tx) => tx.currency), ...cashEvents.map((event) => event.currency)]
+      .map(normalizeCurrency)
+      .filter(Boolean),
+  );
+  const currencyMismatch =
+    currencies.size > 1 ||
+    (normalizedExpected !== null &&
+      [...currencies].some((currency) => currency !== normalizedExpected));
+
+  if (currencyMismatch) {
+    return {
+      complete: false,
+      balance: 0,
+      minimumBalance: 0,
+      reason: normalizedExpected
+        ? `Cash ledger недоступен: операции должны быть в базовой валюте ${normalizedExpected}. FX-конвертация не подставляется автоматически.`
+        : 'Cash ledger недоступен: обнаружены смешанные валюты без FX-истории.',
+      deposits: 0,
+      withdrawals: 0,
+      dividends: 0,
+      fees: 0,
+      entries: [],
+    };
+  }
 
   for (const tx of transactions) {
     const time = Date.parse(tx.timestamp);

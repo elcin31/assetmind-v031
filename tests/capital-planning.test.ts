@@ -4,11 +4,11 @@ import { buildCashLedger } from '../src/math/cashLedger';
 import { moneyWeightedReturn, xirr } from '../src/math/xirr';
 import { buildRebalancePlan, simulateTradeWhatIf } from '../src/math/rebalancing';
 
-const tx = (id: string, type: 'BUY' | 'SELL', quantity: number, price: number, timestamp: string): Transaction => ({
-  id, portfolio_id: 'p', symbol: 'AAPL', type, quantity, price, currency: 'USD', timestamp, created_at: timestamp,
+const tx = (id: string, type: 'BUY' | 'SELL', quantity: number, price: number, timestamp: string, currency = 'USD'): Transaction => ({
+  id, portfolio_id: 'p', symbol: 'AAPL', type, quantity, price, currency, timestamp, created_at: timestamp,
 });
-const cash = (id: string, kind: CashEvent['kind'], amount: number, timestamp: string): CashEvent => ({
-  id, portfolio_id: 'p', kind, amount, currency: 'USD', timestamp, created_at: timestamp,
+const cash = (id: string, kind: CashEvent['kind'], amount: number, timestamp: string, currency = 'USD'): CashEvent => ({
+  id, portfolio_id: 'p', kind, amount, currency, timestamp, created_at: timestamp,
 });
 
 describe('cash ledger', () => {
@@ -30,6 +30,30 @@ describe('cash ledger', () => {
     expect(ledger.complete).toBe(false);
     expect(ledger.balance).toBe(-100);
     expect(ledger.reason).toContain('Cash ledger неполный');
+  });
+
+  it('refuses to add mixed currencies without an FX history', () => {
+    const ledger = buildCashLedger(
+      [tx('b', 'BUY', 1, 100, '2025-01-02T15:00:00Z', 'USD')],
+      [cash('d', 'DEPOSIT', 100, '2025-01-01T10:00:00Z', 'EUR')],
+      '2025-12-31T23:00:00Z',
+    );
+    expect(ledger.complete).toBe(false);
+    expect(ledger.balance).toBe(0);
+    expect(ledger.entries).toEqual([]);
+    expect(ledger.reason).toContain('смешанные валюты');
+  });
+
+  it('refuses a single non-base currency instead of treating it as portfolio cash', () => {
+    const ledger = buildCashLedger(
+      [tx('b', 'BUY', 1, 100, '2025-01-02T15:00:00Z', 'EUR')],
+      [cash('d', 'DEPOSIT', 100, '2025-01-01T10:00:00Z', 'EUR')],
+      '2025-12-31T23:00:00Z',
+      'USD',
+    );
+    expect(ledger.complete).toBe(false);
+    expect(ledger.reason).toContain('базовой валюте USD');
+    expect(ledger.reason).toContain('FX-конвертация');
   });
 });
 

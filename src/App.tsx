@@ -29,7 +29,12 @@ function composeSnapshot(
   planning: PlanningState,
   asOf: string,
 ): PortfolioSnapshot {
-  const cashLedger = buildCashLedger(data.transactions, planning.cashEvents, asOf);
+  const cashLedger = buildCashLedger(
+    data.transactions,
+    planning.cashEvents,
+    asOf,
+    data.portfolio.base_currency,
+  );
   const accountValue = market.valuation.complete && cashLedger.complete
     ? market.portfolioValue + cashLedger.balance
     : null;
