@@ -32,6 +32,25 @@ function tx(
   };
 }
 
+function split(
+  symbol: string,
+  numerator: number,
+  denominator: number,
+  timestamp = '2026-01-02T00:00:00Z'
+): Transaction {
+  return {
+    id: crypto.randomUUID(),
+    portfolio_id: 'p1',
+    symbol,
+    type: 'SPLIT',
+    split_numerator: numerator,
+    split_denominator: denominator,
+    currency: 'USD',
+    timestamp,
+    created_at: timestamp,
+  };
+}
+
 describe('calculatePositions', () => {
   it('single BUY', () => {
     const { positions } = calculatePositions([tx('AAPL', 'BUY', 10, 200)]);
@@ -50,7 +69,6 @@ describe('calculatePositions', () => {
     ]);
     expect(positions).toHaveLength(1);
     expect(positions[0].quantity).toBe(15);
-    // (10*200 + 5*220) / 15 = 3100/15 ≈ 206.666667
     expect(positions[0].averageCost).toBeCloseTo(206.666667, 5);
     expect(positions[0].costBasis).toBeCloseTo(3100, 5);
   });
@@ -63,9 +81,43 @@ describe('calculatePositions', () => {
     expect(positions).toHaveLength(1);
     expect(positions[0].quantity).toBe(7);
     expect(positions[0].averageCost).toBe(200);
-    // realized = 3 * (230 - 200) = 90
     expect(totalRealizedPnL).toBe(90);
     expect(positions[0].realizedPnL).toBe(90);
+  });
+
+  it('applies a forward split without changing cost basis or realized P&L', () => {
+    const { positions, totalRealizedPnL, hadInvalidSell } = calculatePositionsWithTotals([
+      tx('AAPL', 'BUY', 10, 200, '2026-01-01T00:00:00Z'),
+      split('AAPL', 4, 1),
+    ]);
+    expect(hadInvalidSell).toBe(false);
+    expect(totalRealizedPnL).toBe(0);
+    expect(positions[0].quantity).toBe(40);
+    expect(positions[0].averageCost).toBe(50);
+    expect(positions[0].costBasis).toBe(2000);
+  });
+
+  it('allows a post-split SELL against split-adjusted inventory', () => {
+    const { positions, totalRealizedPnL, hadInvalidSell } = calculatePositionsWithTotals([
+      tx('NVDA', 'BUY', 10, 100, '2026-01-01T00:00:00Z'),
+      split('NVDA', 10, 1, '2026-01-02T00:00:00Z'),
+      tx('NVDA', 'SELL', 50, 15, '2026-01-03T00:00:00Z'),
+    ]);
+    expect(hadInvalidSell).toBe(false);
+    expect(positions[0].quantity).toBe(50);
+    expect(positions[0].averageCost).toBe(10);
+    expect(positions[0].costBasis).toBe(500);
+    expect(totalRealizedPnL).toBe(250);
+  });
+
+  it('applies a reverse split while preserving cost basis', () => {
+    const { positions } = calculatePositions([
+      tx('XYZ', 'BUY', 100, 2, '2026-01-01T00:00:00Z'),
+      split('XYZ', 1, 10),
+    ]);
+    expect(positions[0].quantity).toBe(10);
+    expect(positions[0].averageCost).toBe(20);
+    expect(positions[0].costBasis).toBe(200);
   });
 
   it('invalid SELL is flagged', () => {
@@ -74,7 +126,6 @@ describe('calculatePositions', () => {
       tx('AAPL', 'SELL', 10, 120, '2026-01-02T00:00:00Z'),
     ]);
     expect(hadInvalidSell).toBe(true);
-    // Position remains the original 5 because invalid sell is skipped
     expect(positions[0].quantity).toBe(5);
   });
 
@@ -112,11 +163,11 @@ describe('calculatePositions', () => {
     expect(positions[0].realizedPnL).toBe(100);
   });
 
-  it('canSell helper', () => {
-    const txs = [tx('AAPL', 'BUY', 10, 200)];
-    expect(canSell(txs, 'AAPL', 5)).toBe(true);
-    expect(canSell(txs, 'AAPL', 10)).toBe(true);
-    expect(canSell(txs, 'AAPL', 11)).toBe(false);
+  it('canSell helper uses split-adjusted inventory', () => {
+    const txs = [tx('AAPL', 'BUY', 10, 200), split('AAPL', 2, 1)];
+    expect(canSell(txs, 'AAPL', 15)).toBe(true);
+    expect(canSell(txs, 'AAPL', 20)).toBe(true);
+    expect(canSell(txs, 'AAPL', 21)).toBe(false);
     expect(canSell(txs, 'NVDA', 1)).toBe(false);
   });
 });

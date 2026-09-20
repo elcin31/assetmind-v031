@@ -1,18 +1,35 @@
-export type TransactionType = 'BUY' | 'SELL';
+export type TransactionType = 'BUY' | 'SELL' | 'SPLIT';
 export type CashEventKind = 'DEPOSIT' | 'WITHDRAWAL' | 'DIVIDEND' | 'FEE';
 
-export interface Transaction {
+interface TransactionBase {
   id: string;
   portfolio_id: string;
   symbol: string;
-  type: TransactionType;
-  quantity: number;
-  price: number;
   currency: string;
   timestamp: string; // ISO
   created_at: string;
   client_request_id?: string;
 }
+
+export interface TradeTransaction extends TransactionBase {
+  type: 'BUY' | 'SELL';
+  quantity: number;
+  price: number;
+  split_numerator?: never;
+  split_denominator?: never;
+}
+
+export interface SplitTransaction extends TransactionBase {
+  type: 'SPLIT';
+  /** Legacy/test object spreads may carry these fields; canonical validation rejects them for persisted splits. */
+  quantity?: number;
+  price?: number;
+  split_numerator: number;
+  split_denominator: number;
+}
+
+/** Canonical security ledger row. SPLIT changes inventory only and never creates cash or P&L. */
+export type Transaction = TradeTransaction | SplitTransaction;
 
 export interface CashEvent {
   id: string;

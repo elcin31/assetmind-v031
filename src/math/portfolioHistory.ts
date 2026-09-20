@@ -4,6 +4,7 @@ import type {
   PortfolioHistoryPoint,
 } from "../types/analytics";
 import { compareTransactions } from "./positions";
+import { tradeTransactions } from "./securityLedger";
 import { EPSILON, validDate } from "./statistics";
 import { flowAdjustedReturn } from "./performance";
 
@@ -21,24 +22,29 @@ export function reconstructPortfolioHistory(
   });
   if (!validDate(asOf)) return empty("Некорректная дата оценки.");
   if (!transactions.length) return empty("Добавьте первую сделку.");
+  // This legacy reconstruction is trade-only. Never silently treat a split as a
+  // sell or invent historical quantities before split-aware history is wired.
+  if (transactions.some((t) => t.type === "SPLIT")) {
+    return empty("История недоступна: stock split требует split-aware реконструкции портфеля.");
+  }
+  const trades = tradeTransactions(transactions);
   if (
-    transactions.some(
+    trades.some(
       (t) =>
         !Number.isFinite(Date.parse(t.timestamp)) ||
         !Number.isFinite(Date.parse(t.created_at)) ||
         !t.symbol.trim() ||
         !t.id ||
-        !["BUY", "SELL"].includes(t.type) ||
         !Number.isFinite(t.quantity) ||
         t.quantity <= 0 ||
         !Number.isFinite(t.price) ||
         t.price <= 0,
     ) ||
-    new Set(transactions.map((t) => t.id)).size !== transactions.length ||
-    new Set(transactions.map((t) => t.currency)).size > 1
+    new Set(trades.map((t) => t.id)).size !== trades.length ||
+    new Set(trades.map((t) => t.currency)).size > 1
   )
     return empty("Некорректные операции или смешанные валюты без FX-истории.");
-  const sorted = [...transactions]
+  const sorted = [...trades]
     .sort(compareTransactions)
     .map((t) => ({
       ...t,

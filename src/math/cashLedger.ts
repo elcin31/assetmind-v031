@@ -1,4 +1,5 @@
 import type { CashEvent, CashLedgerSummary, Transaction } from '../types';
+import { tradeTransactions } from './securityLedger';
 
 const EPS = 1e-6;
 const round = (value: number) => Math.round(value * 1e8) / 1e8;
@@ -42,14 +43,8 @@ function unavailable(reason: string): CashLedgerResult {
 
 /**
  * Reconstruct the account cash balance from explicit funding/cash events and
- * trade executions. A negative running balance means the funding ledger is
- * incomplete; AssetMind refuses to infer the missing deposit.
- *
- * No FX conversion is performed here. Mixed currencies, or a currency that
- * differs from an explicitly supplied portfolio base currency, make the ledger
- * unavailable instead of silently adding unlike monetary units. Currency and
- * payload validation are scoped to operations at or before the requested as-of
- * timestamp; valid future operations do not contaminate a historical snapshot.
+ * trade executions. SPLIT rows are inventory-only corporate actions and are
+ * deliberately excluded from cash operations.
  */
 export function buildCashLedger(
   transactions: Transaction[],
@@ -68,17 +63,27 @@ export function buildCashLedger(
   }
 
   const eligibleTransactions = transactions.filter((tx) => Date.parse(tx.timestamp) <= cutoff);
+  const eligibleTrades = tradeTransactions(eligibleTransactions);
   const eligibleCashEvents = cashEvents.filter((event) => Date.parse(event.timestamp) <= cutoff);
-  const invalidTransaction = eligibleTransactions.some(
+  const invalidTransaction = eligibleTrades.some(
     (tx) =>
       !tx.id ||
-      !['BUY', 'SELL'].includes(tx.type) ||
       !Number.isFinite(tx.quantity) ||
       tx.quantity <= 0 ||
       !Number.isFinite(tx.price) ||
       tx.price <= 0 ||
       !Number.isFinite(Date.parse(tx.created_at)) ||
       !normalizeCurrency(tx.currency),
+  );
+  const invalidSplit = eligibleTransactions.some(
+    (tx) => tx.type === 'SPLIT' && (
+      !tx.id ||
+      !Number.isFinite(tx.split_numerator) || tx.split_numerator <= 0 ||
+      !Number.isFinite(tx.split_denominator) || tx.split_denominator <= 0 ||
+      tx.split_numerator === tx.split_denominator ||
+      !Number.isFinite(Date.parse(tx.created_at)) ||
+      !normalizeCurrency(tx.currency)
+    ),
   );
   const invalidCashEvent = eligibleCashEvents.some(
     (event) =>
@@ -89,7 +94,7 @@ export function buildCashLedger(
       !Number.isFinite(Date.parse(event.created_at)) ||
       !normalizeCurrency(event.currency),
   );
-  if (invalidTransaction || invalidCashEvent) {
+  if (invalidTransaction || invalidSplit || invalidCashEvent) {
     return unavailable('Cash ledger недоступен: обнаружена некорректная операция.');
   }
 
@@ -112,7 +117,7 @@ export function buildCashLedger(
     );
   }
 
-  for (const tx of eligibleTransactions) {
+  for (const tx of eligibleTrades) {
     const notional = tx.quantity * tx.price;
     operations.push({
       id: tx.id,
