@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Transaction } from '../types';
+import type { TradeTransaction, Transaction } from '../types';
 import { deleteTransaction, updateTransaction } from '../storage/portfolio';
 import { formatCurrency } from '../utils/format';
 import './core-p0.css';
@@ -18,7 +18,7 @@ function localDateTime(iso: string) {
   return local.toISOString().slice(0, 16);
 }
 
-function draftFrom(tx: Transaction): Draft {
+function draftFrom(tx: TradeTransaction): Draft {
   return {
     symbol: tx.symbol,
     type: tx.type,
@@ -46,16 +46,20 @@ export function TransactionHistory({
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const money = (value: number) => formatCurrency(value, currency);
-  const sorted = [...transactions].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+  // SPLIT is a canonical ledger event, not an editable cash trade. Keep this
+  // legacy trade editor narrowed until dedicated corporate-action UI exists.
+  const sorted = transactions
+    .filter((tx): tx is TradeTransaction => tx.type === 'BUY' || tx.type === 'SELL')
+    .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
 
-  const beginEdit = (tx: Transaction) => {
+  const beginEdit = (tx: TradeTransaction) => {
     setEditing(tx.id);
     setDraft(draftFrom(tx));
     setConfirmDelete(null);
     onError(null);
   };
 
-  const save = async (tx: Transaction) => {
+  const save = async (tx: TradeTransaction) => {
     if (!draft) return;
     const symbol = draft.symbol.trim().toUpperCase();
     const quantity = Number(draft.quantity);
@@ -86,7 +90,7 @@ export function TransactionHistory({
     }
   };
 
-  const remove = async (tx: Transaction) => {
+  const remove = async (tx: TradeTransaction) => {
     if (confirmDelete !== tx.id) {
       setConfirmDelete(tx.id);
       return;
@@ -108,10 +112,10 @@ export function TransactionHistory({
   return (
     <section className="card">
       <div className="section-heading">
-        <h2>История сделок <span className="tag">{transactions.length}</span></h2>
+        <h2>История сделок <span className="tag">{sorted.length}</span></h2>
         <span className="caption">Изменения пересчитывают позиции и аналитику</span>
       </div>
-      {!transactions.length ? (
+      {!sorted.length ? (
         <p className="empty">Начните с первой покупки. Позиции и лаборатория обновятся автоматически.</p>
       ) : (
         <div className="table-scroll">
