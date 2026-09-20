@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { StockSplit, Transaction } from '../src/types';
 
-function providerSplitIsNotLedgerRow(_: StockSplit): Transaction[] {
+function providerSplitIsNotLedgerRow(provider: StockSplit): Transaction[] {
+  void provider;
   return [];
 }
 
