@@ -26,6 +26,20 @@ export interface CashLedgerResult extends CashLedgerSummary {
   entries: CashLedgerEntry[];
 }
 
+function unavailable(reason: string): CashLedgerResult {
+  return {
+    complete: false,
+    balance: 0,
+    minimumBalance: 0,
+    reason,
+    deposits: 0,
+    withdrawals: 0,
+    dividends: 0,
+    fees: 0,
+    entries: [],
+  };
+}
+
 /**
  * Reconstruct the account cash balance from explicit funding/cash events and
  * trade executions. A negative running balance means the funding ledger is
@@ -33,7 +47,9 @@ export interface CashLedgerResult extends CashLedgerSummary {
  *
  * No FX conversion is performed here. Mixed currencies, or a currency that
  * differs from an explicitly supplied portfolio base currency, make the ledger
- * unavailable instead of silently adding unlike monetary units.
+ * unavailable instead of silently adding unlike monetary units. Currency and
+ * payload validation are scoped to operations at or before the requested as-of
+ * timestamp; valid future operations do not contaminate a historical snapshot.
  */
 export function buildCashLedger(
   transactions: Transaction[],
@@ -42,12 +58,46 @@ export function buildCashLedger(
   expectedCurrency?: string,
 ): CashLedgerResult {
   const cutoff = Date.parse(asOf);
+  if (!Number.isFinite(cutoff)) return unavailable('Cash ledger недоступен: некорректная дата оценки.');
+
+  if (
+    transactions.some((tx) => !Number.isFinite(Date.parse(tx.timestamp))) ||
+    cashEvents.some((event) => !Number.isFinite(Date.parse(event.timestamp)))
+  ) {
+    return unavailable('Cash ledger недоступен: обнаружена операция с некорректной датой.');
+  }
+
+  const eligibleTransactions = transactions.filter((tx) => Date.parse(tx.timestamp) <= cutoff);
+  const eligibleCashEvents = cashEvents.filter((event) => Date.parse(event.timestamp) <= cutoff);
+  const invalidTransaction = eligibleTransactions.some(
+    (tx) =>
+      !tx.id ||
+      !['BUY', 'SELL'].includes(tx.type) ||
+      !Number.isFinite(tx.quantity) ||
+      tx.quantity <= 0 ||
+      !Number.isFinite(tx.price) ||
+      tx.price <= 0 ||
+      !Number.isFinite(Date.parse(tx.created_at)) ||
+      !normalizeCurrency(tx.currency),
+  );
+  const invalidCashEvent = eligibleCashEvents.some(
+    (event) =>
+      !event.id ||
+      !['DEPOSIT', 'WITHDRAWAL', 'DIVIDEND', 'FEE'].includes(event.kind) ||
+      !Number.isFinite(event.amount) ||
+      event.amount <= 0 ||
+      !Number.isFinite(Date.parse(event.created_at)) ||
+      !normalizeCurrency(event.currency),
+  );
+  if (invalidTransaction || invalidCashEvent) {
+    return unavailable('Cash ledger недоступен: обнаружена некорректная операция.');
+  }
+
   const operations: LedgerOperation[] = [];
   const normalizedExpected = expectedCurrency ? normalizeCurrency(expectedCurrency) : null;
   const currencies = new Set(
-    [...transactions.map((tx) => tx.currency), ...cashEvents.map((event) => event.currency)]
-      .map(normalizeCurrency)
-      .filter(Boolean),
+    [...eligibleTransactions.map((tx) => tx.currency), ...eligibleCashEvents.map((event) => event.currency)]
+      .map(normalizeCurrency),
   );
   const currencyMismatch =
     currencies.size > 1 ||
@@ -55,26 +105,15 @@ export function buildCashLedger(
       [...currencies].some((currency) => currency !== normalizedExpected));
 
   if (currencyMismatch) {
-    return {
-      complete: false,
-      balance: 0,
-      minimumBalance: 0,
-      reason: normalizedExpected
+    return unavailable(
+      normalizedExpected
         ? `Cash ledger недоступен: операции должны быть в базовой валюте ${normalizedExpected}. FX-конвертация не подставляется автоматически.`
         : 'Cash ledger недоступен: обнаружены смешанные валюты без FX-истории.',
-      deposits: 0,
-      withdrawals: 0,
-      dividends: 0,
-      fees: 0,
-      entries: [],
-    };
+    );
   }
 
-  for (const tx of transactions) {
-    const time = Date.parse(tx.timestamp);
-    if (!Number.isFinite(time) || time > cutoff) continue;
+  for (const tx of eligibleTransactions) {
     const notional = tx.quantity * tx.price;
-    if (!Number.isFinite(notional) || notional <= 0) continue;
     operations.push({
       id: tx.id,
       timestamp: tx.timestamp,
@@ -89,9 +128,7 @@ export function buildCashLedger(
   let withdrawals = 0;
   let dividends = 0;
   let fees = 0;
-  for (const event of cashEvents) {
-    const time = Date.parse(event.timestamp);
-    if (!Number.isFinite(time) || time > cutoff || !Number.isFinite(event.amount) || event.amount <= 0) continue;
+  for (const event of eligibleCashEvents) {
     let delta = 0;
     let external = 0;
     if (event.kind === 'DEPOSIT') { delta = event.amount; external = event.amount; deposits += event.amount; }

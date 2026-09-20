@@ -55,6 +55,32 @@ describe('cash ledger', () => {
     expect(ledger.reason).toContain('базовой валюте USD');
     expect(ledger.reason).toContain('FX-конвертация');
   });
+
+  it('does not let a valid future foreign-currency operation contaminate an earlier snapshot', () => {
+    const ledger = buildCashLedger(
+      [tx('future', 'BUY', 1, 100, '2026-01-02T15:00:00Z', 'EUR')],
+      [cash('d', 'DEPOSIT', 100, '2025-01-01T10:00:00Z', 'USD')],
+      '2025-12-31T23:00:00Z',
+      'USD',
+    );
+    expect(ledger.complete).toBe(true);
+    expect(ledger.balance).toBe(100);
+    expect(ledger.entries).toHaveLength(1);
+  });
+
+  it('marks a malformed in-scope operation unavailable instead of silently skipping it', () => {
+    const broken = tx('b', 'BUY', Number.NaN, 100, '2025-01-02T15:00:00Z');
+    const ledger = buildCashLedger(
+      [broken],
+      [cash('d', 'DEPOSIT', 100, '2025-01-01T10:00:00Z')],
+      '2025-12-31T23:00:00Z',
+      'USD',
+    );
+    expect(ledger.complete).toBe(false);
+    expect(ledger.balance).toBe(0);
+    expect(ledger.entries).toEqual([]);
+    expect(ledger.reason).toContain('некорректная операция');
+  });
 });
 
 describe('XIRR / money-weighted return', () => {
