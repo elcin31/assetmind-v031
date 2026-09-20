@@ -21,8 +21,9 @@ export interface TradeTransaction extends TransactionBase {
 
 export interface SplitTransaction extends TransactionBase {
   type: 'SPLIT';
-  quantity?: never;
-  price?: never;
+  /** Legacy/test object spreads may carry these fields; canonical validation rejects them for persisted splits. */
+  quantity?: number;
+  price?: number;
   split_numerator: number;
   split_denominator: number;
 }
