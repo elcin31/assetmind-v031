@@ -1,4 +1,4 @@
-import type { Portfolio, SplitTransaction, TradeTransaction, Transaction } from '../types';
+import type { Portfolio, TradeTransaction, Transaction } from '../types';
 import { supabase } from '../auth/supabase';
 import { calculatePositions } from '../math/positions';
 import { cloudErrorMessage, requireCloudRow } from './cloudMutation';
@@ -114,7 +114,7 @@ async function ensureCloudPortfolio(userId: string, local: LocalPortfolio): Prom
 function tradeToCloudTransaction(tx: TradeTransaction, userId: string, portfolioId: string) {
   return { user_id: userId, portfolio_id: portfolioId, transaction_id: tx.id, date: tx.timestamp.slice(0, 10), type: tx.type, symbol: tx.symbol, quantity: tx.quantity, price: tx.price, fees: 0, amount: null, currency: tx.currency, split_numerator: null, split_denominator: null, executed_at: tx.timestamp, recorded_at: tx.created_at, source: 'assetmind-web', client_request_id: tx.client_request_id ?? null };
 }
-function toCloudTransaction(tx: Transaction, userId: string, portfolioId: string) {
+function toCloudTransaction(tx: Transaction, userId: string, portfolioId: string): Record<string, unknown> {
   return tx.type === 'SPLIT' ? splitToCloudTransaction(tx, userId, portfolioId) : tradeToCloudTransaction(tx, userId, portfolioId);
 }
 function fromCloudTransaction(row: CloudTransactionRow): Transaction {
@@ -133,7 +133,7 @@ async function migrateLocalPortfolioOnce(userId: string, local: LocalPortfolio, 
     const cloudIds = new Set((existing.data ?? []).map((row) => String(row.transaction_id)));
     const missing = local.transactions.filter((tx) => !cloudIds.has(tx.id));
     if (missing.length) {
-      const inserted = await supabase.from('transactions').insert(missing.map((tx) => toCloudTransaction(tx, userId, cloudPortfolio.id)));
+      const inserted = await supabase.from('transactions').insert(missing.map((tx) => toCloudTransaction(tx, userId, cloudPortfolio.id)) as never[]);
       if (inserted.error) throw new Error(cloudMessage(inserted.error));
     }
   }
@@ -183,7 +183,7 @@ export async function addTransaction(input: NewTransaction, requestId: string, u
     const tx: TradeTransaction = { ...input, id: crypto.randomUUID(), client_request_id: requestId, portfolio_id: data.portfolio.id, created_at: new Date(Math.max(Date.now(), latest + 1)).toISOString() };
     const next = validatePortfolio({ ...data, transactions: [...data.transactions, tx] });
     if (supabase) {
-      const inserted = await supabase.from('transactions').insert(toCloudTransaction(tx, userId, data.portfolio.id));
+      const inserted = await supabase.from('transactions').insert(toCloudTransaction(tx, userId, data.portfolio.id) as never);
       if (inserted.error) {
         if (inserted.error.code === '23505') {
           const retry = await supabase.from('transactions').select('transaction_id,portfolio_id,type,symbol,quantity,price,currency,split_numerator,split_denominator,executed_at,recorded_at,created_at,client_request_id').eq('user_id', userId).eq('portfolio_id', data.portfolio.id).eq('client_request_id', requestId).maybeSingle();
@@ -265,7 +265,7 @@ export async function importPortfolio(raw: string, userId: string) {
       const currentIds = new Set(current.transactions.map((tx) => tx.id));
       const missing = next.transactions.filter((tx) => !currentIds.has(tx.id));
       if (missing.length) {
-        const result = await supabase.from('transactions').insert(missing.map((tx) => toCloudTransaction(tx, userId, current.portfolio.id)));
+        const result = await supabase.from('transactions').insert(missing.map((tx) => toCloudTransaction(tx, userId, current.portfolio.id)) as never[]);
         if (result.error) throw new Error(cloudMessage(result.error));
       }
     }
