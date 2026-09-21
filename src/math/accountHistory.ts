@@ -1,19 +1,18 @@
-import type { CashEvent, HistoryBar, StockSplit, TradeTransaction, Transaction } from '../types';
+import type { CashEvent, HistoryBar, StockSplit, Transaction } from '../types';
 import type { PortfolioHistory, PortfolioHistoryPoint } from '../types/analytics';
 import { buildCashLedger } from './cashLedger';
 import { compareTransactions } from './positions';
-import { tradeTransactions } from './securityLedger';
 import { flowAdjustedReturn } from './performance';
 import { EPSILON, validDate } from './statistics';
 
 type AccountOperation =
   | {
-      kind: 'trade';
+      kind: 'security';
       id: string;
       day: string;
       timestamp: string;
       createdAt: string;
-      transaction: TradeTransaction;
+      transaction: Transaction;
     }
   | {
       kind: 'cash';
@@ -25,9 +24,9 @@ type AccountOperation =
     };
 
 export interface AccountHistoryMarketData {
-  /** Provider-reported splits. Relevant held splits block actual history until corporate actions are ledger-aware. */
+  /** Provider-reported splits. Held splits require a matching canonical SPLIT ledger row. */
   splits?: Map<string, StockSplit[]>;
-  /** First date requested from the raw-price provider for each symbol. */
+  /** First actually observed raw valuation bar for each symbol. */
   coverageStarts?: Map<string, string>;
 }
 
@@ -46,6 +45,23 @@ function cashDelta(event: CashEvent): { delta: number; external: number; externa
   return { delta: -event.amount, external: 0, externalFlow: false };
 }
 
+function splitRatio(transaction: Extract<Transaction, { type: 'SPLIT' }>): number {
+  return transaction.split_numerator / transaction.split_denominator;
+}
+
+function hasMatchingLedgerSplit(
+  transactions: Transaction[],
+  symbol: string,
+  split: StockSplit,
+): boolean {
+  return transactions.some((transaction) =>
+    transaction.type === 'SPLIT' &&
+    transaction.symbol.trim().toUpperCase() === symbol &&
+    transaction.timestamp.slice(0, 10) === split.date &&
+    Math.abs(splitRatio(transaction) - split.ratio) <= 1e-9
+  );
+}
+
 function quantityHeldBeforeSplit(
   transactions: Transaction[],
   symbol: string,
@@ -54,16 +70,20 @@ function quantityHeldBeforeSplit(
   const splitTime = Date.parse(split.timestamp);
   if (!Number.isFinite(splitTime)) return 0;
   let quantity = 0;
-  for (const transaction of [...tradeTransactions(transactions)].sort(compareTransactions)) {
+  for (const transaction of [...transactions].sort(compareTransactions)) {
     if (transaction.symbol.trim().toUpperCase() !== symbol) continue;
     const transactionTime = Date.parse(transaction.timestamp);
     if (!Number.isFinite(transactionTime) || transactionTime >= splitTime) break;
-    quantity += transaction.type === 'BUY' ? transaction.quantity : -transaction.quantity;
+    if (transaction.type === 'BUY') quantity += transaction.quantity;
+    else if (transaction.type === 'SELL') quantity -= transaction.quantity;
+    else if (transaction.type === 'SPLIT') {
+      quantity *= transaction.split_numerator / transaction.split_denominator;
+    }
   }
   return quantity;
 }
 
-function relevantHeldSplit(
+function relevantUnrecordedHeldSplit(
   transactions: Transaction[],
   marketData: AccountHistoryMarketData,
   asOf: string,
@@ -72,7 +92,9 @@ function relevantHeldSplit(
     const symbol = rawSymbol.trim().toUpperCase();
     for (const split of splits) {
       if (split.date > asOf) continue;
-      if (quantityHeldBeforeSplit(transactions, symbol, split) > EPSILON) return { symbol, split };
+      if (quantityHeldBeforeSplit(transactions, symbol, split) <= EPSILON) continue;
+      if (hasMatchingLedgerSplit(transactions, symbol, split)) continue;
+      return { symbol, split };
     }
   }
   return null;
@@ -93,21 +115,23 @@ export function reconstructAccountHistory(
   if (!validDate(asOf)) return empty('Некорректная дата оценки.');
   if (!transactions.length) return empty('Добавьте первую сделку.');
 
-  // The account-history engine is not split-aware yet. Explicit SPLIT rows must
-  // never be reinterpreted as SELLs or silently ignored in factual history.
-  if (transactions.some((transaction) => transaction.type === 'SPLIT')) {
-    return empty('Фактическая история счёта недоступна: stock split требует split-aware реконструкции истории.');
-  }
-  const trades = tradeTransactions(transactions);
-  const invalidTransaction = trades.some(
-    (transaction) =>
+  const invalidTransaction = transactions.some((transaction) => {
+    if (
       !Number.isFinite(Date.parse(transaction.timestamp)) ||
       !Number.isFinite(Date.parse(transaction.created_at)) ||
       !transaction.symbol.trim() ||
-      !transaction.id ||
-      !Number.isFinite(transaction.quantity) || transaction.quantity <= 0 ||
-      !Number.isFinite(transaction.price) || transaction.price <= 0,
-  );
+      !transaction.id
+    ) return true;
+    if (transaction.type === 'SPLIT') {
+      return !Number.isFinite(transaction.split_numerator) ||
+        transaction.split_numerator <= 0 ||
+        !Number.isFinite(transaction.split_denominator) ||
+        transaction.split_denominator <= 0 ||
+        Math.abs(transaction.split_numerator - transaction.split_denominator) <= EPSILON;
+    }
+    return !Number.isFinite(transaction.quantity) || transaction.quantity <= 0 ||
+      !Number.isFinite(transaction.price) || transaction.price <= 0;
+  });
   const invalidCashEvent = cashEvents.some(
     (event) =>
       !event.id ||
@@ -116,14 +140,14 @@ export function reconstructAccountHistory(
       !Number.isFinite(Date.parse(event.timestamp)) ||
       !Number.isFinite(Date.parse(event.created_at)),
   );
-  const ids = [...trades.map((transaction) => transaction.id), ...cashEvents.map((event) => event.id)];
-  const currencies = new Set([...trades.map((transaction) => transaction.currency), ...cashEvents.map((event) => event.currency)]);
+  const ids = [...transactions.map((transaction) => transaction.id), ...cashEvents.map((event) => event.id)];
+  const currencies = new Set([...transactions.map((transaction) => transaction.currency), ...cashEvents.map((event) => event.currency)]);
   if (invalidTransaction || invalidCashEvent || new Set(ids).size !== ids.length || currencies.size > 1) {
     return empty('Некорректные операции или смешанные валюты без FX-истории.');
   }
 
   const cutoff = `${asOf}T23:59:59.999Z`;
-  const eligibleTransactions = [...trades]
+  const eligibleTransactions = [...transactions]
     .sort(compareTransactions)
     .map((transaction) => ({
       ...transaction,
@@ -134,10 +158,14 @@ export function reconstructAccountHistory(
   const eligibleCashEvents = [...cashEvents]
     .map((event) => ({ ...event, day: new Date(event.timestamp).toISOString().slice(0, 10) }))
     .filter((event) => event.day <= asOf);
+  const eligibleTrades = eligibleTransactions.filter(
+    (transaction): transaction is Extract<typeof transaction, { type: 'BUY' | 'SELL' }> =>
+      transaction.type === 'BUY' || transaction.type === 'SELL',
+  );
 
-  if (!eligibleTransactions.length) return empty('До даты оценки нет сделок.');
+  if (!eligibleTrades.length) return empty('До даты оценки нет сделок.');
 
-  const symbols = [...new Set(eligibleTransactions.map((transaction) => transaction.symbol))];
+  const symbols = [...new Set(eligibleTrades.map((transaction) => transaction.symbol))];
   const unavailableRawSymbols = symbols.filter((symbol) => !(histories.get(symbol)?.length));
   if (unavailableRawSymbols.length) {
     return empty(`Фактическая история счёта недоступна: нет raw close для ${unavailableRawSymbols.join(', ')}. Adjusted close не подставляется вместо фактической цены.`, unavailableRawSymbols);
@@ -145,21 +173,21 @@ export function reconstructAccountHistory(
 
   if (marketData.coverageStarts) {
     for (const symbol of symbols) {
-      const firstTransaction = eligibleTransactions.find((transaction) => transaction.symbol === symbol);
+      const firstTransaction = eligibleTrades.find((transaction) => transaction.symbol === symbol);
       const coverageStart = marketData.coverageStarts.get(symbol);
       if (!firstTransaction || !coverageStart || !validDate(coverageStart)) {
         return empty(`Фактическая история счёта недоступна: не подтверждена полная raw-price coverage для ${symbol}.`, [symbol]);
       }
       if (firstTransaction.day < coverageStart) {
-        return empty(`Фактическая история счёта недоступна: первая сделка ${symbol} (${firstTransaction.day}) старше доступной raw-price/corporate-action истории (${coverageStart}).`, [symbol]);
+        return empty(`Фактическая история счёта недоступна: первая сделка ${symbol} (${firstTransaction.day}) старше первой фактически доступной raw-price точки (${coverageStart}).`, [symbol]);
       }
     }
   }
 
-  const heldSplit = relevantHeldSplit(eligibleTransactions, marketData, asOf);
+  const heldSplit = relevantUnrecordedHeldSplit(eligibleTransactions, marketData, asOf);
   if (heldSplit) {
     const { symbol, split } = heldSplit;
-    return empty(`Фактическая история счёта недоступна: обнаружен stock split ${symbol} ${split.numerator}:${split.denominator} от ${split.date}. Corporate actions должны быть учтены одновременно в transaction ledger, position engine и database integrity; AssetMind не подменяет это локальной поправкой графика.`, [symbol]);
+    return empty(`Фактическая история счёта недоступна: обнаружен stock split ${symbol} ${split.numerator}:${split.denominator} от ${split.date}, но в canonical transaction ledger нет соответствующей SPLIT-записи. AssetMind не подменяет ledger локальной поправкой графика.`, [symbol]);
   }
 
   const ledger = buildCashLedger(eligibleTransactions, eligibleCashEvents, cutoff);
@@ -182,7 +210,7 @@ export function reconstructAccountHistory(
 
   const operations: AccountOperation[] = [
     ...eligibleTransactions.map<AccountOperation>((transaction) => ({
-      kind: 'trade', id: transaction.id, day: transaction.day,
+      kind: 'security', id: transaction.id, day: transaction.day,
       timestamp: transaction.timestamp, createdAt: transaction.created_at, transaction,
     })),
     ...eligibleCashEvents.map<AccountOperation>((event) => ({
@@ -191,7 +219,7 @@ export function reconstructAccountHistory(
     })),
   ].sort(operationOrder);
 
-  const firstOperationDay = operations[0]?.day ?? eligibleTransactions[0].day;
+  const firstOperationDay = operations[0]?.day ?? eligibleTrades[0].day;
   const dates = [...calendar].filter((date) => date >= firstOperationDay).sort();
   const quantities = new Map<string, number>();
   const points: PortfolioHistoryPoint[] = [];
@@ -206,9 +234,17 @@ export function reconstructAccountHistory(
     let traded = false;
     while (operationIndex < operations.length && operations[operationIndex].day <= date) {
       const operation = operations[operationIndex++];
-      if (operation.kind === 'trade') {
+      if (operation.kind === 'security') {
         const transaction = operation.transaction;
         const currentQuantity = quantities.get(transaction.symbol) ?? 0;
+        if (transaction.type === 'SPLIT') {
+          const nextQuantity = currentQuantity * splitRatio(transaction);
+          if (!Number.isFinite(nextQuantity) || nextQuantity < -EPSILON) {
+            return empty('Некорректная история: stock split создал недопустимое количество позиции.');
+          }
+          quantities.set(transaction.symbol, Math.abs(nextQuantity) < EPSILON ? 0 : nextQuantity);
+          continue;
+        }
         const nextQuantity = currentQuantity + (transaction.type === 'BUY' ? transaction.quantity : -transaction.quantity);
         if (nextQuantity < -EPSILON || !Number.isFinite(nextQuantity)) return empty('Некорректная история: продажа превышает доступную позицию.');
         quantities.set(transaction.symbol, Math.max(0, nextQuantity));

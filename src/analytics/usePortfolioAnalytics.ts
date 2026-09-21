@@ -21,17 +21,10 @@ interface HistoryResult {
   /** Raw-close series for actual historical account valuation. */
   valuationHistories: Map<string, HistoryBar[]>;
   splits: Map<string, StockSplit[]>;
-  /** Start of the requested 5Y provider window, used to reject unverifiable older inventory. */
+  /** First actually observed raw valuation bar for each symbol. */
   coverageStarts: Map<string, string>;
   errors: string[];
   issues: HistoryRequestIssue[];
-}
-
-function fiveYearCoverageStart(): string {
-  const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  start.setUTCFullYear(start.getUTCFullYear() - 5);
-  return start.toISOString().slice(0, 10);
 }
 
 export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: string) {
@@ -81,7 +74,6 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: stri
   useEffect(() => {
     let active = true;
     const symbols = symbolsKey.split(',').filter(Boolean);
-    const coverageStart = fiveYearCoverageStart();
     void Promise.allSettled(symbols.map((symbol) => loadHistoricalMarketData(symbol))).then(
       (results) => {
         const histories = new Map<string, HistoryBar[]>();
@@ -95,7 +87,8 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: stri
             histories.set(symbols[i], r.value.bars);
             valuationHistories.set(symbols[i], r.value.valuationBars);
             splits.set(symbols[i], r.value.splits);
-            coverageStarts.set(symbols[i], coverageStart);
+            const firstRawBar = r.value.valuationBars[0]?.date;
+            if (firstRawBar) coverageStarts.set(symbols[i], firstRawBar);
             return;
           }
           if (r.reason instanceof HistoryRequestError) {

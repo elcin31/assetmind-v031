@@ -6,6 +6,11 @@ import { splitFromCloudTransaction, splitToCloudTransaction, type CloudSplitTran
 
 export const LEGACY_STORAGE_KEY = 'assetmind.portfolio.v1';
 export interface LocalPortfolio { version: 1; portfolio: Portfolio; transactions: Transaction[] }
+export interface PortfolioSyncResult {
+  portfolio: LocalPortfolio;
+  source: 'cloud' | 'cache' | 'local';
+  warning: string | null;
+}
 export type NewTransaction = Pick<TradeTransaction, 'symbol' | 'type' | 'quantity' | 'price' | 'currency' | 'timestamp'>;
 
 interface CloudPortfolioRow { id: string; user_id: string; name: string; base_currency: string; created_at: string }
@@ -161,10 +166,28 @@ async function loadCloudCanonical(userId: string): Promise<LocalPortfolio> {
   return canonical;
 }
 
+export async function readPortfolioSyncedWithStatus(userId: string): Promise<PortfolioSyncResult> {
+  if (!supabase) {
+    return {
+      portfolio: readPortfolio(userId),
+      source: 'local',
+      warning: 'Cloud portfolio is not configured. Showing validated local data only.',
+    };
+  }
+  try {
+    return { portfolio: await loadCloudCanonical(userId), source: 'cloud', warning: null };
+  } catch (error) {
+    console.warn('[AssetMind portfolio sync]', error);
+    return {
+      portfolio: readPortfolio(userId),
+      source: 'cache',
+      warning: 'Cloud portfolio could not be refreshed. Showing the validated local cache; changes from other devices may be missing.',
+    };
+  }
+}
+
 export async function readPortfolioSynced(userId: string): Promise<LocalPortfolio> {
-  if (!supabase) return readPortfolio(userId);
-  try { return await loadCloudCanonical(userId); }
-  catch (error) { console.warn('[AssetMind portfolio sync]', error); return readPortfolio(userId); }
+  return (await readPortfolioSyncedWithStatus(userId)).portfolio;
 }
 
 function sameTransactionInput(existing: Transaction, input: NewTransaction): boolean {
