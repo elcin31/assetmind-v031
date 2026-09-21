@@ -10,7 +10,7 @@ import { useAuth } from './auth/AuthContext';
 import { enrichPositionsWithQuotes } from './math/pnl';
 import { buildCashLedger } from './math/cashLedger';
 import { moneyWeightedReturn } from './math/xirr';
-import { getPortfolioStorageKey, readPortfolioSynced } from './storage/portfolio';
+import { getPortfolioStorageKey, readPortfolioSyncedWithStatus } from './storage/portfolio';
 import { readPlanningState } from './storage/planning';
 import { exportAccountBackup, importAccountBackup } from './storage/accountBackup';
 
@@ -53,6 +53,7 @@ function composeSnapshot(
 function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignOut: () => Promise<void> }) {
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [syncWarning, setSyncWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
@@ -64,10 +65,12 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
     const capitalAsOf = new Date().toISOString();
     setError(null);
     try {
-      const data = await readPortfolioSynced(userId);
+      const sync = await readPortfolioSyncedWithStatus(userId);
+      const data = sync.portfolio;
       const planning = await readPlanningState(userId, data.portfolio.id, data.portfolio.base_currency);
       const base = enrichPositionsWithQuotes(data.transactions, new Map());
       if (run !== generation.current) return;
+      setSyncWarning(sync.warning);
       setSnapshot(composeSnapshot(data, base, planning, capitalAsOf));
       setLoading(base.positions.length > 0);
       const quotes = new Map<string, Quote>();
@@ -83,7 +86,11 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
         setSnapshot(composeSnapshot(data, enrichPositionsWithQuotes(data.transactions, quotes), planning, capitalAsOf));
       }
     } catch (err) {
-      if (run === generation.current) { setSnapshot(null); setError(err instanceof Error ? err.message : 'Could not read portfolio'); }
+      if (run === generation.current) {
+        setSnapshot(null);
+        setSyncWarning(null);
+        setError(err instanceof Error ? err.message : 'Could not read portfolio');
+      }
     } finally { if (run === generation.current) setLoading(false); }
   }, [userId]);
 
@@ -131,6 +138,7 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
         finally { setBackupBusy(false); }
       }} />
     </details>
+    {syncWarning && <p className="warning-banner" role="status" aria-live="polite">{syncWarning}</p>}
     {snapshot ? <PortfolioScreen snapshot={snapshot} userId={userId} onRefresh={() => { void loadPortfolio(); }} onSignOut={onSignOut} loading={loading} setError={setError} error={error} /> :
       <main className="card"><h1>AssetMind</h1>{error ? <p role="alert">{error}</p> : <p>Loading portfolio…</p>}<button className="btn btn-primary" onClick={() => void loadPortfolio()}>Retry</button></main>}
   </div>;
