@@ -76,7 +76,9 @@ function quantityHeldBeforeSplit(
     if (!Number.isFinite(transactionTime) || transactionTime >= splitTime) break;
     if (transaction.type === 'BUY') quantity += transaction.quantity;
     else if (transaction.type === 'SELL') quantity -= transaction.quantity;
-    else quantity *= splitRatio(transaction);
+    else if (transaction.type === 'SPLIT') {
+      quantity *= transaction.split_numerator / transaction.split_denominator;
+    }
   }
   return quantity;
 }
