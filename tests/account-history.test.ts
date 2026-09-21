@@ -23,6 +23,25 @@ function trade(
   };
 }
 
+function split(
+  id: string,
+  day: string,
+  numerator: number,
+  denominator: number,
+): Transaction {
+  return {
+    id,
+    portfolio_id: 'p',
+    symbol: 'AAPL',
+    type: 'SPLIT',
+    split_numerator: numerator,
+    split_denominator: denominator,
+    currency: 'USD',
+    timestamp: `${day}T13:30:00Z`,
+    created_at: `${day}T13:30:01Z`,
+  };
+}
+
 function cash(
   id: string,
   day: string,
@@ -153,8 +172,42 @@ it('never substitutes adjusted history when raw close is unavailable', () => {
   expect(history.reason).toContain('Adjusted close не подставляется');
 });
 
-it('blocks actual account history across a held stock split until corporate actions are ledger-aware', () => {
-  const split: StockSplit = {
+it('applies a canonical SPLIT to factual account inventory without creating cash or P&L', () => {
+  const providerSplit: StockSplit = {
+    date: '2026-01-05',
+    timestamp: '2026-01-05T13:30:00Z',
+    numerator: 2,
+    denominator: 1,
+    ratio: 2,
+  };
+  const rawBars: HistoryBar[] = [
+    { date: '2026-01-02', close: 100 },
+    { date: '2026-01-05', close: 50 },
+    { date: '2026-01-06', close: 51 },
+  ];
+  const history = reconstructAccountHistory(
+    [
+      trade('buy', '2026-01-02', 'BUY', 1, 100),
+      split('split', '2026-01-05', 2, 1),
+    ],
+    [cash('funding', '2026-01-02', 'DEPOSIT', 100)],
+    new Map([['AAPL', rawBars]]),
+    '2026-01-06',
+    {
+      splits: new Map([['AAPL', [providerSplit]]]),
+      coverageStarts: new Map([['AAPL', '2026-01-02']]),
+    },
+  );
+
+  expect(history.reason).toBeNull();
+  expect(history.points.map((point) => point.value)).toEqual([100, 100, 102]);
+  expect(history.points[1]).toMatchObject({ traded: false, externalFlow: 0 });
+  expect(history.points[1].dailyReturn).toBe(0);
+  expect(history.points[2].dailyReturn).toBeCloseTo(0.02, 12);
+});
+
+it('blocks a held provider split when the canonical ledger has no matching SPLIT row', () => {
+  const providerSplit: StockSplit = {
     date: '2026-01-05',
     timestamp: '2026-01-05T13:30:00Z',
     numerator: 2,
@@ -171,17 +224,17 @@ it('blocks actual account history across a held stock split until corporate acti
     [cash('funding', '2026-01-02', 'DEPOSIT', 100)],
     new Map([['AAPL', rawBars]]),
     '2026-01-06',
-    { splits: new Map([['AAPL', [split]]]) },
+    { splits: new Map([['AAPL', [providerSplit]]]) },
   );
 
   expect(history.points).toEqual([]);
   expect(history.missingSymbols).toEqual(['AAPL']);
   expect(history.reason).toContain('stock split AAPL 2:1');
-  expect(history.reason).toContain('transaction ledger');
+  expect(history.reason).toContain('нет соответствующей SPLIT-записи');
 });
 
 it('does not block a split that occurs after the position was fully closed', () => {
-  const split: StockSplit = {
+  const providerSplit: StockSplit = {
     date: '2026-01-06',
     timestamp: '2026-01-06T13:30:00Z',
     numerator: 2,
@@ -196,14 +249,14 @@ it('does not block a split that occurs after the position was fully closed', () 
     [cash('funding', '2026-01-02', 'DEPOSIT', 100)],
     histories,
     '2026-01-07',
-    { splits: new Map([['AAPL', [split]]]) },
+    { splits: new Map([['AAPL', [providerSplit]]]) },
   );
 
   expect(history.reason).toBeNull();
   expect(history.points.at(-1)?.value).toBe(110);
 });
 
-it('refuses inventory older than the verified raw-price and corporate-action window', () => {
+it('refuses inventory older than the first actually observed raw-price point', () => {
   const history = reconstructAccountHistory(
     [trade('buy', '2026-01-02', 'BUY', 1, 100)],
     [cash('funding', '2026-01-02', 'DEPOSIT', 200)],
@@ -214,5 +267,5 @@ it('refuses inventory older than the verified raw-price and corporate-action win
 
   expect(history.points).toEqual([]);
   expect(history.missingSymbols).toEqual(['AAPL']);
-  expect(history.reason).toContain('старше доступной raw-price/corporate-action истории');
+  expect(history.reason).toContain('старше первой фактически доступной raw-price точки');
 });
