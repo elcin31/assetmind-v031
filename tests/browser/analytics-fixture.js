@@ -6,7 +6,7 @@ import { enrichPositionsWithQuotes } from "../../src/math/pnl";
 import "../../src/index.css";
 import "../../src/auth/auth-integration.css";
 const mode = new URLSearchParams(location.search).get("mode");
-const symbols = ["AAPL", "MSFT", "NVDA"];
+const symbols = ["AAPL", "MSFT", "NVDA", "AMD", "GOOG", "META", "TSLA"];
 const transactions =
   mode === "empty"
     ? []
@@ -15,8 +15,8 @@ const transactions =
         portfolio_id: "fixture",
         symbol,
         type: "BUY",
-        quantity: [20, 15, 30][i],
-        price: [100, 150, 80][i],
+        quantity: [20, 15, 30, 10, 8, 4, 3][i],
+        price: [100, 150, 80, 90, 100, 180, 130][i],
         currency: "USD",
         timestamp: "2024-01-02T15:00:00Z",
         created_at: "2024-01-02T16:00:00Z",
@@ -33,13 +33,14 @@ const quotes = new Map(
     symbol,
     {
       symbol,
-      price: [235, 480, 190][i],
+      price: [235, 480, 190, 70, 90, 150, 100][i],
       change: 0,
       changePercent: 0,
       timestamp: Date.now(),
     },
   ]),
 );
+if (mode === "incomplete") quotes.delete("MSFT");
 const snapshot = {
   portfolio: {
     id: "fixture",
@@ -50,6 +51,7 @@ const snapshot = {
   transactions,
   ...enrichPositionsWithQuotes(transactions, quotes),
 };
+if (mode === "large") snapshot.accountValue = 1234567890123.45;
 createRoot(document.getElementById("root")).render(
   React.createElement(
     React.StrictMode,

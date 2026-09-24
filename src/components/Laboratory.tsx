@@ -1,3 +1,5 @@
+import { CapitalSummary } from './CapitalSummary';
+import { DataQualityPanel } from './DataQualityPanel';
 import { useState } from 'react';
 import type { PortfolioSnapshot } from '../types';
 import type { AnalyticsController } from '../analytics/usePortfolioAnalytics';
@@ -21,6 +23,7 @@ const tabs = [
   { id: 'attribution', label: 'Атрибуция' },
   { id: 'scenarios', label: 'Сценарии' },
   { id: 'benchmark', label: 'Рынок' },
+  { id: 'data', label: 'Данные' },
 ];
 
 export function Laboratory({
@@ -153,6 +156,7 @@ export function Laboratory({
               ))}
             </div>
           </section>
+          <CapitalSummary snapshot={snapshot} />
           <MonthlyReturnsHeatmap
             months={a.performance.monthly}
             loading={c.loading}
@@ -302,6 +306,7 @@ export function Laboratory({
       )}
       {tab === 'attribution' && <AttributionPanel analytics={a} currency={snapshot.portfolio.base_currency} />}
       {tab === 'scenarios' && <ScenariosPanel snapshot={snapshot} />}
+      {tab === 'data' && <DataQualityPanel snapshot={snapshot} controller={c} />}
       {tab === 'benchmark' && <BenchmarkPanel controller={c} detailed />}
     </>
   );
