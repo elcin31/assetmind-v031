@@ -64,7 +64,7 @@ export function Laboratory({
       <section className="lab-intro">
         <div>
           <span className="eyebrow">АНАЛИТИКА ПОРТФЕЛЯ</span>
-          <h2>Лаборатория</h2>
+          <h2>Аналитика</h2>
           <p>Результат, источники риска и сценарии.</p>
         </div>
       </section>

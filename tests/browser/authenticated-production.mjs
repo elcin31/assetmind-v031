@@ -66,7 +66,7 @@ async function waitForPortfolio() {
 }
 
 async function openLabRisk() {
-  await page.getByRole('button', { name: 'Лаборатория', exact: true }).click();
+  await page.getByRole('button', { name: 'Аналитика', exact: true }).click();
   await page.getByRole('button', { name: 'Риск', exact: true }).click();
   await page.getByRole('group', { name: 'Risk Horizon' }).waitFor();
 }
@@ -78,7 +78,7 @@ async function waitForPreferenceSave() {
 }
 
 async function ensureTradeTab() {
-  const tradeButton = page.getByRole('button', { name: 'Сделки', exact: true });
+  const tradeButton = page.getByRole('button', { name: 'Операции', exact: true });
   if (await tradeButton.count()) await tradeButton.click();
 }
 

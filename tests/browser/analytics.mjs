@@ -183,7 +183,7 @@ try {
     await page.setViewportSize({ width, height: 950 });
     await healthy(page, `Overview ${width}`);
     await page
-      .getByRole("button", { name: "Лаборатория", exact: true })
+      .getByRole("button", { name: "Аналитика", exact: true })
       .click();
     for (const name of [
       "Доходность",
@@ -253,7 +253,7 @@ try {
     .locator(".holding-detail")
     .getByRole("heading", { name: "Цена · AAPL", exact: true })
     .waitFor();
-  await page.getByRole("button", { name: "Лаборатория", exact: true }).click();
+  await page.getByRole("button", { name: "Аналитика", exact: true }).click();
   await page
     .getByRole("heading", { name: "Capital & MWR", exact: true })
     .waitFor();
@@ -321,6 +321,49 @@ try {
     assert.deepEqual(test.errors, []);
     await test.context.close();
   }
+
+  const planning = await open('planning');
+  const pp = planning.page;
+  assert.deepEqual(await pp.locator('.site-nav button span').allTextContents(), ['Обзор','Портфель','План','Аналитика','Операции']);
+  await pp.getByRole('button',{name:'План',exact:true}).click();
+  for (const width of [320,375,390,430,768,1440]) {
+    await pp.setViewportSize({width,height:950});
+    for (const name of ['Цели и ребалансировка','Новый капитал','What-If','Advanced']) {
+      await pp.getByRole('group',{name:'Раздел плана'}).getByRole('button',{name,exact:true}).click();
+      assert(await pp.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1), `Planning ${name} ${width}: no overflow`);
+      assert(!/NaN|Infinity|Solver iterations/.test(await pp.locator('.planning-page').innerText()));
+    }
+  }
+  await pp.getByRole('button',{name:'Цели и ребалансировка',exact:true}).click();
+  await pp.getByLabel('Target AAPL, %',{exact:true}).fill('30');
+  await pp.getByRole('button',{name:'Сохранить цели',exact:true}).click();
+  await pp.getByText('Цели сохранены.',{exact:true}).waitFor();
+  await pp.waitForFunction(()=>!document.body.innerText.includes('Загружаем историю'));
+  await pp.getByRole('button',{name:'Новый капитал',exact:true}).click();
+  await pp.getByLabel('Новый капитал',{exact:true}).fill('1000');
+  assert((await pp.locator('.planning-page').innerText()).includes('Остаток нового капитала'));
+  assert(!(await pp.locator('.planning-page tbody').innerText()).includes('SELL'));
+  await pp.getByRole('button',{name:'What-If',exact:true}).click();
+  await pp.getByRole('button',{name:'Рассчитать сценарий',exact:true}).click();
+  await pp.getByRole('heading',{name:'Влияние решения',exact:true}).waitFor();
+  assert.equal(await pp.locator('.decision-table tbody tr').count(),9);
+  assert((await pp.locator('.decision-table').innerText()).includes('60 общих наблюдений'));
+  await pp.getByRole('group',{name:'Risk Horizon',exact:true}).getByRole('button',{name:'60D',exact:true}).click();
+  assert(!(await pp.locator('.decision-table').innerText()).includes('60 общих наблюдений'));
+  await pp.getByLabel('Объём сценария',{exact:true}).fill('999999');
+  assert.equal(await pp.locator('.decision-table').count(),0,'editing inputs invalidates old result');
+  await pp.getByRole('button',{name:'Рассчитать сценарий',exact:true}).click();
+  assert((await pp.locator('.planning-page [role=alert]').innerText()).includes('недостаточно'));
+  await pp.getByLabel('Объём сценария',{exact:true}).fill('1');
+  await pp.getByRole('button',{name:'Рассчитать сценарий',exact:true}).click();
+  await pp.setViewportSize({width:390,height:950});
+  await pp.screenshot({path:'/tmp/planning-whatif-mobile.png',fullPage:true});
+  await pp.getByRole('button',{name:'Цели и ребалансировка',exact:true}).click();
+  await pp.setViewportSize({width:1440,height:1000});
+  await pp.screenshot({path:'/tmp/planning-desktop.png',fullPage:true});
+  assert.deepEqual(planning.errors,[]);
+  await planning.context.close();
+  console.log('PASS Planning: navigation, six widths, targets save, capital buys only, 9 What-If metrics, unavailable VaR, horizon updates, stale result invalidation, insufficient cash and Advanced');
   console.log(
     "PASS Overview: six widths, both themes, periods, benchmarks, risk horizons, navigation, limits, preserved analytics, empty/incomplete/unavailable states, large values, cache and no console exceptions",
   );

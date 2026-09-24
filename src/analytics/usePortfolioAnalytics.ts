@@ -1,3 +1,4 @@
+import { datedReturns } from '../math/performance';
 import { useEffect, useMemo, useState } from 'react';
 import type { HistoryBar, PortfolioSnapshot, StockSplit } from '../types';
 import type { BenchmarkSymbol, Period, RiskHorizon } from '../types/analytics';
@@ -132,7 +133,18 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: stri
     [snapshot, current, benchmark, period, riskHorizon, asOf, rf, mar],
   );
 
+  const benchmarkRiskReturns = useMemo(
+    () =>
+      datedReturns(
+        (current?.histories.get(benchmark) ?? []).filter(
+          bar => bar.date <= asOf,
+        ),
+      ),
+    [current, benchmark, asOf],
+  );
+
   return {
+    benchmarkRiskReturns,
     analytics,
     period,
     setPeriod,
