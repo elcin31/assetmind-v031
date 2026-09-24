@@ -32,7 +32,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
-    "verify": "npm run typecheck && npm test && npm run lint && npm run e2e:auth:check && npm run build"
+    "verify": "npm run typecheck && npm test && npm run lint && npm run e2e:auth:check && npm run build",
+    "e2e:overview": "node tests/browser/analytics.mjs"
   },
   "type": "module",
   "version": "0.1.0"

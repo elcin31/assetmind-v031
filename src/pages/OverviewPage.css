@@ -1,0 +1,318 @@
+.overview-page {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.overview-page .card {
+  border: 0;
+  box-shadow: 0 4px 24px #162f4a04;
+  margin: 0;
+}
+.overview-page .section-heading {
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.overview-page .section-heading h2 {
+  margin: 0;
+}
+.overview-page .text-button {
+  margin: 0;
+  padding: 0;
+  min-height: 44px;
+  font-size: 12px;
+}
+.overview-page button:focus-visible,
+.overview-page summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.overview-page p,
+.overview-page dd,
+.overview-page b,
+.overview-page strong {
+  overflow-wrap: anywhere;
+}
+.overview-hero {
+  padding: 32px;
+  border-radius: 28px;
+  background: var(--surface);
+  box-shadow: 0 8px 40px #162f4a06;
+}
+.overview-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.overview-value {
+  font-size: clamp(30px, 4.5vw, 58px);
+  line-height: 1.15;
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  margin: 16px 0 24px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.overview-period-result,
+.overview-hero-bottom {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.overview-period-result span,
+.overview-hero-bottom span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.overview-period-result b {
+  font-size: 22px;
+  font-weight: 600;
+}
+.overview-hero > .caption {
+  margin-top: 12px;
+}
+.overview-hero .chart-periods {
+  max-width: 520px;
+  margin: 24px 0;
+}
+.overview-hero-bottom {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.overview-hero-bottom b {
+  font-size: 16px;
+  font-weight: 550;
+}
+.overview-chart-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 18px;
+}
+.overview-chart-legend > span::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 3px;
+  background: var(--accent);
+  vertical-align: middle;
+  margin-right: 6px;
+  border-radius: 2px;
+}
+.overview-chart-legend > span:nth-child(2)::before {
+  background: var(--positive);
+}
+.overview-chart-legend small {
+  margin-left: auto;
+}
+.overview-performance .price-plot {
+  max-height: 320px;
+}
+.overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+.overview-metric > span,
+.overview-metric > small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.overview-metric > strong {
+  display: block;
+  font-size: 26px;
+  font-weight: 600;
+  margin: 10px 0;
+  font-variant-numeric: tabular-nums;
+}
+.overview-metric details {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 8px;
+}
+.overview-metric summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.overview-metric details p {
+  line-height: 1.6;
+}
+.overview-insights,
+.overview-holdings ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.overview-insights li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+  padding: 18px 0;
+  border-top: 1px solid var(--border);
+}
+.overview-insights li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.overview-insights h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+.overview-insights p {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+.overview-insights b {
+  font-size: 13px;
+}
+.overview-severity {
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+[data-severity="HIGH"] .overview-severity {
+  color: var(--negative);
+}
+[data-severity="MEDIUM"] .overview-severity {
+  color: var(--warning);
+}
+.overview-secondary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.overview-secondary > * {
+  min-width: 0;
+}
+.overview-contributors h2 {
+  margin-bottom: 6px;
+}
+.overview-contributor {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 0;
+  font-size: 14px;
+}
+.overview-holding {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 20px 0;
+  border-top: 1px solid var(--border);
+}
+.overview-holding-symbol {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.overview-holding dl {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr 1.2fr 1fr;
+  gap: 12px;
+  margin: 0;
+}
+.overview-holding dt {
+  color: var(--text-muted);
+  font-size: 10px;
+  margin-bottom: 6px;
+}
+.overview-holding dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+.overview-empty p {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+@media (max-width: 1000px) {
+  .overview-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px 20px;
+  }
+}
+@media (max-width: 760px) {
+  .overview-page {
+    gap: 18px;
+  }
+  .overview-hero {
+    padding: 22px;
+  }
+  .overview-secondary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+  .overview-period-result {
+    gap: 12px;
+  }
+  .overview-period-result b {
+    font-size: 19px;
+  }
+  .overview-hero-bottom {
+    gap: 14px;
+  }
+  .overview-page .benchmark-selector {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .overview-chart-legend small {
+    margin-left: 0;
+  }
+  .overview-insights li {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+  }
+  .overview-insights li > b {
+    grid-column: 2;
+  }
+  .overview-holding {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .overview-holding dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .overview-holding dd {
+    font-size: 14px;
+  }
+}
+@media (max-width: 350px) {
+  .overview-hero {
+    padding: 18px;
+  }
+  .overview-value {
+    font-size: 30px;
+  }
+  .overview-metric > strong {
+    font-size: 23px;
+  }
+  .overview-period-result b {
+    font-size: 17px;
+  }
+}
+.overview-key-metrics .chart-periods {
+  min-width: 168px;
+  margin: 0;
+}
+.overview-key-metrics .chart-periods button {
+  padding: 0 12px;
+}
