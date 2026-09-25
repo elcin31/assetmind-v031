@@ -24,7 +24,7 @@ import {
   positionReturn,
   returnAttribution,
 } from './attribution';
-import { concentration } from './lab';
+import { concentration, concentrationSummary } from './lab';
 import { annualRateToDaily, EPSILON, volatility } from './statistics';
 import { calculatePositions } from './positions';
 import { buildCurrentHoldingsRiskProxy } from './returns';
@@ -168,6 +168,9 @@ export function calculatePortfolioAnalytics(
   const weights = complete
     ? snapshot.positions.map((p) => p.marketValue! / snapshot.portfolioValue)
     : [];
+  const currentConcentration = complete
+    ? concentrationSummary(snapshot.positions.map(p => ({ symbol: p.symbol, weight: p.marketValue! / snapshot.portfolioValue, marketValue: p.marketValue! })))
+    : null;
   const currentRisk =
     matrix && complete
       ? riskContributions(symbols, weights, matrix.covariance)
@@ -324,6 +327,7 @@ export function calculatePortfolioAnalytics(
     currentRisk,
     averageCorrelation: matrix ? averageCorrelation(matrix.correlation) : null,
     concentration: complete ? concentration(weights) : null,
+    concentrationSummary: currentConcentration,
     benchmark: benchmarkResult,
     pnl,
     contributions,

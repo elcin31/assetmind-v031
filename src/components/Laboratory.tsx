@@ -4,7 +4,6 @@ import { useState } from 'react';
 import type { PortfolioSnapshot } from '../types';
 import type { AnalyticsController } from '../analytics/usePortfolioAnalytics';
 import { AnalyticsMetric, Formula } from './AnalyticsMetric';
-import { pct } from '../utils/analyticsFormat';
 import { PortfolioHistoryChart, PeriodSelector } from './PortfolioHistoryChart';
 import { MonthlyReturnsHeatmap } from './MonthlyReturnsHeatmap';
 import { DrawdownChart } from './DrawdownChart';
@@ -15,15 +14,17 @@ import { ScenariosPanel } from './ScenariosPanel';
 import { AnalyticsChart } from './AnalyticsChart';
 import { RiskHorizonSelector } from './RiskHorizonSelector';
 import { rollingMetric } from '../math/rolling';
+import { buildXRayInsights } from '../math/xrayInsights';
+import { numeric, pct } from '../utils/analyticsFormat';
 
 const tabs = [
+  { id: 'xray', label: 'X-Ray' },
   { id: 'performance', label: 'Доходность' },
   { id: 'risk', label: 'Риск' },
   { id: 'diversification', label: 'Диверсификация' },
+  { id: 'benchmark', label: 'Benchmark' },
   { id: 'attribution', label: 'Атрибуция' },
   { id: 'scenarios', label: 'Сценарии' },
-  { id: 'benchmark', label: 'Рынок' },
-  { id: 'data', label: 'Данные' },
 ];
 
 export function Laboratory({
@@ -33,7 +34,7 @@ export function Laboratory({
   snapshot: PortfolioSnapshot;
   controller: AnalyticsController;
 }) {
-  const [tab, setTab] = useState('performance');
+  const [tab, setTab] = useState('xray');
   const [volWindow, setVolWindow] = useState(20);
   const [sharpeWindow, setSharpeWindow] = useState(63);
   const a = c.analytics;
@@ -58,14 +59,30 @@ export function Laboratory({
     : !a.matrix
       ? matrixReason
       : 'Вклад в риск математически не определён: portfolio variance должна быть положительной.';
+  const weights = snapshot.positions.map(p => ({
+    symbol: p.symbol,
+    weight: a.details[p.symbol]?.weight ?? null,
+    riskContribution: a.currentRisk?.contributions.find(item => item.symbol === p.symbol)?.fraction ?? null,
+    marketValue: p.marketValue,
+  })).sort((x, y) => (y.weight ?? -1) - (x.weight ?? -1));
+  const concentrationStats = a.concentrationSummary;
+  const observations = buildXRayInsights({
+    positions: weights,
+    averagePairwiseCorrelation: a.averageCorrelation,
+    currentDrawdown: a.drawdown?.current ?? null,
+    maxDrawdown: a.drawdown?.max ?? null,
+    commonObservations: a.riskMatrix.commonObservations,
+    requiredObservations: a.riskMatrix.required,
+  });
+  const money = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? 'Недостаточно данных' : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: snapshot.portfolio.base_currency, maximumFractionDigits: 0 }).format(value);
 
   return (
     <>
       <section className="lab-intro">
         <div>
           <span className="eyebrow">АНАЛИТИКА ПОРТФЕЛЯ</span>
-          <h2>Аналитика</h2>
-          <p>Результат, источники риска и сценарии.</p>
+          <h2>Laboratory</h2>
+          <p>Исследовательский центр структуры, доходности и риска портфеля.</p>
         </div>
       </section>
       <div className="lab-tabs" role="group" aria-label="Раздел аналитики">
@@ -110,7 +127,7 @@ export function Laboratory({
         </label>
       </div>
 
-      {(tab === 'risk' || tab === 'diversification') && (
+      {(tab === 'risk' || tab === 'diversification' || tab === 'xray') && (
         <div className="section-heading">
           <div>
             <h2>Risk Horizon</h2>
@@ -120,6 +137,41 @@ export function Laboratory({
         </div>
       )}
       {(tab === 'attribution' || tab === 'benchmark') && <PeriodSelector controller={c} />}
+
+      {tab === 'xray' && <>
+        <section className="xray-summary">
+          <div className="xray-summary-main"><span className="eyebrow">PORTFOLIO X-RAY</span><h2>Портфель под микроскопом</h2><p>{snapshot.positions.length} открытых позиций · данные на {new Date().toLocaleDateString('ru-RU')}</p><strong>{snapshot.valuation.complete ? money(snapshot.accountValue ?? snapshot.portfolioValue) : 'Недостаточно данных'}</strong><small>Стоимость портфеля</small></div>
+          <div className="xray-summary-metrics">
+            <XRayMetric label="Total Return / TWR" value={a.performance.twr} percent reason={a.performance.reason} formula="TWR = ∏(1 + rₜ) − 1" sample={sample} />
+            <XRayMetric label="Волатильность" value={a.risk.volatility} percent reason={a.riskReason} formula="σ annual = stdev(r) × √252" sample={a.riskSample} />
+            <XRayMetric label="Sharpe Ratio" value={a.risk.sharpe} reason={a.riskReason} formula="(252 × mean(r) − Rf) / σ annual" sample={a.riskSample} />
+            <XRayMetric label="Max Drawdown" value={a.drawdown?.max} percent reason={a.performance.reason} formula="min(Vₜ / max(V₀…Vₜ) − 1)" sample={sample} />
+            <XRayMetric label="Portfolio Beta" value={a.benchmark.beta} reason={a.benchmark.observations < 20 ? 'Недостаточно общих наблюдений с benchmark.' : null} formula="Cov(rₚ, rᵦ) / Var(rᵦ)" sample={`${a.benchmark.observations} benchmark observations`} />
+            <XRayMetric label="Diversification Ratio" value={a.currentRisk?.diversificationRatio} reason={currentRiskReason} formula="Σ(wᵢ × σᵢ) / σₚ" sample={a.matrixSample} />
+            <XRayMetric label="Effective Holdings" value={a.concentration?.effectivePositions} reason={!a.concentration ? 'Нужны полные текущие рыночные веса.' : null} formula="1 / Σ(wᵢ²)" sample="Текущие рыночные веса" />
+          </div>
+        </section>
+        <section className="xray-grid">
+          <article className="card xray-concentration"><div className="section-heading"><div><h2>Концентрация портфеля</h2><p className="caption">Текущие позиции, отсортированные по рыночному весу.</p></div><span className="tag">{weights.length} позиций</span></div>
+            {!snapshot.valuation.complete && <p className="notice">Для точных весов нужны текущие котировки всех открытых позиций.</p>}
+            <div className="xray-highlights"><div><span>Largest Position</span><b>{concentrationStats?.largestPositionWeight == null ? 'Недостаточно данных' : pct(concentrationStats.largestPositionWeight)}</b></div><div><span>Top 3 Weight</span><b>{concentrationStats ? pct(concentrationStats.top3Weight) : 'Недостаточно данных'}</b></div><div><span>Top 5 Weight</span><b>{concentrationStats ? pct(concentrationStats.top5Weight) : 'Недостаточно данных'}</b></div><div><span>HHI</span><b>{concentrationStats?.hhi == null ? 'Недостаточно данных' : concentrationStats.hhi.toFixed(3)}</b></div></div>
+            <div className="xray-bars">{weights.map(p => <div className="xray-bar-row" key={p.symbol}><b>{p.symbol}</b><div className="xray-bar-track"><i style={{ width: `${Math.max(0, Math.min(100, (p.weight ?? 0) * 100))}%` }} /></div><span>{p.weight == null ? '—' : `${(p.weight * 100).toFixed(1)}%`}</span><small>{money(p.marketValue)}</small></div>)}</div>
+            <Formula name="HHI и эффективное число позиций" formula="HHI = Σ(wᵢ²) · Effective Holdings = 1 / HHI">Рассчитано по нормированным текущим рыночным весам. HHI близкий к 1 означает большую концентрацию.</Formula>
+          </article>
+          <article className="card"><div className="section-heading"><div><h2>Структура риска</h2><p className="caption">Вес капитала сравнивается с долей портфельной variance.</p></div><span className="tag">{c.riskHorizon}</span></div>
+            {!a.currentRisk && <p className="notice">{currentRiskReason}</p>}
+            {a.currentRisk && <div className="xray-risk-list">{weights.map(p => { const rc = p.riskContribution; return <div className="xray-risk-row" key={p.symbol}><b>{p.symbol}</b><span>Вес <strong>{p.weight == null ? '—' : pct(p.weight)}</strong></span><span>Риск <strong>{rc == null ? '—' : pct(rc)}</strong></span><div className="xray-risk-bars"><i style={{ width: `${p.weight == null ? 0 : Math.min(100, Math.max(0, p.weight * 100))}%` }} /><i style={{ width: `${rc == null ? 0 : Math.min(100, Math.max(0, rc * 100))}%` }} /></div></div> })}</div>}
+            <p className="caption">Синий — вес; фиолетовый — вклад в variance. Данные: {a.matrixSample}.</p>
+          </article>
+            <article className="card"><h2>Диверсификация</h2><div className="xray-diversification"><div><span>Number of Holdings</span><b>{snapshot.positions.length}</b></div><div><span>Effective Holdings</span><b>{a.concentration?.effectivePositions?.toFixed(1) ?? 'Недостаточно данных'}</b></div><div><span>Средняя корреляция</span><b>{a.averageCorrelation == null ? 'Недостаточно данных' : a.averageCorrelation.toFixed(2)}</b></div><div><span>Portfolio Volatility</span><b>{a.currentRisk?.volatility == null ? 'Недостаточно данных' : pct(a.currentRisk.volatility)}</b></div><div><span>Weighted Asset Volatility</span><b>{a.currentRisk?.weightedAverageAssetVolatility == null ? 'Недостаточно данных' : pct(a.currentRisk.weightedAverageAssetVolatility)}</b></div><div><span>Risk Horizon</span><b>{c.riskHorizon}</b></div></div>
+            <Formula name="Diversification Ratio" formula="DR = Σ(wᵢ × σᵢ) / σₚ">Веса и annualized volatility берутся из одного выбранного окна {c.riskHorizon}; covariance использует общий набор наблюдений.</Formula>
+          </article>
+          <article className="card"><div className="section-heading"><div><h2>Ключевые наблюдения</h2><p className="caption">Факты, рассчитанные по текущим данным портфеля.</p></div><span className="tag">Deterministic</span></div>
+            {observations.length ? <ul className="xray-observations">{observations.map(item => <li key={item.id} data-severity={item.severity}><span>{item.title}</span><p>{item.message}</p></li>)}</ul> : <p className="caption">Пороговые наблюдения не выявлены либо данных пока недостаточно.</p>}
+          </article>
+          <DataQualityPanel snapshot={snapshot} controller={c} />
+        </section>
+      </>}
 
       {tab === 'performance' && a.performance.reason && !c.loading && (
         <p className="notice">{a.performance.reason}</p>
@@ -306,8 +358,12 @@ export function Laboratory({
       )}
       {tab === 'attribution' && <AttributionPanel analytics={a} currency={snapshot.portfolio.base_currency} />}
       {tab === 'scenarios' && <ScenariosPanel snapshot={snapshot} />}
-      {tab === 'data' && <DataQualityPanel snapshot={snapshot} controller={c} />}
       {tab === 'benchmark' && <BenchmarkPanel controller={c} detailed />}
     </>
   );
+}
+
+function XRayMetric({ label, value, percent = false, reason, formula, sample }: { label: string; value: number | null | undefined; percent?: boolean; reason?: string | null; formula: string; sample: string }) {
+  const display = value == null || !Number.isFinite(value) ? 'Недостаточно данных' : percent ? pct(value) : numeric(value);
+  return <div className="xray-summary-metric"><span>{label}<Formula name={label} formula={formula}>{reason ?? 'Метрика рассчитана из существующего analytics layer.'} Данные: {sample}.</Formula></span><b title={value == null ? reason ?? undefined : undefined}>{display}</b></div>;
 }

@@ -51,5 +51,8 @@ export function riskContributions(
     weights.reduce((sum, w, i) => sum + w * Math.sqrt(matrix[i][i]), 0) /
       volatility,
   );
-  return { volatility, variance, contributions, diversificationRatio };
+  const weightedAverageAssetVolatility = finite(
+    weights.reduce((sum, w, i) => sum + w * Math.sqrt(matrix[i][i]), 0),
+  );
+  return { volatility, variance, contributions, diversificationRatio, weightedAverageAssetVolatility };
 }
