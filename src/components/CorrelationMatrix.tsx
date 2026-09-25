@@ -15,9 +15,9 @@ export function CorrelationMatrix({
       <h2>Корреляция активов</h2>
       {loading ? (
         <p className="empty">Загрузка…</p>
-      ) : !matrix ? (
+      ) : !matrix || matrix.symbols.length < 2 ? (
         <p className="notice">
-          {reason ?? "Матрица недоступна для выбранного Risk Horizon."}
+          {matrix?.symbols.length === 1 ? 'Correlation matrix requires at least two holdings.' : reason ?? "Матрица недоступна для выбранного Risk Horizon."}
         </p>
       ) : (
         <>
@@ -43,6 +43,7 @@ export function CorrelationMatrix({
                     {matrix.correlation[i].map((v, j) => (
                       <td
                         key={j}
+                        title={`${s} / ${matrix.symbols[j]} · ρ ${numeric(v)} · ${matrix.observations} observations`}
                         style={{
                           background: `color-mix(in srgb, var(--${v >= 0 ? "accent" : "negative"}) ${10 + Math.abs(v) * 40}%, transparent)`,
                         }}
@@ -86,7 +87,7 @@ export function CorrelationMatrix({
         name="Общая выборка"
         formula="ρᵢⱼ = Cov(Rᵢ,Rⱼ)/(σᵢσⱼ); Σ_ann = Cov_sample × 252"
       >
-        {matrix ? (
+        {matrix && matrix.symbols.length > 1 ? (
           <>
             Текущий состав, {matrix.observations} общих интервалов. Совпадают
             начальная и конечная даты доходностей. Ковариация в квадрате десятичной

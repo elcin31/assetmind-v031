@@ -109,6 +109,26 @@ export const definitions = {
     'Π(1 + Rm) − 1',
     'Adjusted-close return benchmark на той же непрерывной цепочке интервалов.',
   ],
+  activeReturn: [
+    'Active Return',
+    'Rₚ − Rᵦ',
+    'Разница между доходностью портфеля и benchmark за один общий непрерывный период. Не annualized; не является прогнозом будущего результата.',
+  ],
+  benchmarkCorrelation: [
+    'Correlation with Benchmark',
+    'Corr(Rₚ, Rᵦ)',
+    'Pearson correlation на строго общих интервалах доходности портфеля и выбранного benchmark.',
+  ],
+  upsideCapture: [
+    'Upside Capture',
+    'Rₚ | Rᵦ > 0 / Rᵦ | Rᵦ > 0',
+    'Накопленная доходность портфеля относительно benchmark только на общих интервалах с положительной benchmark доходностью. Требуются минимум 20 таких интервалов.',
+  ],
+  downsideCapture: [
+    'Downside Capture',
+    'Rₚ | Rᵦ < 0 / Rᵦ | Rᵦ < 0',
+    'Накопленная доходность портфеля относительно benchmark только на общих интервалах с отрицательной benchmark доходностью. Требуются минимум 20 таких интервалов.',
+  ],
   diversificationRatio: [
     'Коэффициент диверсификации',
     'Σ(wᵢσᵢ) / √(wᵀΣw)',
@@ -133,6 +153,36 @@ export const definitions = {
     'Риск текущего состава · год',
     'σp = √(wᵀΣ_ann w)',
     'Ковариационная модель с текущими рыночными весами и минимум 20 общими return-интервалами; не фактическая transaction-aware доходность.',
+  ],
+  pnlContribution: [
+    'P&L contribution',
+    'Realized P&L + Unrealized P&L',
+    'Денежный результат позиции за всё время операций на существующей Weighted Average Cost модели. Не равен процентному return contribution.',
+  ],
+  returnContribution: [
+    'Return Contribution',
+    'Cᵢ = Σₜ Wₜ₋₁wᵢ,ₜ₋₁rᵢ,ₜ',
+    'Связанный вклад позиции в доходность выбранного периода. Доступен только при восстановимых начальных весах и непрерывных общих позиционных returns; неизвестные сделки и cash flows не моделируются.',
+  ],
+  stressImpact: [
+    'Stress Impact',
+    'ΔV = Σᵢ(Vᵢ × shockᵢ); Impact% = Σᵢ(wᵢ × shockᵢ)',
+    'Линейная гипотетическая переоценка текущих позиций. Не прогнозирует рынок и не учитывает ликвидность, динамику весов или изменение корреляций.',
+  ],
+  historicalReplay: [
+    'Current Holdings Historical Scenario Replay',
+    'Rₚ,ₜ = Σᵢ(wᵢ,today × rᵢ,ₜ)',
+    'Текущие веса применяются к общим историческим доходностям активов; реальные исторические transaction quantities игнорируются. Это сценарный proxy, а не фактическая доходность transaction-aware портфеля.',
+  ],
+  whatIfVolatility: [
+    'What-if volatility',
+    '√(w_scenarioᵀΣ_window w_scenario)',
+    'Текущая общая covariance matrix переоценивается с временными long-only scenario weights. Корреляции и историческая выборка при редактировании весов не изменяются.',
+  ],
+  efficientFrontier: [
+    'Efficient Frontier · historical',
+    'min wᵀΣw − λμᵀw; wᵢ≥0; Σwᵢ=1',
+    'Детерминированная численная аппроксимация feasible long-only портфелей по историческим mean returns и covariance. Для near-singular Σ применяется минимальный diagonal ε, начиная с max(1e−12, max(diag(Σ))×1e−8). Maximum Historical Sharpe выбирается среди рассчитанных точек/вершин; это не непрерывная глобальная гарантия и не прогноз доходности.',
   ],
 } as const;
 

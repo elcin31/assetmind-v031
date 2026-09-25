@@ -7,6 +7,10 @@ export interface HistoricalStressWindow {
   endDate: string;
 }
 
+export interface HistoricalReplayWindow extends HistoricalStressWindow {
+  observations: number;
+}
+
 function validReturn(item: DatedReturn) {
   return Number.isFinite(item.value) && item.value >= -1 && /^\d{4}-\d{2}-\d{2}$/.test(item.date) && /^\d{4}-\d{2}-\d{2}$/.test(item.startDate) && item.startDate < item.date;
 }
@@ -45,4 +49,33 @@ export function historicalStressWindows(
     if (worst) result.push(worst);
   }
   return result;
+}
+
+/**
+ * Current Holdings Historical Scenario Replay. Applies today's long-only
+ * weights to strictly common historical asset return intervals. This is not
+ * transaction-aware portfolio performance and does not use historical units.
+ */
+export function currentWeightsHistoricalReplay(
+  symbols: string[],
+  weights: number[],
+  assetReturns: DatedReturn[][],
+  windows: number[] = [1, 5, 20, 63, 252],
+): HistoricalReplayWindow[] {
+  if (!symbols.length || symbols.length !== weights.length || assetReturns.length !== symbols.length ||
+      new Set(symbols).size !== symbols.length || weights.some((weight) => !Number.isFinite(weight) || weight < 0) ||
+      Math.abs(weights.reduce((sum, weight) => sum + weight, 0) - 1) > 1e-8 ||
+      assetReturns.some((series) => series.some((item, index) => !validReturn(item) || (index > 0 && item.date <= series[index - 1].date)))) return [];
+  const maps = assetReturns.map((series) => new Map(series.map((item) => [`${item.startDate}/${item.date}`, item])));
+  const commonIntervals = [...(maps[0]?.keys() ?? [])].filter((key) => maps.every((map) => map.has(key))).sort((left, right) => {
+    const [, leftEnd] = left.split('/'); const [, rightEnd] = right.split('/');
+    return leftEnd.localeCompare(rightEnd);
+  });
+  const portfolioReturns = commonIntervals.map((key) => {
+    const interval = maps[0].get(key)!;
+    const value = weights.reduce((sum, weight, index) => sum + weight * maps[index].get(key)!.value, 0);
+    return Number.isFinite(value) && value >= -1 ? { ...interval, value } : null;
+  });
+  if (portfolioReturns.some((item) => item === null)) return [];
+  return historicalStressWindows(portfolioReturns as DatedReturn[], windows).map((item) => ({ ...item, observations: item.window }));
 }

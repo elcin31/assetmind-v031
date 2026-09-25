@@ -1,5 +1,8 @@
 import type { BenchmarkMetrics, DatedReturn } from '../types/analytics';
 import { cumulativeReturn } from './performance';
+import { correlation } from './correlation';
+import { alignReturns } from './returnAlignment';
+export { alignReturns } from './returnAlignment';
 import {
   annualRateToDaily,
   covariance,
@@ -8,37 +11,8 @@ import {
   mean,
   MIN_OBSERVATIONS,
   safeRatio,
-  validDate,
   volatility,
 } from './statistics';
-
-export function alignReturns(a: DatedReturn[], b: DatedReturn[]) {
-  const clean = (rs: DatedReturn[]) =>
-    rs.every(
-      (r, i) =>
-        validDate(r.date) &&
-        validDate(r.startDate) &&
-        r.startDate < r.date &&
-        Number.isFinite(r.value) &&
-        r.value >= -1 &&
-        (i === 0 || r.date > rs[i - 1].date),
-    );
-  if (!clean(a) || !clean(b)) return [];
-  const map = new Map(b.map((r) => [`${r.startDate}/${r.date}`, r]));
-  return a.flatMap((r) => {
-    const other = map.get(`${r.startDate}/${r.date}`);
-    return other
-      ? [
-          {
-            date: r.date,
-            startDate: r.startDate,
-            portfolio: r.value,
-            benchmark: other.value,
-          },
-        ]
-      : [];
-  });
-}
 
 export function benchmarkMetrics(
   portfolio: DatedReturn[],
@@ -50,7 +24,7 @@ export function benchmarkMetrics(
   const b = aligned.map((r) => r.benchmark);
   const variance = covariance(b, b);
   const beta =
-    variance !== null && variance > EPSILON
+    aligned.length >= MIN_OBSERVATIONS && variance !== null && variance > EPSILON
       ? safeRatio(covariance(p, b), variance)
       : null;
   const pm = mean(p);
@@ -59,7 +33,7 @@ export function benchmarkMetrics(
   const active = p.map((r, i) => r - b[i]);
   const trackingError = volatility(active);
   const alpha =
-    beta === null || pm === null || bm === null || dailyRf === null
+    aligned.length < MIN_OBSERVATIONS || beta === null || pm === null || bm === null || dailyRf === null
       ? null
       : finite((pm - dailyRf - beta * (bm - dailyRf)) * 252);
   const averageActive = mean(active);
@@ -67,6 +41,16 @@ export function benchmarkMetrics(
     averageActive === null
       ? null
       : safeRatio(averageActive * 252, trackingError);
+  const correlationValue = correlation(p, b);
+  const capture = (upside: boolean) => {
+    const selected = aligned.filter(r => upside ? r.benchmark > 0 : r.benchmark < 0);
+    if (selected.length < MIN_OBSERVATIONS) return null;
+    const portfolioReturn = cumulativeReturn(selected.map(r => r.portfolio));
+    const benchmarkReturn = cumulativeReturn(selected.map(r => r.benchmark));
+    return portfolioReturn === null || benchmarkReturn === null || Math.abs(benchmarkReturn) <= EPSILON
+      ? null
+      : finite(portfolioReturn / benchmarkReturn);
+  };
 
   // Cumulative benchmark comparison is only valid across a continuous chain.
   // Regression/risk statistics may still use clean aligned fragments.
@@ -92,14 +76,20 @@ export function benchmarkMetrics(
     ? comparison
     : [];
 
+  const portfolioReturn = continuous ? cumulativeReturn(p) : null;
+  const benchmarkReturn = continuous ? cumulativeReturn(b) : null;
   return {
     beta,
     alpha,
     trackingError: p.length >= MIN_OBSERVATIONS ? trackingError : null,
     informationRatio:
       p.length >= MIN_OBSERVATIONS ? informationRatio : null,
-    portfolioReturn: continuous ? cumulativeReturn(p) : null,
-    benchmarkReturn: continuous ? cumulativeReturn(b) : null,
+    portfolioReturn,
+    benchmarkReturn,
+    activeReturn: portfolioReturn !== null && benchmarkReturn !== null ? finite(portfolioReturn - benchmarkReturn) : null,
+    correlation: p.length >= MIN_OBSERVATIONS ? correlationValue : null,
+    upsideCapture: capture(true),
+    downsideCapture: capture(false),
     observations: aligned.length,
     comparison: safeComparison,
   };

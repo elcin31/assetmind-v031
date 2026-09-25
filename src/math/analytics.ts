@@ -9,6 +9,7 @@ import {
   historyReadouts,
 } from './performance';
 import { drawdowns } from './drawdown';
+import { rollingMetric, rollingPairMetric } from './rolling';
 import { downsideDeviation } from './downside';
 import {
   calmarRatio,
@@ -24,10 +25,11 @@ import {
   positionReturn,
   returnAttribution,
 } from './attribution';
-import { concentration } from './lab';
+import { concentration, concentrationSummary } from './lab';
 import { annualRateToDaily, EPSILON, volatility } from './statistics';
 import { calculatePositions } from './positions';
 import { buildCurrentHoldingsRiskProxy } from './returns';
+import { currentWeightsHistoricalReplay } from './historicalStress';
 import {
   HISTORICAL_TAIL_MIN_OBSERVATIONS,
   buildRiskReturnMatrix,
@@ -168,10 +170,20 @@ export function calculatePortfolioAnalytics(
   const weights = complete
     ? snapshot.positions.map((p) => p.marketValue! / snapshot.portfolioValue)
     : [];
+  const currentConcentration = complete
+    ? concentrationSummary(snapshot.positions.map(p => ({ symbol: p.symbol, weight: p.marketValue! / snapshot.portfolioValue, marketValue: p.marketValue! })))
+    : null;
   const currentRisk =
     matrix && complete
       ? riskContributions(symbols, weights, matrix.covariance)
       : null;
+  const historicalReplay = complete && symbols.length > 0
+    ? currentWeightsHistoricalReplay(
+        symbols,
+        weights,
+        symbols.map((symbol) => datedReturns(clean.get(symbol) ?? [])),
+      )
+    : [];
 
   // Proxy always starts from full available adjusted history; only current-risk
   // metrics use the selected horizon. This remains explicitly a current-holdings
@@ -194,6 +206,21 @@ export function calculatePortfolioAnalytics(
     benchmarkReturns,
     rf,
   );
+  const relativeDrawdown = benchmarkResult.comparison.length > 0 && benchmarkResult.comparison.every(point => Number.isFinite(point.portfolio) && Number.isFinite(point.benchmark) && point.benchmark > EPSILON)
+    ? drawdowns(benchmarkResult.comparison.map(point => ({ date: point.date, value: point.portfolio / point.benchmark })))
+    : null;
+  const benchmarkRiskWindow = selectRiskWindow(datedReturns(clean.get(benchmark) ?? []), riskHorizon);
+  const currentBenchmarkRisk = benchmarkMetrics(
+    actualRiskWindow.available ? actualRiskWindow.returns : [],
+    benchmarkRiskWindow.available ? benchmarkRiskWindow.returns : [],
+    rf,
+  );
+  const rolling = {
+    volatility: Object.fromEntries([20, 60, 252].map(window => [window, rollingMetric(performance.riskReturns, window, 'volatility')])),
+    sharpe: Object.fromEntries([20, 60, 252].map(window => [window, rollingMetric(performance.riskReturns, window, 'sharpe', rf)])),
+    beta: Object.fromEntries([20, 60, 252].map(window => [window, rollingPairMetric(performance.riskReturns, benchmarkReturns, window, 'beta')])),
+    correlation: Object.fromEntries([20, 60, 252].map(window => [window, rollingPairMetric(performance.riskReturns, benchmarkReturns, window, 'correlation')])),
+  };
 
   // P&L is lifetime. Return attribution remains deliberately narrower than the
   // new account-level TWR: it is only valid while holdings stay unchanged and
@@ -300,7 +327,7 @@ export function calculatePortfolioAnalytics(
           ).beta,
           riskContribution:
             currentRisk?.contributions.find((c) => c.symbol === p.symbol)
-              ?.fraction ?? null,
+              ?.normalizedRC ?? null,
         },
       ];
     }),
@@ -324,10 +351,33 @@ export function calculatePortfolioAnalytics(
     currentRisk,
     averageCorrelation: matrix ? averageCorrelation(matrix.correlation) : null,
     concentration: complete ? concentration(weights) : null,
+    concentrationSummary: currentConcentration,
     benchmark: benchmarkResult,
+    relativeDrawdown,
+    currentBenchmarkRisk,
+    whatIfBenchmarkReturns: benchmarkRiskWindow.available ? benchmarkRiskWindow.returns : [],
+    historicalReplay,
+    rolling,
     pnl,
     contributions,
+    contributionReason: linked
+      ? null
+      : !first || !last
+        ? 'Нет непрерывного return-периода для атрибуции.'
+        : hasTradeAfterBaseline
+          ? 'В выбранном периоде есть BUY/SELL; веса позиций менялись, точный связанный вклад недоступен.'
+          : hasCashEventAfterBaseline
+            ? 'В выбранном периоде есть cash flow; позиционный return contribution не вычисляется.'
+            : !attributionEligible
+              ? 'Не удалось восстановить значения позиций на начало периода.'
+              : 'Недостаточно общих валидных return-интервалов для связанного вклада.',
     details,
+    dataQuality: {
+      latestPriceDate: [...clean.values()].flatMap((bars) => bars.map((bar) => bar.date)).sort().at(-1) ?? null,
+      returnObservations: performance.riskReturns.length,
+      commonObservations: riskMatrix.commonObservations,
+      benchmarkOverlap: currentBenchmarkRisk.observations,
+    },
     proxy: {
       ...proxy,
       riskWindow: proxyRiskWindow,

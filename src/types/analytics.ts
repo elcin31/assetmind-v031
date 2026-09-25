@@ -79,6 +79,15 @@ export interface CorrelationMatrix {
 export interface RiskContribution {
   symbol: string;
   weight: number;
+  /** Marginal contribution to portfolio volatility: (Σw)i / σp. */
+  mcr: number;
+  /** Absolute contribution to portfolio volatility: wi × MCRi. */
+  rc: number;
+  /** Normalized RC as a fraction of portfolio volatility; sums to 1. */
+  normalizedRC: number;
+  /** Normalized risk contribution divided by capital weight. */
+  riskWeightRatio: number | null;
+  assetVolatility: number;
   /** Marginal contribution to variance: (Σw)i. */
   marginal: number;
   /** Absolute contribution to variance: wi(Σw)i. */
@@ -93,6 +102,10 @@ export interface BenchmarkMetrics {
   informationRatio: number | null;
   portfolioReturn: number | null;
   benchmarkReturn: number | null;
+  activeReturn: number | null;
+  correlation: number | null;
+  upsideCapture: number | null;
+  downsideCapture: number | null;
   observations: number;
   comparison: { date: string; portfolio: number; benchmark: number }[];
 }

@@ -21,12 +21,20 @@ export function riskContributions(
       0,
     );
     const absolute = weight * marginal;
+    const fraction = absolute / variance;
+    const mcr = marginal / volatility;
+    const rc = weight * mcr;
     return {
       symbol: symbols[i],
       weight,
+      assetVolatility: Math.sqrt(matrix[i][i]),
+      mcr,
+      rc,
+      normalizedRC: fraction,
+      riskWeightRatio: weight > EPSILON ? fraction / weight : null,
       marginal,
       absolute,
-      fraction: absolute / variance,
+      fraction,
     };
   });
   if (
@@ -34,15 +42,21 @@ export function riskContributions(
       (c) =>
         !Number.isFinite(c.fraction) ||
         !Number.isFinite(c.absolute) ||
-        !Number.isFinite(c.marginal),
+        !Number.isFinite(c.marginal) ||
+        !Number.isFinite(c.mcr) ||
+        !Number.isFinite(c.rc) ||
+        !Number.isFinite(c.assetVolatility) ||
+        (c.riskWeightRatio !== null && !Number.isFinite(c.riskWeightRatio)),
     )
   )
     return null;
 
   const absoluteSum = contributions.reduce((sum, c) => sum + c.absolute, 0);
+  const volatilityContributionSum = contributions.reduce((sum, c) => sum + c.rc, 0);
   const fractionSum = contributions.reduce((sum, c) => sum + c.fraction, 0);
   if (
     Math.abs(absoluteSum - variance) > Math.max(EPSILON, variance * 1e-8) ||
+    Math.abs(volatilityContributionSum - volatility) > Math.max(EPSILON, volatility * 1e-8) ||
     Math.abs(fractionSum - 1) > 1e-8
   )
     return null;
@@ -51,5 +65,22 @@ export function riskContributions(
     weights.reduce((sum, w, i) => sum + w * Math.sqrt(matrix[i][i]), 0) /
       volatility,
   );
-  return { volatility, variance, contributions, diversificationRatio };
+  const weightedAverageAssetVolatility = finite(
+    weights.reduce((sum, w, i) => sum + w * Math.sqrt(matrix[i][i]), 0),
+  );
+  const normalizedRiskContributionSum = contributions.reduce((sum, c) => sum + c.normalizedRC, 0);
+  const riskConcentration = finite(contributions.reduce((sum, c) => sum + c.normalizedRC ** 2, 0));
+  if (Math.abs(normalizedRiskContributionSum - 1) > 1e-8 || riskConcentration === null) return null;
+  const rankedContributions = [...contributions].sort((a, b) => b.normalizedRC - a.normalizedRC);
+  return {
+    volatility,
+    variance,
+    contributions,
+    diversificationRatio,
+    weightedAverageAssetVolatility,
+    normalizedRiskContributionSum,
+    riskConcentration,
+    largestRiskContributor: rankedContributions[0] ? { symbol: rankedContributions[0].symbol, contribution: rankedContributions[0].normalizedRC } : null,
+    top3RiskContribution: rankedContributions.slice(0, 3).reduce((sum, item) => sum + item.normalizedRC, 0),
+  };
 }

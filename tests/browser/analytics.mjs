@@ -104,7 +104,9 @@ try {
           status: 502,
           json: { code: "PROVIDER_UNAVAILABLE" },
         });
-      const bars = histories.get(symbol) || [];
+      let bars = histories.get(symbol) || [];
+      if (mode === "insufficient") bars = bars.slice(0, 15);
+      if (mode === "flat") bars = bars.map(bar => ({ ...bar, close: 100 }));
       return route.fulfill({
         json: {
           symbol,
@@ -186,23 +188,34 @@ try {
       .getByRole("button", { name: "Аналитика", exact: true })
       .click();
     for (const name of [
+      "X-Ray",
       "Доходность",
       "Риск",
       "Диверсификация",
+      "Benchmark",
       "Атрибуция",
       "Сценарии",
-      "Рынок",
-      "Данные",
     ]) {
       await page.getByRole("button", { name, exact: true }).click();
-      assert(
-        await page.evaluate(
-          () => document.documentElement.scrollWidth <= innerWidth + 1,
-        ),
-        `${name} ${width}: no overflow`,
-      );
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
+      const offenders = overflow ? await page.evaluate(() => [...document.querySelectorAll('.attribution-table-scroll,.attribution-table-scroll *')].filter((element) => element.getBoundingClientRect().right > innerWidth + 1).slice(0,8).map((element) => ({ tag: element.tagName, className: typeof element.className === 'string' ? element.className : 'svg', right: Math.round(element.getBoundingClientRect().right), width: Math.round(element.getBoundingClientRect().width), parentWidth: Math.round(element.parentElement.getBoundingClientRect().width), parentOverflow: getComputedStyle(element.parentElement).overflowX, ownOverflow: getComputedStyle(element).overflowX }))) : [];
+      assert(!overflow, `${name} ${width}: no overflow ${JSON.stringify(offenders)}`);
       assert(!/NaN|Infinity/.test(await page.locator("body").innerText()));
     }
+    await page.getByRole("button", { name: "X-Ray", exact: true }).click();
+    await page.getByRole("heading", { name: "Портфель под микроскопом", exact: true }).waitFor();
+    assert.equal(await page.locator(".data-quality-card").count(), 1);
+    assert((await page.locator(".xray-summary").innerText()).includes("Total Return / TWR"));
+    await page.getByRole("button", { name: "Риск", exact: true }).click();
+    await page.getByRole("heading", { name: "Risk Budget", exact: true }).waitFor();
+    assert.equal(await page.locator(".risk-budget-row").count(), 7);
+    assert((await page.locator(".risk-budget-summary").innerText()).includes("Largest Risk Contributor"));
+    await page.getByRole("button", { name: "Диверсификация", exact: true }).click();
+    await page.getByRole("heading", { name: "Correlation Explorer", exact: true }).waitFor();
+    assert.equal(await page.locator(".heatmap tbody tr").count(), 7);
+    await page.getByRole("button", { name: "Benchmark", exact: true }).click();
+    await page.getByRole("heading", { name: "Портфель и рынок", exact: true }).waitFor();
+    assert((await page.locator(".benchmark-rolling").innerText()).includes("Rolling Beta"));
     await page.getByRole("button", { name: "Обзор", exact: true }).click();
     await page
       .getByRole("button", { name: "Все активы →", exact: true })
@@ -217,6 +230,27 @@ try {
         "navigation does not cover content",
       );
   }
+  await page.getByRole("button", { name: "Аналитика", exact: true }).click();
+  await page.getByRole("button", { name: "Атрибуция", exact: true }).click();
+  await page.getByRole("heading", { name: "Attribution Overview", exact: true }).waitFor();
+  assert.equal(await page.locator(".attribution-table tbody tr").count(), 7);
+  await page.getByRole("button", { name: "Сценарии", exact: true }).click();
+  await page.getByRole("button", { name: "Stress Test", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Historical Replay", exact: true }).click();
+  await page.getByRole("heading", { name: "Current Holdings Historical Scenario Replay", exact: true }).waitFor();
+  assert((await page.locator("body").innerText()).includes("не transaction-aware historical portfolio return"));
+  await page.getByRole("button", { name: "What-if Portfolio", exact: true }).click();
+  await page.getByRole("heading", { name: "Current vs Scenario", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Normalize Weights", exact: true }).click();
+  assert.match(await page.locator(".whatif-actions").innerText(), /100(?:[,.]0+)?%/);
+  await page.getByRole("button", { name: "Reset to Current Portfolio", exact: true }).click();
+  await page.getByRole("button", { name: "Efficient Frontier", exact: true }).click();
+  await page.getByText("Long-only constraint:").waitFor();
+  assert((await page.locator("body").innerText()).includes("Maximum Historical Sharpe"));
+  await page.setViewportSize({ width: 320, height: 900 });
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Scenarios 320: no viewport overflow");
+  assert(!/NaN|Infinity/.test(await page.locator("body").innerText()), "Scenarios 320: finite values");
+  await page.getByRole("button", { name: "Обзор", exact: true }).click();
   for (const period of ["1M", "3M", "6M", "YTD", "1Y", "ALL"]) {
     await page
       .getByRole("group", { name: "Период аналитики", exact: true })
@@ -255,16 +289,18 @@ try {
     .waitFor();
   await page.getByRole("button", { name: "Аналитика", exact: true }).click();
   await page
-    .getByRole("heading", { name: "Capital & MWR", exact: true })
+    .getByRole("heading", { name: "Портфель под микроскопом", exact: true })
     .waitFor();
-  await page.getByRole("button", { name: "Данные", exact: true }).click();
+  await page.getByRole("button", { name: "X-Ray", exact: true }).click();
   assert.equal(await page.locator(".data-quality-card").count(), 1);
   await page.getByRole("button", { name: "Риск", exact: true }).click();
   assert((await page.locator("body").innerText()).includes("Sortino"));
-  await page.getByRole("button", { name: "Сценарии", exact: true }).click();
-  await page.getByLabel("Заполнить шоки сценарием").selectOption("broad");
-  assert.equal(await page.getByLabel("Шок AAPL, %").inputValue(), "-15");
-  await page.getByLabel("Шок AAPL, %").fill("-30");
+    await page.getByRole("button", { name: "Сценарии", exact: true }).click();
+  await page.getByLabel("Preset scenario").selectOption("broad");
+  assert.equal(await page.getByLabel("Shock AAPL, percent").inputValue(), "-10.0");
+  await page.getByLabel("Shock AAPL, percent").fill("-30");
+  assert((await page.locator(".stress-result").innerText()).includes("Portfolio Impact"));
+  assert((await page.locator(".stress-disclaimer").innerText()).includes("не прогноз"));
   await page.getByRole("button", { name: "Обзор", exact: true }).click();
   for (const [width, theme] of [
     [390, "light"],
@@ -280,11 +316,20 @@ try {
       path: `/tmp/overview-${width}-${theme}.png`,
       fullPage: true,
     });
+    await page.getByRole("button", { name: "Аналитика", exact: true }).click();
+    await page.getByRole("button", { name: "X-Ray", exact: true }).click();
+    await page.screenshot({ path: `/tmp/laboratory-xray-${width}-${theme}.png`, fullPage: true });
+    await page.getByRole("button", { name: "Риск", exact: true }).click();
+    await page.screenshot({ path: `/tmp/laboratory-risk-${width}-${theme}.png`, fullPage: true });
+    await page.getByRole("button", { name: "Обзор", exact: true }).click();
   }
   assert.deepEqual(current.errors, []);
   await current.context.close();
   for (const mode of [
     "empty",
+    "single",
+    "insufficient",
+    "flat",
     "incomplete",
     "benchmark",
     "history",
@@ -307,6 +352,23 @@ try {
         await test.page.getByTestId("portfolio-value").innerText(),
         "—",
       );
+    if (mode === "single") {
+      await test.page.getByRole("button", { name: "Аналитика", exact: true }).click();
+      await test.page.getByRole("button", { name: "Риск", exact: true }).click();
+      assert.equal(await test.page.locator(".risk-budget-row").count(), 1);
+      await test.page.getByRole("button", { name: "Диверсификация", exact: true }).click();
+      assert.equal(await test.page.locator(".heatmap tbody tr").count(), 0);
+      assert((await test.page.locator(".correlation-explorer").innerText()).includes("at least two holdings"));
+      await test.page.getByRole("button", { name: "Сценарии", exact: true }).click();
+      await test.page.getByRole("button", { name: "What-if Portfolio", exact: true }).click();
+      assert((await test.page.locator("body").innerText()).includes("Недостаточно данных"));
+    }
+    if (mode === "insufficient" || mode === "flat") {
+      await test.page.getByRole("button", { name: "Аналитика", exact: true }).click();
+      await test.page.getByRole("button", { name: "Риск", exact: true }).click();
+      assert.equal(await test.page.locator(".risk-budget-row").count(), 0, `${mode}: risk budget unavailable`);
+      assert(!/NaN|Infinity/.test(await test.page.locator("body").innerText()));
+    }
     if (["benchmark", "history", "trades"].includes(mode)) {
       assert.equal(
         await test.page.locator(".overview-performance svg").count(),

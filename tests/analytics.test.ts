@@ -34,7 +34,8 @@ import {
   returnAttribution,
 } from "../src/math/attribution";
 import { scenarioValue, scenarioPreset } from "../src/math/scenarios";
-import { rollingMetric } from "../src/math/rolling";
+import { rollingMetric, rollingPairMetric } from "../src/math/rolling";
+import { buildCorrelationExplorer } from "../src/math/correlationExplorer";
 
 const tx = (
   id: string,
@@ -208,6 +209,7 @@ describe("drawdown episodes", () => {
     const d = drawdowns(series([100, 90, 80, 100, 95, 98]));
     expect(d?.max).toBeCloseTo(-0.2);
     expect(d?.episodes).toHaveLength(2);
+    expect(d?.worstEpisodes?.[0]).toEqual(d?.episodes[0]);
     expect(d?.episodes[0]).toEqual({
       startDate: "2026-01-02",
       bottomDate: "2026-01-03",
@@ -283,6 +285,11 @@ describe("risk, correlation and covariance", () => {
       result.contributions.reduce((s, c) => s + c.fraction, 0),
     ).toBeCloseTo(1);
     expect(result.diversificationRatio).toBeCloseTo(0.24 / Math.sqrt(0.03168));
+    expect(result.contributions.reduce((sum, c) => sum + c.normalizedRC, 0)).toBeCloseTo(1);
+    expect(result.contributions.reduce((sum, c) => sum + c.rc, 0)).toBeCloseTo(result.volatility);
+    expect(result.normalizedRiskContributionSum).toBeCloseTo(1);
+    expect(result.riskConcentration).toBeGreaterThan(0);
+    expect(result.contributions[0].riskWeightRatio).not.toBeNull();
     expect(
       portfolioVariance(
         [1 / 3, 1 / 3, 1 / 3],
@@ -343,6 +350,40 @@ describe("risk, correlation and covariance", () => {
       rollingMetric(dated(rs), 252, "sharpe").every((p) => p.value === null),
     ).toBe(true);
   });
+
+  it("calculates rolling beta and correlation only from aligned contiguous windows", () => {
+    const portfolio = dated(rs);
+    const benchmark = dated(rs.map(value => value * 2));
+    const beta = rollingPairMetric(portfolio, benchmark, 20, 'beta');
+    const corr = rollingPairMetric(portfolio, benchmark, 20, 'correlation');
+    expect(beta[18]).toMatchObject({ value: null, observations: 0 });
+    expect(beta[19].value).toBeCloseTo(.5);
+    expect(corr[19].value).toBeCloseTo(1);
+    expect(rollingPairMetric(portfolio, benchmark.slice(0, 10), 20, 'beta').every(point => point.value === null)).toBe(true);
+    expect(rollingPairMetric(portfolio, benchmark, 1, 'beta')).toEqual([]);
+  });
+
+  it('builds a selected-asset correlation explorer with horizon-specific values and rolling pairs', () => {
+    const dates = Array.from({ length: 70 }, (_, i) => new Date(Date.UTC(2025, 0, i + 1)).toISOString().slice(0, 10));
+    const returnsA = dates.map((_, i) => ((i % 7) - 3) * .002 + .0001);
+    const toBars = (returns: number[]) => {
+      let value = 100;
+      return dates.map((date, i) => { if (i) value *= 1 + returns[i]; return { date, close: value }; });
+    };
+    const histories = new Map<string, HistoryBar[]>([
+      ['A', toBars(returnsA)],
+      ['B', toBars(returnsA.map(r => r * 1.5))],
+      ['SPY', toBars(returnsA.map((r, i) => r + (i % 3 - 1) * .001))],
+    ]);
+    const matrix = correlationMatrix(['A', 'B'], histories);
+    const explorer = buildCorrelationExplorer('A', matrix, histories, 'SPY', '20D');
+    expect(explorer.rows[0]).toMatchObject({ symbol: 'B', observations: 69 });
+    expect(explorer.rows[0].value).toBeCloseTo(1);
+    expect(explorer.rows[0].rolling[20].at(-1)?.value).toBeCloseTo(1);
+    expect(explorer.rows[0].rolling[252].at(-1)?.value).toBeNull();
+    expect(explorer.benchmark?.observations).toBe(20);
+    expect(buildCorrelationExplorer('missing', matrix, histories, 'SPY', '20D').rows).toEqual([]);
+  });
 });
 
 describe("benchmark, attribution and scenarios", () => {
@@ -354,6 +395,25 @@ describe("benchmark, attribution and scenarios", () => {
     expect(result.informationRatio).toBeNull();
     expect(result.comparison[0].portfolio).toBe(100);
     expect(result.portfolioReturn).toBeCloseTo(result.benchmarkReturn!);
+    expect(result.correlation).toBeCloseTo(1);
+    expect(result.activeReturn).toBeCloseTo(0);
+  });
+
+  it('does not publish beta or alpha below the shared 20-observation minimum', () => {
+    const short = dated(rs.slice(0, 19));
+    const result = benchmarkMetrics(short, short, 0.04);
+    expect(result.beta).toBeNull();
+    expect(result.alpha).toBeNull();
+    expect(result.correlation).toBeNull();
+  });
+
+  it('calculates upside and downside capture only with enough matching benchmark days', () => {
+    const returns = Array.from({ length: 80 }, (_, i) => i % 2 ? -.01 : .01);
+    const same = dated(returns);
+    const result = benchmarkMetrics(same, same);
+    expect(result.upsideCapture).toBeCloseTo(1);
+    expect(result.downsideCapture).toBeCloseTo(1);
+    expect(benchmarkMetrics(same.slice(0, 10), same.slice(0, 10)).upsideCapture).toBeNull();
   });
 
   it("does not compound an incomplete comparison", () =>
