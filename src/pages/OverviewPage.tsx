@@ -228,25 +228,22 @@ export function OverviewPage({
             }
           />
           <Metric
-            label="Sharpe"
-            value={c.loading ? "—" : numeric(a.risk.sharpe)}
-            note={`Риск · ${c.riskHorizon}`}
-            reason={
-              a.riskReason ??
-              "Недостаточно наблюдений или нулевая волатильность."
-            }
+            label="Sharpe · Current Holdings"
+            value={c.loading ? "—" : numeric(a.proxy.sharpe)}
+            note={`${c.riskHorizon} historical lookback`}
+            reason={a.proxy.riskWindow.reason ?? "Sharpe недоступен при недостаточной или нулевой волатильности proxy."}
           />
           <Metric
-            label="Max Drawdown"
+            label="Max Drawdown · Actual"
             value={c.loading ? "—" : pct(a.drawdown?.max)}
             note={`За период ${c.period}`}
             reason={historyReason}
           />
           <Metric
-            label="Volatility"
-            value={c.loading ? "—" : pct(a.risk.volatility)}
-            note={`Годовая · ${c.riskHorizon}`}
-            reason={a.riskReason ?? historyReason}
+            label="Volatility · Current Holdings"
+            value={c.loading ? "—" : pct(a.proxy.volatility)}
+            note={`Годовая · ${c.riskHorizon} proxy`}
+            reason={a.proxy.riskWindow.reason ?? "Volatility proxy недоступна при недостаточной или нулевой дисперсии."}
           />
         </div>
       </section>

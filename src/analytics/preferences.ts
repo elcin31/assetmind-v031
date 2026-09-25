@@ -11,7 +11,7 @@ export interface AnalyticsPreferences {
 
 export const DEFAULT_ANALYTICS_PREFERENCES: AnalyticsPreferences = {
   period: '1Y',
-  riskHorizon: '20D',
+  riskHorizon: '60D',
   benchmark: 'SPY',
   rf: 0,
   mar: 0,
@@ -28,7 +28,7 @@ export function normalizeAnalyticsPreferences(value: unknown): AnalyticsPreferen
   const mar = Number(raw.mar);
   return {
     period: periods.has(raw.period as Period) ? raw.period as Period : '1Y',
-    riskHorizon: riskHorizons.has(raw.riskHorizon as RiskHorizon) ? raw.riskHorizon as RiskHorizon : '20D',
+    riskHorizon: riskHorizons.has(raw.riskHorizon as RiskHorizon) ? raw.riskHorizon as RiskHorizon : '60D',
     benchmark: benchmarks.has(raw.benchmark as BenchmarkSymbol) ? raw.benchmark as BenchmarkSymbol : 'SPY',
     rf: Number.isFinite(rf) ? Math.max(-10, Math.min(100, rf)) : 0,
     mar: Number.isFinite(mar) ? Math.max(-10, Math.min(100, mar)) : 0,

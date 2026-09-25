@@ -1,10 +1,9 @@
 /**
  * Historical returns helpers.
  *
- * Methodology: revalue the CURRENT open quantities across historical closes.
- * This is a historical risk proxy for today's holdings mix. It is not a
- * reconstruction of the portfolio's actual historical NAV when quantities
- * changed over time.
+ * Methodology: apply CURRENT market weights to each asset's aligned adjusted
+ * return series. This is a constant-mix historical risk proxy, not a
+ * reconstruction of the portfolio's actual historical NAV or quantities.
  */
 
 import type { HistoryBar, Position } from '../types';
@@ -23,12 +22,11 @@ export interface PortfolioReturnSeries {
 export function buildCurrentHoldingsRiskProxy(
   positions: Position[],
   historyBySymbol: Map<string, HistoryBar[]>,
+  suppliedWeights?: number[],
 ): PortfolioReturnSeries {
   if (positions.length === 0) return unavailable('empty_portfolio');
 
-  const priceMaps = new Map<string, Map<string, number>>();
   const returnMaps = new Map<string, Map<string, DatedReturn>>();
-  let commonDates: string[] | null = null;
   let commonIntervals: string[] | null = null;
 
   for (const pos of positions) {
@@ -37,23 +35,11 @@ export function buildCurrentHoldingsRiskProxy(
       return unavailable(`insufficient_history_for_${pos.symbol}`);
     }
 
-    const priceMap = new Map(
-      bars
-        .filter((bar) => Number.isFinite(bar.close) && bar.close > 0)
-        .map((bar) => [bar.date, bar.close]),
-    );
     const returns = datedReturns(bars);
     const intervalMap = new Map(
       returns.map((r) => [`${r.startDate}/${r.date}`, r]),
     );
-    priceMaps.set(pos.symbol, priceMap);
     returnMaps.set(pos.symbol, intervalMap);
-
-    const dates = [...priceMap.keys()].sort();
-    commonDates =
-      commonDates === null
-        ? dates
-        : commonDates.filter((date) => priceMap.has(date));
 
     const intervalKeys = [...intervalMap.keys()];
     commonIntervals =
@@ -62,70 +48,56 @@ export function buildCurrentHoldingsRiskProxy(
         : commonIntervals.filter((key) => intervalMap.has(key));
   }
 
-  if (!commonDates || commonDates.length < 2) {
-    return unavailable('insufficient_common_history');
-  }
   if (!commonIntervals || commonIntervals.length === 0) {
     return unavailable('insufficient_common_return_intervals');
   }
 
-  const dates: string[] = [];
-  const values: number[] = [];
-  for (const date of commonDates) {
-    let dayValue = 0;
-    let valid = true;
-    for (const pos of positions) {
-      const price = priceMaps.get(pos.symbol)?.get(date);
-      if (price === undefined || !Number.isFinite(price) || price <= 0) {
-        valid = false;
-        break;
-      }
-      dayValue += pos.quantity * price;
+  let weights = suppliedWeights;
+  if (!weights) {
+    const marketValues = positions.map((position) => position.marketValue);
+    if (marketValues.every((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0)) {
+      const total = marketValues.reduce((sum, value) => sum + value, 0);
+      weights = total > 0 ? marketValues.map((value) => value / total) : undefined;
     }
-    if (valid && Number.isFinite(dayValue) && dayValue > 0) {
-      dates.push(date);
-      values.push(dayValue);
+    if (!weights) {
+      const latestValues = positions.map((position) => {
+        const bars = historyBySymbol.get(position.symbol) ?? [];
+        const latest = bars.filter((bar) => Number.isFinite(bar.close) && bar.close > 0).at(-1)?.close;
+        return latest === undefined ? null : latest * position.quantity;
+      });
+      if (latestValues.every((value): value is number => value !== null && Number.isFinite(value) && value >= 0)) {
+        const total = latestValues.reduce((sum, value) => sum + value, 0);
+        weights = total > 0 ? latestValues.map((value) => value / total) : undefined;
+      }
     }
   }
+  if (!weights || weights.length !== positions.length || weights.some((weight) => !Number.isFinite(weight) || weight < 0)) {
+    return unavailable('missing_current_market_weights');
+  }
+  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+  if (Math.abs(weightTotal - 1) > 1e-8) return unavailable('invalid_current_market_weights');
 
   const returns: DatedReturn[] = commonIntervals
     .map((key) => {
-      const [startDate, date] = key.split('/');
-      let startValue = 0;
-      let endValue = 0;
-      for (const pos of positions) {
-        const start = priceMaps.get(pos.symbol)?.get(startDate);
-        const end = priceMaps.get(pos.symbol)?.get(date);
-        if (
-          start === undefined ||
-          end === undefined ||
-          !Number.isFinite(start) ||
-          !Number.isFinite(end) ||
-          start <= 0 ||
-          end <= 0
-        )
-          return null;
-        startValue += pos.quantity * start;
-        endValue += pos.quantity * end;
+      let value = 0;
+      for (let index = 0; index < positions.length; index += 1) {
+        const observation = returnMaps.get(positions[index].symbol)?.get(key);
+        if (!observation || !Number.isFinite(observation.value)) return null;
+        value += weights![index] * observation.value;
       }
-      if (
-        !Number.isFinite(startValue) ||
-        !Number.isFinite(endValue) ||
-        startValue <= 0 ||
-        endValue <= 0
-      )
-        return null;
-      const value = endValue / startValue - 1;
-      return Number.isFinite(value) && value >= -1
-        ? { startDate, date, value }
-        : null;
+      const [startDate, date] = key.split('/');
+      return Number.isFinite(value) && value >= -1 ? { startDate, date, value } : null;
     })
-    .filter((r): r is DatedReturn => r !== null)
+    .filter((result): result is DatedReturn => result !== null)
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  if (values.length < 2 || returns.length === 0) {
+  if (returns.length === 0) {
     return unavailable('insufficient_clean_history');
   }
+
+  let wealth = 100;
+  const dates = [returns[0].startDate, ...returns.map((item) => item.date)];
+  const values = [wealth, ...returns.map((item) => (wealth *= 1 + item.value))];
 
   return {
     dates,

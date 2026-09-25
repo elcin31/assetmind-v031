@@ -4,15 +4,15 @@ import { DEFAULT_ANALYTICS_PREFERENCES, normalizeAnalyticsPreferences } from '..
 it('normalizes analytics preferences without accepting invalid enum or rate values', () => {
   expect(normalizeAnalyticsPreferences(null)).toEqual(DEFAULT_ANALYTICS_PREFERENCES);
   expect(normalizeAnalyticsPreferences({ period: '5Y', riskHorizon: '5D', benchmark: 'BTC', rf: 999, mar: -999 })).toEqual({
-    period: '1Y', riskHorizon: '20D', benchmark: 'SPY', rf: 100, mar: -10,
+    period: '1Y', riskHorizon: '60D', benchmark: 'SPY', rf: 100, mar: -10,
   });
   expect(normalizeAnalyticsPreferences({ period: 'YTD', riskHorizon: '60D', benchmark: 'QQQ', rf: 4.25, mar: 2 })).toEqual({
     period: 'YTD', riskHorizon: '60D', benchmark: 'QQQ', rf: 4.25, mar: 2,
   });
 });
 
-it('migrates old analytics preferences without riskHorizon to the 20D default', () => {
+it('migrates old analytics preferences without riskHorizon to the 60D default', () => {
   expect(normalizeAnalyticsPreferences({ period: '1Y', benchmark: 'SPY', rf: 3, mar: 1 })).toEqual({
-    period: '1Y', riskHorizon: '20D', benchmark: 'SPY', rf: 3, mar: 1,
+    period: '1Y', riskHorizon: '60D', benchmark: 'SPY', rf: 3, mar: 1,
   });
 });

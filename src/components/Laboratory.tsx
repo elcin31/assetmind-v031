@@ -1,413 +1,44 @@
-import { CapitalSummary } from './CapitalSummary';
-import { DataQualityPanel } from './DataQualityPanel';
-import { useState } from 'react';
-import type { PortfolioSnapshot } from '../types';
-import type { AnalyticsController } from '../analytics/usePortfolioAnalytics';
-import { AnalyticsMetric, Formula } from './AnalyticsMetric';
-import { PortfolioHistoryChart, PeriodSelector } from './PortfolioHistoryChart';
-import { MonthlyReturnsHeatmap } from './MonthlyReturnsHeatmap';
-import { DrawdownChart } from './DrawdownChart';
-import { CorrelationMatrix } from './CorrelationMatrix';
-import { BenchmarkPanel } from './BenchmarkPanel';
-import { AttributionPanel } from './AttributionPanel';
-import { ScenariosPanel } from './ScenariosPanel';
-import { AnalyticsChart } from './AnalyticsChart';
-import { RiskHorizonSelector } from './RiskHorizonSelector';
-import { buildXRayInsights } from '../math/xrayInsights';
-import { numeric, pct } from '../utils/analyticsFormat';
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×~vñ:-jZ.¶›­–)Þ³V–×÷'B²6—FÅ7VÖÖ'’Òg&öÒrâô6—FÅ7VÖÖ'’s°¦–×÷'B²FFVÆ—G•æVÂÒg&öÒrâôFFVÆ—G•æVÂs°¦–×÷'B²W6U7FFRÒg&öÒw&V7Bs°¦–×÷'BG—R²÷'FföÆ–õ6æ6†÷BÒg&öÒrââ÷G—W2s°¦–×÷'BG—R²æÇ—F–746öçG&öÆÆW"Òg&öÒrââöæÇ—F–72÷W6U÷'FföÆ–ôæÇ—F–72s°¦–×÷'B²æÇ—F–74ÖWG&–2Âf÷&×VÆÒg&öÒrâôæÇ—F–74ÖWG&–2s°¦–×÷'B²÷'FföÆ–ô†—7F÷'”6†'BÂW&–öE6VÆV7F÷"Òg&öÒrâõ÷'FföÆ–ô†—7F÷'”6†'Bs°¦–×÷'B²ÖöçF†Ç•&WGW&ç4†VFÖÒg&öÒrâôÖöçF†Ç•&WGW&ç4†VFÖs°¦–×÷'B²G&vF÷vä6†'BÒg&öÒrâôG&vF÷vä6†'Bs°¦–×÷'B²6÷'&VÆF–öäÖG&—‚Òg&öÒrâô6÷'&VÆF–öäÖG&—‚s°¦–×÷'B²&Væ6†Ö&µæVÂÒg&öÒrâô&Væ6†Ö&µæVÂs°¦–×÷'B²GG&–'WF–öåæVÂÒg&öÒrâôGG&–'WF–öåæVÂs°¦–×÷'B²66Væ&–÷5æVÂÒg&öÒrâõ66Væ&–÷5æVÂs°¦–×÷'B²æÇ—F–746†'BÒg&öÒrâôæÇ—F–746†'Bs°¦–×÷'B²&—6´†÷&—¦öå6VÆV7F÷"Òg&öÒrâõ&—6´†÷&—¦öå6VÆV7F÷"s°¦–×÷'B²'V–ÆE…&”–ç6–v‡G2Òg&öÒrââöÖF‚÷‡&”–ç6–v‡G2s°¦–×÷'B²çVÖW&–2Â7BÒg&öÒrââ÷WF–Ç2öæÇ—F–74f÷&ÖBs° ¦6öç7BF'2Ò°¢²–C¢w‡&’rÂÆ&VÃ¢u‚Õ&’rÒÀ¢²–C¢wW&f÷&Öæ6RrÂÆ&VÃ¢}	Mí]íMÝí-ÂrÒÀ¢²–C¢w&—6²rÂÆ&VÃ¢}
+¢rÒÀ¢²–C¢vF—fW'6–f–6F–öârÂÆ&VÃ¢}	M-]M­mòrÒÀ¢²–C¢v&Væ6†Ö&²rÂÆ&VÃ¢t&Væ6†Ö&²rÒÀ¢²–C¢vGG&–'WF–öârÂÆ&VÃ¢}	-=mòrÒÀ¢²–C¢w66Væ&–÷2rÂÆ&VÃ¢}
+m]Ý‚rÒÀ¥Ó° ¦W‡÷'BgVæ7F–öâÆ&÷&F÷'’‡°¢6æ6†÷BÀ¢6öçG&öÆÆW#¢2À§Ó¢°¢6æ6†÷C¢÷'FföÆ–õ6æ6†÷C°¢6öçG&öÆÆW#¢æÇ—F–746öçG&öÆÆW#°§Ò’°¢6öç7B·F"Â6WEF%ÒÒW6U7FFR‚w‡&’r“°¢6öç7B·föÅv–æF÷rÂ6WEföÅv–æF÷uÒÒW6U7FFSÃ#ÂcÂ#S#âƒ#“°¢6öç7B·6†'Uv–æF÷rÂ6WE6†'Uv–æF÷uÒÒW6U7FFSÃ#ÂcÂ#S#âƒ#“°¢6öç7B·6VÆV7FVD6÷'&VÆF–öåVW"Â6WE6VÆV7FVD6÷'&VÆF–öåVW%ÒÒW6U7FFR‚rr“°¢6öç7B¶6÷'&VÆF–öåv–æF÷rÂ6WD6÷'&VÆF–öåv–æF÷uÒÒW6U7FFSÃ#ÂcÂ#S#âƒ#“°¢6öç7B·66Væ&–õvV–v‡G2Â6WE66Væ&–õvV–v‡G5ÒÒW6U7FFSÂ†çVÖ&W"ÂçVÆÂ•µÒÂçVÆÃâ†çVÆÂ“°¢6öç7BÒ2ææÇ—F–73°¢6öç7B6×ÆRÒG¶ç6×ÆWÒ+r&bG¶2ç&gÒR+rÔ"G¶2æÖ'ÒV°¢6öç7B&÷f–FW%&V6öâÒ2æW'&÷'2æÆVæwF‚ò2æW'&÷'2æ¦ö–â‚s²r’¢çVÆÃ°¢6öç7BÖG&—…&V6öâÒ&÷f–FW%&V6öâóòç&—6´ÖG&—‚ç&V6öã°¢6öç7B†4×VÇF—ÆT†öÆF–æw2Ò6æ6†÷Bç÷6—F–öç2æÆVæwF‚â°¢6öç7B7W'&VçE&—6µ&V6öâÒ6æ6†÷BçfÇVF–öâæ6ö×ÆWFP¢ò}	Ý=mÝ²-]­=R­í-í-­‚-]Rí-­½-½Rýí}m’M½ò½Ýí}Ý½R-]í"âp¢¢æÖG&—€¢òÖG&—…&V6öà¢¢}	-­½B"¢Í-]Í-}]­‚ÝRíý]M]½Ó¢÷'FföÆ–òf&–æ6RMí½mÝ½-Âýí½ím-]½ÍÝí’âs°¢6öç7BF—fW'6–f–6F–öå&V6öâÒ†4×VÇF—ÆT†öÆF–æw2ò}	ÝRýÍ]Ýý]-ò¢ýí-M]½âíMÝí’ýí}m]’âr¢7W'&VçE&—6µ&V6öã°¢6öç7BvV–v‡G2Ò6æ6†÷Bç÷6—F–öç2æÖ‡Óâ‡°¢7–Ö&öÃ¢ç7–Ö&öÂÀ¢vV–v‡C¢æFWF–Ç5·ç7–Ö&öÅÓòçvV–v‡BóòçVÆÂÀ¢&—6´6öçG&–'WF–öã¢æ7W'&VçE&—6³òæ6öçG&–'WF–öç2æf–æB†—FVÒÓâ—FVÒç7–Ö&öÂÓÓÒç7–Ö&öÂ“òææ÷&ÖÆ—¦VE$2óòçVÆÂÀ¢Ö&¶WEfÇVS¢æÖ&¶WEfÇVRÀ¢Ò’’ç6÷'B‚‡‚Â’’Óâ‡’çvV–v‡BóòÓ’Ò‡‚çvV–v‡BóòÓ’“°¢6öç7B6öæ6VçG&F–öå7FG2Òæ6öæ6VçG&F–öå7VÖÖ'“°¢6öç7B7F—fT6÷'&VÆF–öåVW"Ò2æ6÷'&VÆF–öäW‡Æ÷&W"ç&÷w2ç6öÖR‡&÷rÓâ&÷rç7–Ö&öÂÓÓÒ6VÆV7FVD6÷'&VÆF–öåVW"’ÇÂ6VÆV7FVD6÷'&VÆF–öåVW"ÓÓÒ2æ&Væ6†Ö&²ò6VÆV7FVD6÷'&VÆF–öåVW"¢rs°¢6öç7B6VÆV7FVD6÷'&VÆF–öå&÷rÒ2æ6÷'&VÆF–öäW‡Æ÷&W"ç&÷w2æf–æB‡&÷rÓâ&÷rç7–Ö&öÂÓÓÒ7F—fT6÷'&VÆF–öåVW"’óò2æ6÷'&VÆF–öäW‡Æ÷&W"ç&÷w5³ÒóòçVÆÃ°¢6öç7Bö'6W'fF–öç2Ò'V–ÆE…&”–ç6–v‡G2‡°¢÷6—F–öç3¢vV–v‡G2À¢fW&vU—'v—6T6÷'&VÆF–öã¢æfW&vT6÷'&VÆF–öâÀ¢7W'&VçDG&vF÷vã¢æG&vF÷vãòæ7W'&VçBóòçVÆÂÀ¢Ö„G&vF÷vã¢æG&vF÷vãòæÖ‚óòçVÆÂÀ¢&—6´6öæ6VçG&F–öã¢æ7W'&VçE&—6³òç&—6´6öæ6VçG&F–öâóòçVÆÂÀ¢F—fW'6–f–6F–öå&F–ó¢†4×VÇF—ÆT†öÆF–æw2òæ7W'&VçE&—6³òæF—fW'6–f–6F–öå&F–òóòçVÆÂ¢çVÆÂÀ¢÷'FföÆ–ô&WF¢æ7W'&VçD&Væ6†Ö&µ&—6²æ&WFÀ¢7F—fTG&vF÷vã¢ç&VÆF—fTG&vF÷vãòæ7W'&VçBóòçVÆÂÀ¢6öÖÖöäö'6W'fF–öç3¢ç&—6´ÖG&—‚æ6öÖÖöäö'6W'fF–öç2À¢&WV—&VDö'6W'fF–öç3¢ç&—6´ÖG&—‚ç&WV—&VBÀ¢æÄ6öçG&–'WF–öç3¢çæÂæÖ†—FVÒÓâ‡²7–Ö&öÃ¢—FVÒç7–Ö&öÂÂVç&VÆ—¦VEäÃ¢—FVÒçVç&VÆ—¦VEäÂÒ’’À¢Ò“°¢6öç7BÖöæW’Ò‡fÇVS¢çVÖ&W"ÂçVÆÂÂVæFVf–æVB’ÓâfÇVRÓÒçVÆÂÇÂçVÖ&W"æ—4f–æ—FR‡fÇVR’ò}	Ý]Mí--í}ÝâMÝÝ½Rr¢æWr–çFÂäçVÖ&W$f÷&ÖB‚w'RÕ%RrÂ²7G–ÆS¢v7W'&Væ7’rÂ7W'&Væ7“¢6æ6†÷Bç÷'FföÆ–òæ&6Uö7W'&Væ7’ÂÖ†–×VÔg&7F–öäF–v—G3¢Ò’æf÷&ÖB‡fÇVR“° ¢&WGW&â€¢Ãà¢Ç6V7F–öâ6Æ74æÖSÒ&Æ"Ö–çG&ò#à¢ÆF—cà¢Ç7â6Æ74æÖSÒ&W–V'&÷r#í		Ý		½	
+-		­		ý	í
 
-const tabs = [
-  { id: 'xray', label: 'X-Ray' },
-  { id: 'performance', label: 'Ð”Ð¾Ñ…Ð¾Ð´Ð½Ð¾ÑÑ‚ÑŒ' },
-  { id: 'risk', label: 'Ð Ð¸ÑÐº' },
-  { id: 'diversification', label: 'Ð”Ð¸Ð²ÐµÑ€ÑÐ¸Ñ„Ð¸ÐºÐ°Ñ†Ð¸Ñ' },
-  { id: 'benchmark', label: 'Benchmark' },
-  { id: 'attribution', label: 'ÐÑ‚Ñ€Ð¸Ð±ÑƒÑ†Ð¸Ñ' },
-  { id: 'scenarios', label: 'Ð¡Ñ†ÐµÐ½Ð°Ñ€Ð¸Ð¸' },
-];
-
-export function Laboratory({
-  snapshot,
-  controller: c,
-}: {
-  snapshot: PortfolioSnapshot;
-  controller: AnalyticsController;
-}) {
-  const [tab, setTab] = useState('xray');
-  const [volWindow, setVolWindow] = useState<20 | 60 | 252>(20);
-  const [sharpeWindow, setSharpeWindow] = useState<20 | 60 | 252>(20);
-  const [selectedCorrelationPeer, setSelectedCorrelationPeer] = useState('');
-  const [correlationWindow, setCorrelationWindow] = useState<20 | 60 | 252>(20);
-  const [scenarioWeights, setScenarioWeights] = useState<(number | null)[] | null>(null);
-  const a = c.analytics;
-  const sample = `${a.sample} Â· Rf ${c.rf}% Â· MAR ${c.mar}%`;
-  const providerReason = c.errors.length ? c.errors.join('; ') : null;
-  const matrixReason = providerReason ?? a.riskMatrix.reason;
-  const hasMultipleHoldings = snapshot.positions.length > 1;
-  const currentRiskReason = !snapshot.valuation.complete
-    ? 'ÐÑƒÐ¶Ð½Ñ‹ Ñ‚ÐµÐºÑƒÑ‰Ð¸Ðµ ÐºÐ¾Ñ‚Ð¸Ñ€Ð¾Ð²ÐºÐ¸ Ð²ÑÐµÑ… Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚Ñ‹Ñ… Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¹ Ð´Ð»Ñ Ñ€Ñ‹Ð½Ð¾Ñ‡Ð½Ñ‹Ñ… Ð²ÐµÑÐ¾Ð².'
-    : !a.matrix
-      ? matrixReason
-      : 'Ð’ÐºÐ»Ð°Ð´ Ð² Ñ€Ð¸ÑÐº Ð¼Ð°Ñ‚ÐµÐ¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸ Ð½Ðµ Ð¾Ð¿Ñ€ÐµÐ´ÐµÐ»Ñ‘Ð½: portfolio variance Ð´Ð¾Ð»Ð¶Ð½Ð° Ð±Ñ‹Ñ‚ÑŒ Ð¿Ð¾Ð»Ð¾Ð¶Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾Ð¹.';
-  const diversificationReason = !hasMultipleHoldings ? 'ÐÐµ Ð¿Ñ€Ð¸Ð¼ÐµÐ½ÑÐµÑ‚ÑÑ Ðº Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»ÑŽ Ñ Ð¾Ð´Ð½Ð¾Ð¹ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸ÐµÐ¹.' : currentRiskReason;
-  const weights = snapshot.positions.map(p => ({
-    symbol: p.symbol,
-    weight: a.details[p.symbol]?.weight ?? null,
-    riskContribution: a.currentRisk?.contributions.find(item => item.symbol === p.symbol)?.normalizedRC ?? null,
-    marketValue: p.marketValue,
-  })).sort((x, y) => (y.weight ?? -1) - (x.weight ?? -1));
-  const concentrationStats = a.concentrationSummary;
-  const activeCorrelationPeer = c.correlationExplorer.rows.some(row => row.symbol === selectedCorrelationPeer) || selectedCorrelationPeer === c.benchmark ? selectedCorrelationPeer : '';
-  const selectedCorrelationRow = c.correlationExplorer.rows.find(row => row.symbol === activeCorrelationPeer) ?? c.correlationExplorer.rows[0] ?? null;
-  const observations = buildXRayInsights({
-    positions: weights,
-    averagePairwiseCorrelation: a.averageCorrelation,
-    currentDrawdown: a.drawdown?.current ?? null,
-    maxDrawdown: a.drawdown?.max ?? null,
-    riskConcentration: a.currentRisk?.riskConcentration ?? null,
-    diversificationRatio: hasMultipleHoldings ? a.currentRisk?.diversificationRatio ?? null : null,
-    portfolioBeta: a.currentBenchmarkRisk.beta,
-    activeDrawdown: a.relativeDrawdown?.current ?? null,
-    commonObservations: a.riskMatrix.commonObservations,
-    requiredObservations: a.riskMatrix.required,
-    pnlContributions: a.pnl.map(item => ({ symbol: item.symbol, unrealizedPnL: item.unrealizedPnL })),
-  });
-  const money = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…' : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: snapshot.portfolio.base_currency, maximumFractionDigits: 0 }).format(value);
-
-  return (
-    <>
-      <section className="lab-intro">
-        <div>
-          <span className="eyebrow">ÐÐÐÐ›Ð˜Ð¢Ð˜ÐšÐ ÐŸÐžÐ Ð¢Ð¤Ð•Ð›Ð¯</span>
-          <h2>Laboratory</h2>
-          <p>Ð˜ÑÑÐ»ÐµÐ´Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒÑÐºÐ¸Ð¹ Ñ†ÐµÐ½Ñ‚Ñ€ ÑÑ‚Ñ€ÑƒÐºÑ‚ÑƒÑ€Ñ‹, Ð´Ð¾Ñ…Ð¾Ð´Ð½Ð¾ÑÑ‚Ð¸ Ð¸ Ñ€Ð¸ÑÐºÐ° Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»Ñ.</p>
-        </div>
-      </section>
-      <div className="lab-tabs" role="group" aria-label="Ð Ð°Ð·Ð´ÐµÐ» Ð°Ð½Ð°Ð»Ð¸Ñ‚Ð¸ÐºÐ¸">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            aria-pressed={tab === t.id}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-      <div className="analytics-settings">
-        <label>
-          Ð‘ÐµÐ·Ñ€Ð¸ÑÐºÐ¾Ð²Ð°Ñ ÑÑ‚Ð°Ð²ÐºÐ°, % Ð² Ð³Ð¾Ð´
-          <input
-            className="input"
-            type="number"
-            min="-10"
-            max="100"
-            step=".25"
-            value={c.rf}
-            onChange={(e) =>
-              c.setRf(Math.max(-10, Math.min(100, Number(e.target.value))))
-            }
-          />
-        </label>
-        <label>
-          MAR, % Ð² Ð³Ð¾Ð´
-          <input
-            className="input"
-            type="number"
-            min="-10"
-            max="100"
-            step=".25"
-            value={c.mar}
-            onChange={(e) =>
-              c.setMar(Math.max(-10, Math.min(100, Number(e.target.value))))
-            }
-          />
-        </label>
-      </div>
-
-      {(tab === 'risk' || tab === 'diversification' || tab === 'xray') && (
-        <div className="section-heading">
-          <div>
-            <h2>Risk Horizon</h2>
-            <p className="caption">ÐžÐ´Ð½Ð¾ Ð¾ÐºÐ½Ð¾ Ð´Ð»Ñ current-risk, covariance, correlation Ð¸ diversification. Performance period Ð¾ÑÑ‚Ð°Ñ‘Ñ‚ÑÑ Ð½ÐµÐ·Ð°Ð²Ð¸ÑÐ¸Ð¼Ñ‹Ð¼.</p>
-          </div>
-          <RiskHorizonSelector controller={c} />
-        </div>
-      )}
-      {(tab === 'attribution' || tab === 'benchmark') && <PeriodSelector controller={c} />}
-
-      {tab === 'xray' && <>
-        <section className="xray-summary">
-          <div className="xray-summary-main"><span className="eyebrow">PORTFOLIO X-RAY</span><h2>ÐŸÐ¾Ñ€Ñ‚Ñ„ÐµÐ»ÑŒ Ð¿Ð¾Ð´ Ð¼Ð¸ÐºÑ€Ð¾ÑÐºÐ¾Ð¿Ð¾Ð¼</h2><p>{snapshot.positions.length} Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚Ñ‹Ñ… Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¹ Â· Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð½Ð° {new Date().toLocaleDateString('ru-RU')}</p><strong>{snapshot.valuation.complete ? money(snapshot.accountValue ?? snapshot.portfolioValue) : 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…'}</strong><small>Ð¡Ñ‚Ð¾Ð¸Ð¼Ð¾ÑÑ‚ÑŒ Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»Ñ</small></div>
-          <div className="xray-summary-metrics">
-            <XRayMetric label="Total Return / TWR" value={a.performance.twr} percent reason={a.performance.reason} formula="TWR = âˆ(1 + râ‚œ) âˆ’ 1" sample={sample} />
-            <XRayMetric label="Ð’Ð¾Ð»Ð°Ñ‚Ð¸Ð»ÑŒÐ½Ð¾ÑÑ‚ÑŒ" value={a.risk.volatility} percent reason={a.riskReason} formula="Ïƒ annual = stdev(r) Ã— âˆš252" sample={a.riskSample} />
-            <XRayMetric label="Sharpe Ratio" value={a.risk.sharpe} reason={a.riskReason} formula="(252 Ã— mean(r) âˆ’ Rf) / Ïƒ annual" sample={a.riskSample} />
-            <XRayMetric label="Max Drawdown" value={a.drawdown?.max} percent reason={a.performance.reason} formula="min(Vâ‚œ / max(Vâ‚€â€¦Vâ‚œ) âˆ’ 1)" sample={sample} />
-            <XRayMetric label="Portfolio Beta" value={a.benchmark.beta} reason={a.benchmark.observations < 20 ? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¾Ð±Ñ‰Ð¸Ñ… Ð½Ð°Ð±Ð»ÑŽÐ´ÐµÐ½Ð¸Ð¹ Ñ benchmark.' : null} formula="Cov(râ‚š, ráµ¦) / Var(ráµ¦)" sample={`${a.benchmark.observations} benchmark observations`} />
-            <XRayMetric label="Diversification Ratio" value={hasMultipleHoldings ? a.currentRisk?.diversificationRatio : null} reason={diversificationReason} formula="Î£(wáµ¢ Ã— Ïƒáµ¢) / Ïƒâ‚š" sample={a.matrixSample} />
-            <XRayMetric label="Effective Holdings" value={a.concentration?.effectivePositions} reason={!a.concentration ? 'ÐÑƒÐ¶Ð½Ñ‹ Ð¿Ð¾Ð»Ð½Ñ‹Ðµ Ñ‚ÐµÐºÑƒÑ‰Ð¸Ðµ Ñ€Ñ‹Ð½Ð¾Ñ‡Ð½Ñ‹Ðµ Ð²ÐµÑÐ°.' : null} formula="1 / Î£(wáµ¢Â²)" sample="Ð¢ÐµÐºÑƒÑ‰Ð¸Ðµ Ñ€Ñ‹Ð½Ð¾Ñ‡Ð½Ñ‹Ðµ Ð²ÐµÑÐ°" />
-          </div>
-        </section>
-        <section className="xray-grid">
-          <article className="card xray-concentration"><div className="section-heading"><div><h2>ÐšÐ¾Ð½Ñ†ÐµÐ½Ñ‚Ñ€Ð°Ñ†Ð¸Ñ Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»Ñ</h2><p className="caption">Ð¢ÐµÐºÑƒÑ‰Ð¸Ðµ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¸, Ð¾Ñ‚ÑÐ¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ðµ Ð¿Ð¾ Ñ€Ñ‹Ð½Ð¾Ñ‡Ð½Ð¾Ð¼Ñƒ Ð²ÐµÑÑƒ.</p></div><span className="tag">{weights.length} Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¹</span></div>
-            {!snapshot.valuation.complete && <p className="notice">Ð”Ð»Ñ Ñ‚Ð¾Ñ‡Ð½Ñ‹Ñ… Ð²ÐµÑÐ¾Ð² Ð½ÑƒÐ¶Ð½Ñ‹ Ñ‚ÐµÐºÑƒÑ‰Ð¸Ðµ ÐºÐ¾Ñ‚Ð¸Ñ€Ð¾Ð²ÐºÐ¸ Ð²ÑÐµÑ… Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚Ñ‹Ñ… Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¹.</p>}
-            <div className="xray-highlights"><div><span>Largest Position</span><b>{concentrationStats?.largestPositionWeight == null ? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…' : pct(concentrationStats.largestPositionWeight)}</b></div><div><span>Top 3 Weight</span><b>{concentrationStats ? pct(concentrationStats.top3Weight) : 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…'}</b></div><div><span>Top 5 Weight</span><b>{concentrationStats ? pct(concentrationStats.top5Weight) : 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…'}</b></div><div><span>HHI</span><b>{concentrationStats?.hhi == null ? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…' : concentrationStats.hhi.toFixed(3)}</b></div></div>
-            <div className="xray-bars">{weights.map(p => <div className="xray-bar-row" key={p.symbol}><b>{p.symbol}</b><div className="xray-bar-track"><i style={{ width: `${Math.max(0, Math.min(100, (p.weight ?? 0) * 100))}%` }} /></div><span>{p.weight == null ? 'â€”' : `${(p.weight * 100).toFixed(1)}%`}</span><small>{money(p.marketValue)}</small></div>)}</div>
-            <Formula name="HHI Ð¸ ÑÑ„Ñ„ÐµÐºÑ‚Ð¸Ð²Ð½Ð¾Ðµ Ñ‡Ð¸ÑÐ»Ð¾ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¹" formula="HHI = Î£(wáµ¢Â²) Â· Effective Holdings = 1 / HHI">Ð Ð°ÑÑÑ‡Ð¸Ñ‚Ð°Ð½Ð¾ Ð¿Ð¾ Ð½Ð¾Ñ€Ð¼Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ð¼ Ñ‚ÐµÐºÑƒÑ‰Ð¸Ð¼ Ñ€Ñ‹Ð½Ð¾Ñ‡Ð½Ñ‹Ð¼ Ð²ÐµÑÐ°Ð¼. HHI Ð±Ð»Ð¸Ð·ÐºÐ¸Ð¹ Ðº 1 Ð¾Ð·Ð½Ð°Ñ‡Ð°ÐµÑ‚ Ð±Ð¾Ð»ÑŒÑˆÑƒÑŽ ÐºÐ¾Ð½Ñ†ÐµÐ½Ñ‚Ñ€Ð°Ñ†Ð¸ÑŽ.</Formula>
-          </article>
-          <article className="card"><div className="section-heading"><div><h2>Ð¡Ñ‚Ñ€ÑƒÐºÑ‚ÑƒÑ€Ð° Ñ€Ð¸ÑÐºÐ°</h2><p className="caption">Ð’ÐµÑ ÐºÐ°Ð¿Ð¸Ñ‚Ð°Ð»Ð° ÑÑ€Ð°Ð²Ð½Ð¸Ð²Ð°ÐµÑ‚ÑÑ Ñ Ð´Ð¾Ð»ÐµÐ¹ Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»ÑŒÐ½Ð¾Ð¹ variance.</p></div><span className="tag">{c.riskHorizon}</span></div>
-            {!a.currentRisk && <p className="notice">{currentRiskReason}</p>}
-            {a.currentRisk && <div className="xray-risk-list">{weights.map(p => { const rc = p.riskContribution; return <div className="xray-risk-row" key={p.symbol}><b>{p.symbol}</b><span>Ð’ÐµÑ <strong>{p.weight == null ? 'â€”' : pct(p.weight)}</strong></span><span>Ð Ð¸ÑÐº <strong>{rc == null ? 'â€”' : pct(rc)}</strong></span><div className="xray-risk-bars"><i style={{ width: `${p.weight == null ? 0 : Math.min(100, Math.max(0, p.weight * 100))}%` }} /><i style={{ width: `${rc == null ? 0 : Math.min(100, Math.max(0, rc * 100))}%` }} /></div></div> })}</div>}
-            <p className="caption">Ð¡Ð¸Ð½Ð¸Ð¹ â€” Ð²ÐµÑ; Ñ„Ð¸Ð¾Ð»ÐµÑ‚Ð¾Ð²Ñ‹Ð¹ â€” Ð²ÐºÐ»Ð°Ð´ Ð² variance. Ð”Ð°Ð½Ð½Ñ‹Ðµ: {a.matrixSample}.</p>
-          </article>
-            <article className="card"><h2>Ð”Ð¸Ð²ÐµÑ€ÑÐ¸Ñ„Ð¸ÐºÐ°Ñ†Ð¸Ñ</h2><div className="xray-diversification"><div><span>Number of Holdings</span><b>{snapshot.positions.length}</b></div><div><span>Effective Holdings</span><b>{a.concentration?.effectivePositions?.toFixed(1) ?? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…'}</b></div><div><span>Ð¡Ñ€ÐµÐ´Ð½ÑÑ ÐºÐ¾Ñ€Ñ€ÐµÐ»ÑÑ†Ð¸Ñ</span><b>{a.averageCorrelation == null ? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…' : a.averageCorrelation.toFixed(2)}</b></div><div><span>Portfolio Volatility</span><b>{a.currentRisk?.volatility == null ? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…' : pct(a.currentRisk.volatility)}</b></div><div><span>Weighted Asset Volatility</span><b>{a.currentRisk?.weightedAverageAssetVolatility == null ? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…' : pct(a.currentRisk.weightedAverageAssetVolatility)}</b></div><div><span>Risk Horizon</span><b>{c.riskHorizon}</b></div></div>
-            <Formula name="Diversification Ratio" formula="DR = Î£(wáµ¢ Ã— Ïƒáµ¢) / Ïƒâ‚š">Ð’ÐµÑÐ° Ð¸ annualized volatility Ð±ÐµÑ€ÑƒÑ‚ÑÑ Ð¸Ð· Ð¾Ð´Ð½Ð¾Ð³Ð¾ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ð¾Ð³Ð¾ Ð¾ÐºÐ½Ð° {c.riskHorizon}; covariance Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ Ð¾Ð±Ñ‰Ð¸Ð¹ Ð½Ð°Ð±Ð¾Ñ€ Ð½Ð°Ð±Ð»ÑŽÐ´ÐµÐ½Ð¸Ð¹.</Formula>
-          </article>
-          <article className="card"><div className="section-heading"><div><h2>ÐšÐ»ÑŽÑ‡ÐµÐ²Ñ‹Ðµ Ð½Ð°Ð±Ð»ÑŽÐ´ÐµÐ½Ð¸Ñ</h2><p className="caption">Ð¤Ð°ÐºÑ‚Ñ‹, Ñ€Ð°ÑÑÑ‡Ð¸Ñ‚Ð°Ð½Ð½Ñ‹Ðµ Ð¿Ð¾ Ñ‚ÐµÐºÑƒÑ‰Ð¸Ð¼ Ð´Ð°Ð½Ð½Ñ‹Ð¼ Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»Ñ.</p></div><span className="tag">Deterministic</span></div>
-            {observations.length ? <ul className="xray-observations">{observations.map(item => { const target = item.category === 'risk' ? 'risk' : item.category === 'diversification' ? 'diversification' : item.category === 'performance' ? 'performance' : 'attribution'; return <li key={item.id} data-severity={item.severity}><span>{item.title}</span><p>{item.message}</p><button className="text-button" type="button" onClick={() => setTab(target)}>ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ñ€Ð°Ð·Ð´ÐµÐ» â†’</button></li>; })}</ul> : <p className="caption">ÐŸÐ¾Ñ€Ð¾Ð³Ð¾Ð²Ñ‹Ðµ Ð½Ð°Ð±Ð»ÑŽÐ´ÐµÐ½Ð¸Ñ Ð½Ðµ Ð²Ñ‹ÑÐ²Ð»ÐµÐ½Ñ‹ Ð»Ð¸Ð±Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ… Ð¿Ð¾ÐºÐ° Ð½ÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾.</p>}
-          </article>
-          <DataQualityPanel snapshot={snapshot} controller={c} />
-        </section>
-        <section className="card xray-shortcuts"><div className="section-heading"><div><h2>ÐŸÐµÑ€ÐµÐ¹Ñ‚Ð¸ Ðº Ð¸ÑÑÐ»ÐµÐ´Ð¾Ð²Ð°Ð½Ð¸ÑŽ</h2><p className="caption">Ð‘Ñ‹ÑÑ‚Ñ€Ñ‹Ð¹ Ð¿ÐµÑ€ÐµÑ…Ð¾Ð´ Ð¸Ð· ÑÐ²Ð¾Ð´ÐºÐ¸ Ðº Ð°Ð½Ð°Ð»Ð¸Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸Ð¼ Ð´ÐµÑ‚Ð°Ð»ÑÐ¼.</p></div></div><div className="xray-shortcut-list">{[['risk','View Risk Budget'],['risk','Open Drawdown Lab'],['diversification','Explore Correlations'],['benchmark','Compare Benchmark'],['attribution','Open Attribution'],['scenarios','Stress Portfolio'],['scenarios','Run What-if']].map(([target,label],index)=><button key={`${target}-${index}`} className="btn btn-ghost" type="button" onClick={()=>setTab(target)}>{label}</button>)}</div></section>
-      </>}
-
-      {tab === 'performance' && a.performance.reason && !c.loading && (
-        <p className="notice">{a.performance.reason}</p>
-      )}
-      {tab === 'risk' && a.riskReason && !c.loading && (
-        <p className="notice">{providerReason ?? a.riskReason}</p>
-      )}
-      {tab === 'performance' && (
-        <>
-          <PortfolioHistoryChart
-            controller={c}
-            currency={snapshot.portfolio.base_currency}
-          />
-          <section className="card">
-            <div className="analytics-metrics">
-              {(
-                [
-                  'twr',
-                  'cagr',
-                  'totalReturn',
-                  'bestDay',
-                  'worstDay',
-                  'positiveDays',
-                  'negativeDays',
-                ] as const
-              ).map((metric) => (
-                <AnalyticsMetric
-                  key={metric}
-                  metric={metric}
-                  value={a.performance[metric]}
-                  sample={sample}
-                  reason={a.performance.reason}
-                />
-              ))}
-            </div>
-          </section>
-          <CapitalSummary snapshot={snapshot} />
-          <MonthlyReturnsHeatmap
-            months={a.performance.monthly}
-            loading={c.loading}
-            sample={sample}
-          />
-        </>
-      )}
-      {tab === 'risk' && (
-        <>
-          <section className="card">
-            <div className="section-heading">
-              <div>
-                <h2>{c.riskHorizon} Risk Â· Ñ„Ð°ÐºÑ‚Ð¸Ñ‡ÐµÑÐºÐ¸Ð¹ Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»ÑŒ</h2>
-                <p className="caption">Transaction-aware risk Ñ‚Ñ€ÐµÐ±ÑƒÐµÑ‚ Ð¿Ð¾Ð»Ð½Ð¾Ð³Ð¾ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ð¾Ð³Ð¾ Ð¾ÐºÐ½Ð°. BUY/SELL, Ð½ÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ñ‹Ð¹ external flow Ð¸ Ñ†ÐµÐ½Ð¾Ð²Ñ‹Ðµ gaps Ð½Ðµ Ð¿ÐµÑ€ÐµÑÐºÐ°ÐºÐ¸Ð²Ð°ÑŽÑ‚ÑÑ Ñ€Ð°Ð´Ð¸ Ð´Ð¾Ð±Ð¾Ñ€Ð° Ð²Ñ‹Ð±Ð¾Ñ€ÐºÐ¸.</p>
-              </div>
-              <span className="tag">{c.riskHorizon}</span>
-            </div>
-            {c.riskHorizon === '20D' && <p className="caption">20D Sharpe Ñ‡ÑƒÐ²ÑÑ‚Ð²Ð¸Ñ‚ÐµÐ»ÐµÐ½ Ðº ÐºÐ¾Ñ€Ð¾Ñ‚ÐºÐ¾Ð¹ Ð²Ñ‹Ð±Ð¾Ñ€ÐºÐµ.</p>}
-            <div className="analytics-metrics">
-              {(
-                [
-                  'volatility',
-                  'downside',
-                  'sharpe',
-                  'sortino',
-                  'calmar',
-                  'var95',
-                  'es95',
-                ] as const
-              ).map((metric) => (
-                <AnalyticsMetric
-                  key={metric}
-                  metric={metric}
-                  value={a.risk[metric]}
-                  sample={metric === 'calmar' ? sample : a.riskSample}
-                  ratio={['sharpe', 'sortino', 'calmar'].includes(metric)}
-                  reason={
-                    providerReason ??
-                    (metric === 'var95' || metric === 'es95'
-                      ? a.tailRiskReason
-                      : metric === 'sortino'
-                        ? a.sortinoReason
-                        : metric === 'calmar'
-                          ? (a.performance.reason ?? a.riskReason)
-                          : a.riskReason)
-                  }
-                />
-              ))}
-              <AnalyticsMetric
-                metric="maxDrawdown"
-                value={a.drawdown?.max}
-                sample={sample}
-                reason={providerReason ?? a.performance.reason}
-              />
-              <AnalyticsMetric
-                metric="currentDrawdown"
-                value={a.drawdown?.current}
-                sample={sample}
-                reason={providerReason ?? a.performance.reason}
-              />
-              <XRayMetric label="Portfolio Beta" value={a.currentBenchmarkRisk.beta} reason={a.currentBenchmarkRisk.observations < 20 ? `ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¾Ð±Ñ‰Ð¸Ñ… Ð¸Ð½Ñ‚ÐµÑ€Ð²Ð°Ð»Ð¾Ð²: ${a.currentBenchmarkRisk.observations}/20.` : null} formula="Cov(Râ‚š,Ráµ¦) / Var(Ráµ¦)" sample={`${c.riskHorizon} Â· ${a.currentBenchmarkRisk.observations} Ð¾Ð±Ñ‰Ð¸Ñ… Ð¸Ð½Ñ‚ÐµÑ€Ð²Ð°Ð»Ð¾Ð² Â· ${c.benchmark}`} />
-              <AnalyticsMetric metric="diversificationRatio" value={hasMultipleHoldings ? a.currentRisk?.diversificationRatio : null} sample={a.matrixSample} ratio reason={!hasMultipleHoldings ? diversificationReason : !a.currentRisk ? currentRiskReason : null} />
-              <AnalyticsMetric metric="averageCorrelation" value={a.averageCorrelation} sample={a.matrixSample} ratio reason={!a.matrix ? matrixReason : null} />
-            </div>
-            <Formula
-              name={`${c.riskHorizon} annualized volatility`}
-              formula="Ïƒ_daily = stdev_sample(r); Ïƒ_annual = Ïƒ_daily Ã— âˆš252"
-            >
-              ÐžÑ†ÐµÐ½ÐºÐ° annualized, Ñ€Ð°ÑÑÑ‡Ð¸Ñ‚Ð°Ð½Ð½Ð°Ñ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð¿Ð¾ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ð¾Ð¼Ñƒ Ð¾ÐºÐ½Ñƒ {c.riskHorizon}; ÑÑ‚Ð¾ Ð½Ðµ Â«Ð³Ð¾Ð´Ð¾Ð²Ð°Ñ Ð¸ÑÑ‚Ð¾Ñ€Ð¸ÑÂ», ÐµÑÐ»Ð¸ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð¾ 20D Ð¸Ð»Ð¸ 60D. Ð”Ð°Ð½Ð½Ñ‹Ðµ: {a.riskSample}.
-            </Formula>
-          </section>
-          <section className="card">
-            <div className="section-heading"><div><h2>Risk Budget</h2><p className="caption">Ð’ÐºÐ»Ð°Ð´ ÐºÐ°Ð¶Ð´Ð¾Ð¹ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¸ Ð² annualized volatility Ð·Ð° {c.riskHorizon}.</p></div><span className="tag">Î£ normalized RC {a.currentRisk ? pct(a.currentRisk.normalizedRiskContributionSum) : 'â€”'}</span></div>
-            {!a.currentRisk && <p className="notice">{currentRiskReason}</p>}
-            {a.currentRisk && <>
-              <div className="risk-budget-summary"><div><span>Largest Risk Contributor</span><b>{a.currentRisk.largestRiskContributor?.symbol ?? 'â€”'} Â· {a.currentRisk.largestRiskContributor ? pct(a.currentRisk.largestRiskContributor.contribution) : 'â€”'}</b></div><div><span>Top 3 Risk Contribution</span><b>{pct(a.currentRisk.top3RiskContribution)}</b></div><div><span>Risk Concentration Â· Î£(RC%Â²)</span><b>{numeric(a.currentRisk.riskConcentration)}</b></div></div>
-              <div className="risk-budget-legend"><span><i /> Weight</span><span><i /> Risk Contribution %</span></div>
-              <div className="risk-budget-list">{a.currentRisk.contributions.map(item => <div className="risk-budget-row" key={item.symbol}><b>{item.symbol}</b><div className="risk-budget-bars" title={`${item.symbol}: Weight ${pct(item.weight)} Â· Risk contribution ${pct(item.normalizedRC)}`}><i style={{ width: `${Math.min(100, Math.abs(item.weight) * 100)}%` }} /><i style={{ width: `${Math.min(100, Math.abs(item.normalizedRC) * 100)}%`, background: item.normalizedRC < 0 ? 'var(--negative)' : undefined }} /></div><span>{pct(item.weight)}</span><strong>{pct(item.normalizedRC)}</strong></div>)}</div>
-              <div className="table-scroll"><table><thead><tr><th>ÐÐºÑ‚Ð¸Ð²</th><th>Ð’ÐµÑ</th><th>Asset Volatility</th><th>MCRáµ¢</th><th>RCáµ¢</th><th>RC %</th><th>Risk / Weight</th></tr></thead><tbody>{a.currentRisk.contributions.map(item => <tr key={item.symbol}><td>{item.symbol}</td><td>{pct(item.weight)}</td><td>{pct(item.assetVolatility)}</td><td>{pct(item.mcr)}</td><td>{pct(item.rc)}</td><td>{pct(item.normalizedRC)}</td><td>{item.riskWeightRatio == null ? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…' : numeric(item.riskWeightRatio)}</td></tr>)}</tbody></table></div>
-              <Formula name="Risk Budget" formula="MCRáµ¢=(Î£w)áµ¢/Ïƒâ‚š; RCáµ¢=wáµ¢Ã—MCRáµ¢; normalized RCáµ¢=RCáµ¢/Ïƒâ‚š">Ð”Ð¾Ð»Ñ normalized RC ÑÑƒÐ¼Ð¼Ð¸Ñ€ÑƒÐµÑ‚ÑÑ Ð¿Ñ€Ð¸Ð¼ÐµÑ€Ð½Ð¾ Ð´Ð¾ 100%. Ð¥ÐµÐ´Ð¶Ð¸Ñ€ÑƒÑŽÑ‰Ð¸Ðµ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¸ Ð¼Ð¾Ð³ÑƒÑ‚ Ð¸Ð¼ÐµÑ‚ÑŒ Ð¾Ñ‚Ñ€Ð¸Ñ†Ð°Ñ‚ÐµÐ»ÑŒÐ½Ñ‹Ð¹ Ð²ÐºÐ»Ð°Ð´. Risk concentration â€” ÑÑƒÐ¼Ð¼Ð° ÐºÐ²Ð°Ð´Ñ€Ð°Ñ‚Ð¾Ð² Ð´Ð¾Ð»ÐµÐ¹ normalized RC, Ð½Ðµ Ð¿Ñ€Ð¾Ð³Ð½Ð¾Ð· Ð¸ Ð½Ðµ Ñ€ÐµÐºÐ¾Ð¼ÐµÐ½Ð´Ð°Ñ†Ð¸Ñ.</Formula>
-            </>}
-          </section>
-          <DrawdownChart analytics={a} loading={c.loading} />
-          <section className="card">
-            <div className="section-heading">
-              <div><h2>Ð¡ÐºÐ¾Ð»ÑŒÐ·ÑÑ‰Ð°Ñ Ð²Ð¾Ð»Ð°Ñ‚Ð¸Ð»ÑŒÐ½Ð¾ÑÑ‚ÑŒ</h2><p className="caption">Ð˜ÑÑ‚Ð¾Ñ€Ð¸Ñ‡ÐµÑÐºÐ¸Ð¹ rolling-Ð³Ñ€Ð°Ñ„Ð¸Ðº Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ Ð¾Ñ‚Ð´ÐµÐ»ÑŒÐ½Ñ‹Ð¹ performance period: {c.period}.</p></div>
-              <PeriodSelector controller={c} />
-            </div>
-            <div className="chart-periods" aria-label="ÐžÐºÐ½Ð¾ Ð²Ð¾Ð»Ð°Ñ‚Ð¸Ð»ÑŒÐ½Ð¾ÑÑ‚Ð¸">
-              {([20, 60, 252] as const).map((n) => (
-                <button key={n} aria-pressed={volWindow === n} onClick={() => setVolWindow(n)}>{n}D</button>
-              ))}
-            </div>
-            <AnalyticsChart key={`vol-${volWindow}-${c.period}`} points={a.rolling.volatility[volWindow]} label="Ð¡ÐºÐ¾Ð»ÑŒÐ·ÑÑ‰Ð°Ñ Ð²Ð¾Ð»Ð°Ñ‚Ð¸Ð»ÑŒÐ½Ð¾ÑÑ‚ÑŒ" format={pct} loading={c.loading} reason={providerReason ?? a.riskReason} />
-            <Formula name="ÐžÐºÐ½Ð¾ Ð²Ð¾Ð»Ð°Ñ‚Ð¸Ð»ÑŒÐ½Ð¾ÑÑ‚Ð¸" formula="Ïƒ_window = stdev_sample(r_window) Ã— âˆš252">
-              ÐÑƒÐ¶Ð½Ð¾ Ð¿Ð¾Ð»Ð½Ð¾Ðµ Ð¾ÐºÐ½Ð¾ Ð¸Ð· {volWindow} Ñ‡Ð¸ÑÑ‚Ñ‹Ñ… Ð´Ð¾Ñ…Ð¾Ð´Ð½Ð¾ÑÑ‚ÐµÐ¹. Ð£Ñ‡Ð°ÑÑ‚Ð¾Ðº Ð´Ð¾ Ð½Ð°ÐºÐ¾Ð¿Ð»ÐµÐ½Ð¸Ñ Ð¾ÐºÐ½Ð° Ð¸ Ð¾ÐºÐ½Ð°, Ð¿ÐµÑ€ÐµÑÐµÐºÐ°ÑŽÑ‰Ð¸Ðµ Ð¸ÑÐºÐ»ÑŽÑ‡Ñ‘Ð½Ð½Ñ‹Ð¹ trade/gap Ð¸Ð½Ñ‚ÐµÑ€Ð²Ð°Ð», Ð½Ðµ Ð²Ñ‹Ð´ÑƒÐ¼Ñ‹Ð²Ð°ÑŽÑ‚ÑÑ. Ð”Ð°Ð½Ð½Ñ‹Ðµ: {sample}.
-            </Formula>
-          </section>
-          <section className="card">
-            <h2>Ð¡ÐºÐ¾Ð»ÑŒÐ·ÑÑ‰Ð¸Ð¹ Sharpe</h2>
-            <div className="chart-periods" aria-label="ÐžÐºÐ½Ð¾ Sharpe">
-              {([20, 60, 252] as const).map((n) => (
-                <button key={n} aria-pressed={sharpeWindow === n} onClick={() => setSharpeWindow(n)}>{n}D</button>
-              ))}
-            </div>
-            <AnalyticsChart key={`sharpe-${sharpeWindow}-${c.period}`} points={a.rolling.sharpe[sharpeWindow]} label="Ð¡ÐºÐ¾Ð»ÑŒÐ·ÑÑ‰Ð¸Ð¹ Sharpe" format={(v) => v.toFixed(2)} loading={c.loading} reason={providerReason ?? a.riskReason} />
-            <Formula name="ÐžÐºÐ½Ð¾ Sharpe" formula="Sharpe=(252Ã—mean(r)âˆ’Rf_annual)/Ïƒ_annual">
-              ÐŸÐ¾Ð»Ð½Ð¾Ðµ Ð¾ÐºÐ½Ð¾ {sharpeWindow} Ñ‡Ð¸ÑÑ‚Ñ‹Ñ… Ð´Ð¾Ñ…Ð¾Ð´Ð½Ð¾ÑÑ‚ÐµÐ¹, Rf {c.rf}% Ð² Ð³Ð¾Ð´. ÐŸÑ€Ð¸ Ð½ÑƒÐ»ÐµÐ²Ð¾Ð¹ Ð²Ð¾Ð»Ð°Ñ‚Ð¸Ð»ÑŒÐ½Ð¾ÑÑ‚Ð¸ ÑƒÑ‡Ð°ÑÑ‚Ð¾Ðº Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½. Ð”Ð°Ð½Ð½Ñ‹Ðµ: {sample}.
-            </Formula>
-          </section>
-          <section className="card">
-            <div className="section-heading">
-              <div><h2>Ð˜ÑÑ‚Ð¾Ñ€Ð¸Ñ‡ÐµÑÐºÐ¸Ð¹ Ñ€Ð¸ÑÐº Ñ‚ÐµÐºÑƒÑ‰ÐµÐ³Ð¾ ÑÐ¾ÑÑ‚Ð°Ð²Ð° Â· proxy</h2><p className="caption">ÐšÐ°Ðº ÑÐµÐ³Ð¾Ð´Ð½ÑÑˆÐ½Ð¸Ð¹ ÑÐ¾ÑÑ‚Ð°Ð² Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»Ñ Ð²Ñ‘Ð» Ð±Ñ‹ ÑÐµÐ±Ñ Ð½Ð° Ð¿Ñ€Ð¾ÑˆÐ»Ñ‹Ñ… adjusted close. Ð­Ñ‚Ð¾ Ð¼Ð¾Ð´ÐµÐ»ÑŒ, Ð½Ðµ Ñ„Ð°ÐºÑ‚Ð¸Ñ‡ÐµÑÐºÐ°Ñ Ð´Ð¾Ñ…Ð¾Ð´Ð½Ð¾ÑÑ‚ÑŒ Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»Ñ.</p></div>
-              <span className="tag">{c.riskHorizon} Risk</span>
-            </div>
-            {a.proxy.riskWindow.reason && <p className="notice">{a.proxy.riskWindow.reason}</p>}
-            <div className="analytics-metrics">
-              <AnalyticsMetric metric="volatility" value={a.proxy.volatility} sample={`${c.riskHorizon} Â· ${a.proxy.riskWindow.availableObservations}/${a.proxy.riskWindow.required} proxy-Ð¸Ð½Ñ‚ÐµÑ€Ð²Ð°Ð»Ð¾Ð²`} reason={a.proxy.riskWindow.reason} />
-              <AnalyticsMetric metric="sharpe" value={a.proxy.sharpe} sample={`${c.riskHorizon} proxy Â· Rf ${c.rf}%`} ratio reason={a.proxy.riskWindow.reason} />
-              <AnalyticsMetric metric="maxDrawdown" value={a.proxy.drawdown?.max} sample="Ð¿Ð¾Ð»Ð½Ð°Ñ proxy value series; Ð½Ðµ Risk Horizon" />
-            </div>
-            <Formula name="Ð¢ÐµÐºÑƒÑ‰Ð¸Ðµ ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð°" formula="V_proxy(t) = Î£qáµ¢(today)Páµ¢(t)">
-              Ð¤Ð¸ÐºÑÐ¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ðµ ÑÐµÐ³Ð¾Ð´Ð½ÑÑˆÐ½Ð¸Ðµ ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð°. Ð”Ð¾Ñ…Ð¾Ð´Ð½Ð¾ÑÑ‚Ð¸ ÑÑ‡Ð¸Ñ‚Ð°ÑŽÑ‚ÑÑ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð½Ð° return-Ð¸Ð½Ñ‚ÐµÑ€Ð²Ð°Ð»Ð°Ñ…, Ð³Ð´Ðµ Ñƒ ÐºÐ°Ð¶Ð´Ð¾Ð³Ð¾ Ð°ÐºÑ‚Ð¸Ð²Ð° ÐµÑÑ‚ÑŒ Ð¾Ð±Ðµ Ñ†ÐµÐ½Ñ‹ start/end; Ð¿Ñ€Ð¾Ð¿ÑƒÑÐº Ð½Ðµ Ð¿Ñ€ÐµÐ²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ÑÑ Ð² 0 Ð¸ Ð½Ðµ ÑÐ¾Ð·Ð´Ð°Ñ‘Ñ‚ Ð¼Ð¾ÑÑ‚ Ñ‡ÐµÑ€ÐµÐ· Ð´Ð°Ñ‚Ñƒ. Ð”Ð»Ñ {c.riskHorizon} current-risk Ñ‚Ñ€ÐµÐ±ÑƒÐµÑ‚ÑÑ Ð¿Ð¾Ð»Ð½Ð¾Ðµ Ð¾ÐºÐ½Ð¾ Ð¸Ð· {a.proxy.riskWindow.required} Ð²Ð°Ð»Ð¸Ð´Ð½Ñ‹Ñ… Ð¸Ð½Ñ‚ÐµÑ€Ð²Ð°Ð»Ð¾Ð².
-            </Formula>
-          </section>
-        </>
-      )}
-      {tab === 'diversification' && (
-        <>
-          <section className="card">
-            <div className="section-heading"><div><h2>Diversification Overview</h2><p className="caption">ÐšÐ°Ð¿Ð¸Ñ‚Ð°Ð», ÑÐ¾Ð²Ð¼ÐµÑÑ‚Ð½Ñ‹Ð¹ Ñ€Ð¸ÑÐº Ð¸ ÐºÐ¾Ð½Ñ†ÐµÐ½Ñ‚Ñ€Ð°Ñ†Ð¸Ñ risk contributions Â· {c.riskHorizon}.</p></div><span className="tag">{c.riskHorizon}</span></div>
-            <div className="analytics-metrics">
-              <XRayMetric label="Actual Holdings" value={snapshot.positions.length} formula="ÐšÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚Ñ‹Ñ… Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¹" sample="Ð¢ÐµÐºÑƒÑ‰Ð¸Ð¹ Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»ÑŒ" />
-              <XRayMetric label="Effective Holdings" value={a.concentration?.effectivePositions} formula="1 / Î£(wáµ¢Â²)" sample="Ð¢ÐµÐºÑƒÑ‰Ð¸Ðµ Ñ€Ñ‹Ð½Ð¾Ñ‡Ð½Ñ‹Ðµ Ð²ÐµÑÐ°" />
-              <AnalyticsMetric metric="diversificationRatio" value={hasMultipleHoldings ? a.currentRisk?.diversificationRatio : null} sample={a.matrixSample} ratio reason={!hasMultipleHoldings ? diversificationReason : !a.currentRisk ? currentRiskReason : null} />
-              <AnalyticsMetric metric="averageCorrelation" value={a.averageCorrelation} sample={a.matrixSample} ratio reason={!a.matrix ? matrixReason : null} />
-              <XRayMetric label="Largest Position Weight" value={a.concentrationSummary?.largestPositionWeight} percent formula="max(wáµ¢)" sample="Ð¢ÐµÐºÑƒÑ‰Ð¸Ðµ Ñ€Ñ‹Ð½Ð¾Ñ‡Ð½Ñ‹Ðµ Ð²ÐµÑÐ°" />
-              <XRayMetric label="Top 3 Weight" value={a.concentrationSummary?.top3Weight} percent formula="Î£ Ð²ÐµÑÐ° Ñ‚Ñ€Ñ‘Ñ… ÐºÑ€ÑƒÐ¿Ð½ÐµÐ¹ÑˆÐ¸Ñ… Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¹" sample="Ð¢ÐµÐºÑƒÑ‰Ð¸Ðµ Ñ€Ñ‹Ð½Ð¾Ñ‡Ð½Ñ‹Ðµ Ð²ÐµÑÐ°" />
-              <XRayMetric label="Largest Risk Contributor" value={a.currentRisk?.largestRiskContributor?.contribution} percent reason={!a.currentRisk ? currentRiskReason : null} formula="max(normalized RCáµ¢)" sample={a.matrixSample} />
-              <XRayMetric label="Portfolio Volatility" value={a.currentRisk?.volatility} percent reason={!a.currentRisk ? currentRiskReason : null} formula="âˆš(wáµ€Î£w)" sample={a.matrixSample} />
-              <XRayMetric label="Weighted Asset Volatility" value={a.currentRisk?.weightedAverageAssetVolatility} percent reason={!a.currentRisk ? currentRiskReason : null} formula="Î£(wáµ¢ Ã— Ïƒáµ¢)" sample={a.matrixSample} />
-            </div>
-          </section>
-          <section className="card">
-            {!a.matrix && <p className="notice">{matrixReason}</p>}
-            <div className="analytics-metrics">
-              <AnalyticsMetric metric="covarianceVol" value={a.currentRisk?.volatility} sample={a.matrixSample} reason={!a.currentRisk ? currentRiskReason : null} />
-              <AnalyticsMetric metric="diversificationRatio" value={hasMultipleHoldings ? a.currentRisk?.diversificationRatio : null} sample={a.matrixSample} ratio reason={!hasMultipleHoldings ? diversificationReason : !a.currentRisk ? currentRiskReason : null} />
-              <AnalyticsMetric metric="averageCorrelation" value={a.averageCorrelation} sample={a.matrixSample} ratio reason={!a.matrix ? matrixReason : null} />
-              <AnalyticsMetric metric="hhi" value={a.concentration?.hhi} sample="Ñ‚ÐµÐºÑƒÑ‰Ð¸Ðµ Ñ€Ñ‹Ð½Ð¾Ñ‡Ð½Ñ‹Ðµ Ð²ÐµÑÐ°" ratio />
-              <AnalyticsMetric metric="effectivePositions" value={a.concentration?.effectivePositions} sample="Ñ‚ÐµÐºÑƒÑ‰Ð¸Ðµ Ñ€Ñ‹Ð½Ð¾Ñ‡Ð½Ñ‹Ðµ Ð²ÐµÑÐ°" ratio />
-            </div>
-          </section>
-          <section className="card correlation-explorer">
-            <div className="section-heading"><div><h2>Correlation Explorer</h2><p className="caption">ÐšÐ¾Ñ€Ñ€ÐµÐ»ÑÑ†Ð¸Ð¸ Ñ‚ÐµÐºÑƒÑ‰ÐµÐ³Ð¾ risk window Ð¸ rolling pair correlations Ð·Ð° Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð½ÑƒÑŽ Ð¸ÑÑ‚Ð¾Ñ€Ð¸ÑŽ.</p></div><label>Ð’Ñ‹Ð±Ñ€Ð°Ð½Ð½Ñ‹Ð¹ Ð°ÐºÑ‚Ð¸Ð²<select className="input" value={c.selectedCorrelationAsset} onChange={event => { c.setSelectedCorrelationAsset(event.target.value); setSelectedCorrelationPeer(''); }}>{snapshot.positions.map(position => <option key={position.symbol} value={position.symbol}>{position.symbol}</option>)}</select></label></div>
-            {!a.matrix || !hasMultipleHoldings ? <p className="notice">{hasMultipleHoldings ? matrixReason : 'Correlation Explorer requires at least two holdings.'}</p> : <>
-              <div className="risk-budget-summary"><div><span>Highest Correlation</span><b>{c.correlationExplorer.highest ? `${c.correlationExplorer.highest.symbol} Â· ${numeric(c.correlationExplorer.highest.value)}` : 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…'}</b></div><div><span>Lowest Correlation</span><b>{c.correlationExplorer.lowest ? `${c.correlationExplorer.lowest.symbol} Â· ${numeric(c.correlationExplorer.lowest.value)}` : 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…'}</b></div><div><span>Benchmark Â· {c.benchmark}</span><b>{c.correlationExplorer.benchmark?.value == null ? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…' : numeric(c.correlationExplorer.benchmark.value)}</b></div></div>
-              <div className="table-scroll"><table><thead><tr><th>ÐŸÐ°Ñ€Ð°</th><th>Correlation</th><th>Observations</th><th>Rolling detail</th></tr></thead><tbody>{c.correlationExplorer.rows.map(row => <tr key={row.symbol}><td>{c.selectedCorrelationAsset} / {row.symbol}</td><td>{row.value == null ? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…' : numeric(row.value)}</td><td>{row.observations}</td><td><button className="btn btn-ghost" aria-pressed={activeCorrelationPeer === row.symbol || (!activeCorrelationPeer && selectedCorrelationRow?.symbol === row.symbol)} onClick={() => setSelectedCorrelationPeer(row.symbol)}>ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ</button></td></tr>)}{c.correlationExplorer.benchmark && <tr><td>{c.selectedCorrelationAsset} / {c.benchmark}</td><td>{c.correlationExplorer.benchmark.value == null ? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…' : numeric(c.correlationExplorer.benchmark.value)}</td><td>{c.correlationExplorer.benchmark.observations}</td><td><button className="btn btn-ghost" aria-pressed={activeCorrelationPeer === c.benchmark} onClick={() => setSelectedCorrelationPeer(c.benchmark)}>ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ</button></td></tr>}</tbody></table></div>
-              <div className="chart-periods" aria-label="Rolling correlation window">{([20, 60, 252] as const).map(n => <button key={n} aria-pressed={correlationWindow === n} onClick={() => setCorrelationWindow(n)}>{n}D</button>)}</div>
-              <AnalyticsChart points={(activeCorrelationPeer === c.benchmark ? c.correlationExplorer.benchmark?.rolling[correlationWindow] ?? [] : selectedCorrelationRow?.rolling[correlationWindow] ?? []).map(point => ({ ...point, caption: `${correlationWindow}D Â· ${point.observations} observations` }))} label={`Rolling correlation ${c.selectedCorrelationAsset} / ${activeCorrelationPeer || selectedCorrelationRow?.symbol || 'asset'}`} format={numeric} loading={c.loading} reason={`ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ ${correlationWindow} Ð¾Ð±Ñ‰Ð¸Ñ… Ð¿Ð¾ÑÐ»ÐµÐ´Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒÐ½Ñ‹Ñ… Ð½Ð°Ð±Ð»ÑŽÐ´ÐµÐ½Ð¸Ð¹ Ð´Ð»Ñ rolling correlation.`} />
-              <Formula name="Correlation Explorer" formula="Ï(A,B)=Cov(RA,RB)/(ÏƒAÏƒB)">Current correlation Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ Ð¾Ð±Ñ‰ÑƒÑŽ Ð²Ñ‹Ð±Ð¾Ñ€ÐºÑƒ Ñ‚ÐµÐºÑƒÑ‰ÐµÐ³Ð¾ risk window {c.riskHorizon} ({a.riskMatrix.commonObservations} observations). Rolling correlation Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ {correlationWindow} Ñ‚Ð¾Ñ‡Ð½Ñ‹Ñ… Ð¾Ð±Ñ‰Ð¸Ñ… Ð¿Ð¾ÑÐ»ÐµÐ´Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒÐ½Ñ‹Ñ… Ð´Ð½ÐµÐ²Ð½Ñ‹Ñ… Ð¸Ð½Ñ‚ÐµÑ€Ð²Ð°Ð»Ð¾Ð²; Ð¿Ñ€Ð¾Ð¿ÑƒÑÐºÐ¸ Ð½Ðµ Ð·Ð°Ð¿Ð¾Ð»Ð½ÑÑŽÑ‚ÑÑ.</Formula>
-            </>}
-          </section>
-          <CorrelationMatrix matrix={a.matrix} loading={c.loading} reason={matrixReason} />
-          <section className="card">
-            <div className="section-heading"><h2>Ð’ÐºÐ»Ð°Ð´ Ð² Ñ€Ð¸ÑÐº Ñ‚ÐµÐºÑƒÑ‰ÐµÐ³Ð¾ ÑÐ¾ÑÑ‚Ð°Ð²Ð°</h2><span className="tag">{c.riskHorizon}</span></div>
-            {!a.currentRisk && <p className="notice">{currentRiskReason}</p>}
-            <div className="table-scroll">
-              <table>
-                <thead><tr><th>ÐÐºÑ‚Ð¸Ð²</th><th>Ð’ÐµÑ</th><th>Ð”Ð¾Ð»Ñ variance</th><th>MCR = (Î£w)áµ¢</th><th>RC = wáµ¢MCRáµ¢</th></tr></thead>
-                <tbody>
-                  {a.currentRisk?.contributions.map((item) => (
-                    <tr key={item.symbol}>
-                      <td>{item.symbol}</td><td>{pct(item.weight)}</td><td>{pct(item.fraction)}</td><td>{item.marginal.toFixed(6)}</td><td>{item.absolute.toFixed(6)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <Formula name="Ð Ð°Ð·Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ variance" formula="ÏƒpÂ²=wâ€²Î£w; MCRáµ¢=(Î£w)áµ¢; RCáµ¢=wáµ¢MCRáµ¢; shareáµ¢=RCáµ¢/ÏƒpÂ²">
-              Ð“Ð¾Ð´Ð¾Ð²Ð°Ñ covariance matrix Ð¿Ð¾ÑÑ‚Ñ€Ð¾ÐµÐ½Ð° Ð¿Ð¾ Ð¾Ð´Ð½Ð¾Ð¹ Ð¸ Ñ‚Ð¾Ð¹ Ð¶Ðµ Ð²Ñ‹Ð±Ð¾Ñ€ÐºÐµ Ð¸Ð· Ð¿Ð¾ÑÐ»ÐµÐ´Ð½Ð¸Ñ… {a.riskMatrix.required} Ð¾Ð±Ñ‰Ð¸Ñ… return-Ð¸Ð½Ñ‚ÐµÑ€Ð²Ð°Ð»Ð¾Ð² Ð´Ð»Ñ Ð²ÑÐµÑ… Ð°ÐºÑ‚Ð¸Ð²Ð¾Ð². Î£RCáµ¢ = ÏƒpÂ², Ð° ÑÑƒÐ¼Ð¼Ð° Ð´Ð¾Ð»ÐµÐ¹ RC Ñ€Ð°Ð²Ð½Ð° 1 Ñ Ñ‡Ð¸ÑÐ»ÐµÐ½Ð½Ð¾Ð¹ Ð¿Ð¾Ð³Ñ€ÐµÑˆÐ½Ð¾ÑÑ‚ÑŒÑŽ. ÐžÑ‚Ñ€Ð¸Ñ†Ð°Ñ‚ÐµÐ»ÑŒÐ½Ñ‹Ð¹ Ð²ÐºÐ»Ð°Ð´ Ð²Ð¾Ð·Ð¼Ð¾Ð¶ÐµÐ½ Ñƒ Ñ…ÐµÐ´Ð¶Ð¸Ñ€ÑƒÑŽÑ‰ÐµÐ³Ð¾ Ð°ÐºÑ‚Ð¸Ð²Ð°. Ð”Ð°Ð½Ð½Ñ‹Ðµ: {a.matrixSample}.
-            </Formula>
-          </section>
-        </>
-      )}
-      {tab === 'attribution' && <AttributionPanel analytics={a} currency={snapshot.portfolio.base_currency} positions={snapshot.positions} />}
-      {tab === 'scenarios' && <ScenariosPanel snapshot={snapshot} controller={c} weights={scenarioWeights} onWeightsChange={setScenarioWeights} />}
-      {tab === 'benchmark' && <BenchmarkPanel controller={c} detailed />}
-      {tab !== 'xray' && <LaboratoryDataContext snapshot={snapshot} controller={c} />}
-    </>
-  );
-}
-
-function LaboratoryDataContext({ snapshot, controller: c }: { snapshot: PortfolioSnapshot; controller: AnalyticsController }) {
-  const a = c.analytics;
-  const latestPriceDate = a.dataQuality.latestPriceDate;
-  return <details className="card lab-data-context"><summary>Data Quality &amp; Methodology <span>{c.riskHorizon} Â· {a.riskMatrix.commonObservations} common observations</span></summary><div className="data-quality-grid"><div><span>Risk Window</span><b>{c.riskHorizon}</b></div><div><span>Covariance observations</span><b>{a.riskMatrix.commonObservations}/{a.riskMatrix.required}</b></div><div><span>Benchmark overlap Â· {c.benchmark}</span><b>{a.currentBenchmarkRisk.observations}</b></div><div><span>Price coverage</span><b>{snapshot.valuation.pricedPositions}/{snapshot.valuation.totalPositions}</b></div><div><span>Missing symbols</span><b>{snapshot.valuation.unpricedSymbols.length ? snapshot.valuation.unpricedSymbols.join(', ') : 'None reported'}</b></div><div><span>Missing intervals</span><b>{a.history.missingDates.length}</b></div><div><span>Last available price date</span><b>{latestPriceDate ?? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…'}</b></div><div><span>Optimization observations</span><b>{a.riskMatrix.matrix?.observations ?? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…'}</b></div><div><span>Historical scenario windows</span><b>{a.historicalReplay.map((item) => item.window).join(', ') || 'Unavailable'}</b></div></div>{!a.matrix && <p className="caption">{a.riskMatrix.reason}</p>}</details>;
-}
-
-function XRayMetric({ label, value, percent = false, reason, formula, sample }: { label: string; value: number | null | undefined; percent?: boolean; reason?: string | null; formula: string; sample: string }) {
-  const display = value == null || !Number.isFinite(value) ? 'ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð´Ð°Ð½Ð½Ñ‹Ñ…' : percent ? pct(value) : numeric(value);
-  return <div className="xray-summary-metric"><span>{label}<Formula name={label} formula={formula}>{reason ?? 'ÐœÐµÑ‚Ñ€Ð¸ÐºÐ° Ñ€Ð°ÑÑÑ‡Ð¸Ñ‚Ð°Ð½Ð° Ð¸Ð· ÑÑƒÑ‰ÐµÑÑ‚Ð²ÑƒÑŽÑ‰ÐµÐ³Ð¾ analytics layer.'} Ð”Ð°Ð½Ð½Ñ‹Ðµ: {sample}.</Formula></span><b title={value == null ? reason ?? undefined : undefined}>{display}</b></div>;
-}
+-
+M	]	½
+óÂ÷7ãà¢Æƒ#äÆ&÷&F÷'“Âöƒ#à¢Çí	½]Mí--]½Í­’m]Ý--=­-=²ÂMí]íMÝí-‚‚­ýí-M]½òãÂ÷à¢ÂöF—cà¢Â÷6V7F–öãà¢ÆF—b6Æ74æÖSÒ&Æ"×F'2"&öÆSÒ&w&÷W"&–ÖÆ&VÃÒ-
+}M]²Ý½-­‚#à¢·F'2æÖ‚‡B’Óâ€¢Æ'WGFöà¢¶W“×·Bæ–GÐ¢&–×&W76VC×·F"ÓÓÒBæ–GÐ¢öä6Æ–6³×²‚’Óâ6WEF"‡Bæ–B—Ð¢à¢·BæÆ&VÇÐ¢Âö'WGFöãà¢’—Ð¢ÂöF—cà¢ÆF—b6Æ74æÖSÒ&æÇ—F–72×6WGF–æw2#à¢ÆÆ&VÃà¢	]}­í-ò--­ÂR"=í@¢Æ–çW@¢6Æ74æÖSÒ&–çWB ¢G—SÒ&çVÖ&W" ¢Ö–ãÒ"Ó ¢ÖƒÒ# ¢7FWÒ"ã#R ¢fÇVS×¶2ç&gÐ¢öä6†ævS×²†R’Óà¢2ç6WE&b„ÖF‚æÖ‚‚ÓÂÖF‚æÖ–âƒÂçVÖ&W"†RçF&vWBçfÇVR’’’¢Ð¢óà¢ÂöÆ&VÃà¢ÆÆ&VÃà¢Ô"ÂR"=í@¢Æ–çW@¢6Æ74æÖSÒ&–çWB ¢G—SÒ&çVÖ&W" ¢Ö–ãÒ"Ó ¢ÖƒÒ# ¢7FWÒ"ã#R ¢fÇVS×¶2æÖ'Ð¢öä6†ævS×²†R’Óà¢2ç6WDÖ"„ÖF‚æÖ‚‚ÓÂÖF‚æÖ–âƒÂçVÖ&W"†RçF&vWBçfÇVR’’’¢Ð¢óà¢ÂöÆ&VÃà¢ÂöF—cà ¢²‡F"ÓÓÒw&—6²rÇÂF"ÓÓÒvF—fW'6–f–6F–öârÇÂF"ÓÓÒw‡&’r’bb€¢ÆF—b6Æ74æÖSÒ'6V7F–öâÖ†VF–ær#à¢ÆF—cà¢Æƒ#å&—6²†÷&—¦öãÂöƒ#à¢Ç6Æ74æÖSÒ&6F–öâ#í	íMÝâí­ÝâM½ò7W'&VçB×&—6²Â6÷f&–æ6RÂ6÷'&VÆF–öâ‚F—fW'6–f–6F–öââW&f÷&Öæ6RW&–öBí--òÝ]}-Í½ÂãÂ÷à¢ÂöF—cà¢Å&—6´†÷&—¦öå6VÆV7F÷"6öçG&öÆÆW#×¶7Òóà¢ÂöF—cà¢—Ð¢²‡F"ÓÓÒvGG&–'WF–öârÇÂF"ÓÓÒv&Væ6†Ö&²r’bbÅW&–öE6VÆV7F÷"6öçG&öÆÆW#×¶7ÒóçÐ ¢·F"ÓÓÒw‡&’rbbÃà¢Ç6V7F–öâ6Æ74æÖSÒ'‡&’×7VÖÖ'’#à¢ÆF—b6Æ74æÖSÒ'‡&’×7VÖÖ'’ÖÖ–â#ãÇ7â6Æ74æÖSÒ&W–V'&÷r#åõ%DdôÄ”ò‚Õ$“Â÷7ããÆƒ#í	ýí-M]½ÂýíBÍ­í­íýíÃÂöƒ#ãÇç·6æ6†÷Bç÷6—F–öç2æÆVæwF‡Òí-­½-½Rýí}m’+rMÝÝ½RÝ¶æWrFFR‚’çFôÆö6ÆTFFU7G&–ær‚w'RÕ%Rr—ÓÂ÷ãÇ7G&öæsç·6æ6†÷BçfÇVF–öâæ6ö×ÆWFRòÖöæW’‡6æ6†÷Bæ66÷VçEfÇVRóò6æ6†÷Bç÷'FföÆ–õfÇVR’¢}	Ý]Mí--í}ÝâMÝÝ½RwÓÂ÷7G&öæsãÇ6ÖÆÃí
+-íÍí-Âýí-M]½óÂ÷6ÖÆÃãÂöF—cà¢ÆF—b6Æ74æÖSÒ'‡&’×7VÖÖ'’ÖÖWG&–72#à¢Å…&”ÖWG&–2Æ&VÃÒ%F÷FÂ&WGW&âòEu"+r7GVÂ"fÇVS×¶çW&f÷&Öæ6RçGw'ÒW&6VçB&V6öã×¶çW&f÷&Öæ6Rç&V6öâóò}
+-]=]-òM­-}]­òG&ç67F–öâÖv&R-íòâwÒf÷&×VÆÒ%Eu"Ò(ˆòƒ².()Â’(‰""6×ÆS×·6×ÆWÒóà¢Å…&”ÖWG&–2Æ&VÃÒ%föÆF–Æ—G’+r7W'&VçB†öÆF–æw2"fÇVS×¶ç&÷‡’çföÆF–Æ—G—ÒW&6VçB&V6öã×¶ç&÷‡’ç&—6µv–æF÷rç&V6öâóò‚ç&÷‡’çföÆF–Æ—G’ò}
+¢-]­=]=âí--Í-]Í-}]­‚ÝRíý]M]½Òâr¢çVÆÂ—Òf÷&×VÆÒ,ø>()¢Ò(‰¢‡~Xê7r’9r(‰£#S""6×ÆS×¶G¶2ç&—6´†÷&—¦öçÒ+r7W'&VçB†öÆF–æw2&—6¶Òóà¢Å…&”ÖWG&–2Æ&VÃÒ%6†'R+r7W'&VçB†öÆF–æw2"fÇVS×¶ç&÷‡’ç6†'WÒ&V6öã×¶ç&÷‡’ç&—6µv–æF÷rç&V6öâóò‚ç&÷‡’ç6†'Ròu6†'RÝRíý]M]½Òý‚Ý]Mí--í}Ýí’½‚Ý=½]-í’-í½-½ÍÝí-‚âr¢çVÆÂ—Òf÷&×VÆÒ"ƒ#S"9rÖVâ‡.()¢’(‰"&b’òø>()¢Ææâ"6×ÆS×¶G¶2ç&—6´†÷&—¦öçÒ+r7W'&VçB†öÆF–æw2&—6¶Òóà¢Å…&”ÖWG&–2Æ&VÃÒ$7GVÂÖ‚G&vF÷vâ"fÇVS×¶æG&vF÷vãòæÖ‡ÒW&6VçB&V6öã×¶çW&f÷&Öæ6Rç&V6öâóòç&—6µ&V6öâóò}	M½ò7GVÂG&vF÷vâ-]=]-òÍÝÍ=Â#M­-}]­R&WGW&âÝÝ-]-½í"âwÒf÷&×VÆÒ&Ö–â…n()ÂòÖ‚…n(((
+en()Â’(‰"’"6×ÆS×·6×ÆWÒóà¢Å…&”ÖWG&–2Æ&VÃÒ%÷'FföÆ–ò&WF+r7W'&VçB†öÆF–æw2"fÇVS×¶æ7W'&VçD&Væ6†Ö&µ&—6²æ&WFÒ&V6öã×¶æ7W'&VçD&Væ6†Ö&µ&—6²æö'6W'fF–öç2Â#ò	Ý]Mí--í}ÝâíR&Væ6†Ö&²Ý-]-½í#¢G¶æ7W'&VçD&Væ6†Ö&µ&—6²æö'6W'fF–öç7Òó#æ¢çVÆÇÒf÷&×VÆÒ$6÷b‡.()¢Ç.Zb’òf"‡.Zb’"6×ÆS×¶G¶æ7W'&VçD&Væ6†Ö&µ&—6²æö'6W'fF–öç7ÒíRÝ-]-½í"+rG¶2æ&Væ6†Ö&·ÖÒóà¢Å…&”ÖWG&–2Æ&VÃÒ$†öÆF–æw2&÷‡’Ö‚G&vF÷vâ"fÇVS×¶ç&÷‡’æG&vF÷vãòæÖ‡ÒW&6VçB&V6öã×¶ç&÷‡’æG&vF÷vå&V6öçÒf÷&×VÆÒ&Ö–â…n()ÂòÖ‚…n(((
+en()Â’(‰"’Ân((Ò"6×ÆS×¶G¶2ç&—6´†÷&—¦öçÒ+r7W'&VçB†öÆF–æw3²ÝR7GVÂG&vF÷væÒóà¢Å…&”ÖWG&–2Æ&VÃÒ$F—fW'6–f–6F–öâ&F–ò"fÇVS×¶†4×VÇF—ÆT†öÆF–æw2òæ7W'&VçE&—6³òæF—fW'6–f–6F–öå&F–ò¢çVÆÇÒ&V6öã×¶F—fW'6–f–6F–öå&V6öçÒf÷&×VÆÒ,ê2‡~Z"9rø>Z"’òø>()¢"6×ÆS×¶æÖG&—…6×ÆWÒóà¢Å…&”ÖWG&–2Æ&VÃÒ$VffV7F—fR†öÆF–æw2"fÇVS×¶æ6öæ6VçG&F–öãòæVffV7F—fU÷6—F–öç7Ò&V6öã×²æ6öæ6VçG&F–öâò}	Ý=mÝ²ýí½Ý½R-]­=R½Ýí}Ý½R-]âr¢çVÆÇÒf÷&×VÆÒ#òê2‡~Z,+"’"6×ÆSÒ-
+-]­=R½Ýí}Ý½R-]"óà¢ÂöF—cà¢Â÷6V7F–öãà¢Ç6V7F–öâ6Æ74æÖSÒ'‡&’Öw&–B#à¢Æ'F–6ÆR6Æ74æÖSÒ&6&B‡&’Ö6öæ6VçG&F–öâ#ãÆF—b6Æ74æÖSÒ'6V7F–öâÖ†VF–ær#ãÆF—cãÆƒ#í	­íÝm]Ý-mòýí-M]½óÂöƒ#ãÇ6Æ74æÖSÒ&6F–öâ#í
+-]­=Rýí}m‚Âí-í-í-ÝÝ½Rýâ½Ýí}ÝíÍ2-]2ãÂ÷ãÂöF—cãÇ7â6Æ74æÖSÒ'Fr#ç·vV–v‡G2æÆVæwF‡Òýí}m“Â÷7ããÂöF—cà¢²6æ6†÷BçfÇVF–öâæ6ö×ÆWFRbbÇ6Æ74æÖSÒ&æ÷F–6R#í	M½ò-í}Ý½R-]í"Ý=mÝ²-]­=R­í-í-­‚-]Rí-­½-½Rýí}m’ãÂ÷çÐ¢ÆF—b6Æ74æÖSÒ'‡&’Ö†–v†Æ–v‡G2#ãÆF—cãÇ7ãäÆ&vW7B÷6—F–öãÂ÷7ããÆ#ç¶6öæ6VçG&F–öå7FG3òæÆ&vW7E÷6—F–öåvV–v‡BÓÒçVÆÂò}	Ý]Mí--í}ÝâMÝÝ½Rr¢7B†6öæ6VçG&F–öå7FG2æÆ&vW7E÷6—F–öåvV–v‡B—ÓÂö#ãÂöF—cãÆF—cãÇ7ãåF÷2vV–v‡CÂ÷7ããÆ#ç¶6öæ6VçG&F–öå7FG2ò7B†6öæ6VçG&F–öå7FG2çF÷5vV–v‡B’¢}	Ý]Mí--í}ÝâMÝÝ½RwÓÂö#ãÂöF—cãÆF—cãÇ7ãåF÷RvV–v‡CÂ÷7ããÆ#ç¶6öæ6VçG&F–öå7FG2ò7B†6öæ6VçG&F–öå7FG2çF÷UvV–v‡B’¢}	Ý]Mí--í}ÝâMÝÝ½RwÓÂö#ãÂöF—cãÆF—cãÇ7ãä„„“Â÷7ããÆ#ç¶6öæ6VçG&F–öå7FG3òæ††’ÓÒçVÆÂò}	Ý]Mí--í}ÝâMÝÝ½Rr¢6öæ6VçG&F–öå7FG2æ††’çFôf—†VBƒ2—ÓÂö#ãÂöF—cãÂöF—cà¢ÆF—b6Æ74æÖSÒ'‡&’Ö&'2#ç·vV–v‡G2æÖ‡ÓâÆF—b6Æ74æÖSÒ'‡&’Ö&"×&÷r"¶W“×·ç7–Ö&öÇÓãÆ#ç·ç7–Ö&öÇÓÂö#ãÆF—b6Æ74æÖSÒ'‡&’Ö&"×G&6²#ãÆ’7G–ÆS×·²v–GFƒ¢G´ÖF‚æÖ‚ƒÂÖF‚æÖ–âƒÂ‡çvV–v‡Bóò’¢’—ÒV×ÒóãÂöF—cãÇ7ãç·çvV–v‡BÓÒçVÆÂò~(	Br¢G²‡çvV–v‡B¢’çFôf—†VBƒ—ÒVÓÂ÷7ããÇ6ÖÆÃç¶ÖöæW’‡æÖ&¶WEfÇVR—ÓÂ÷6ÖÆÃãÂöF—câ—ÓÂöF—cà¢Äf÷&×VÆæÖSÒ$„„’‚ÝMM]­--ÝíR}½âýí}m’"f÷&×VÆÒ$„„’Òê2‡~Z,+"’+rVffV7F—fR†öÆF–æw2Òò„„’#í
+}-ÝâýâÝíÍí-ÝÝ½Â-]­=Â½Ýí}Ý½Â-]Ââ„„’½}­’¢í}Ý}]"í½Í=â­íÝm]Ý-mâãÂôf÷&×VÆà¢Âö'F–6ÆSà¢Æ'F–6ÆR6Æ74æÖSÒ&6&B#ãÆF—b6Æ74æÖSÒ'6V7F–öâÖ†VF–ær#ãÆF—cãÆƒ#í
+-=­-=­Âöƒ#ãÇ6Æ74æÖSÒ&6F–öâ#í	-]­ý-½-Ý-]-òMí½]’ýí-M]½ÍÝí’f&–æ6RãÂ÷ãÂöF—cãÇ7â6Æ74æÖSÒ'Fr#ç¶2ç&—6´†÷&—¦öçÓÂ÷7ããÂöF—cà¢²æ7W'&VçE&—6²bbÇ6Æ74æÖSÒ&æ÷F–6R#ç¶7W'&VçE&—6µ&V6öçÓÂ÷çÐ¢¶æ7W'&VçE&—6²bbÆF—b6Æ74æÖSÒ'‡&’×&—6²ÖÆ—7B#ç·vV–v‡G2æÖ‡Óâ²6öç7B&2Òç&—6´6öçG&–'WF–öã²&WGW&âÆF—b6Æ74æÖSÒ'‡&’×&—6²×&÷r"¶W“×·ç7–Ö&öÇÓãÆ#ç·ç7–Ö&öÇÓÂö#ãÇ7ãí	-]Ç7G&öæsç·çvV–v‡BÓÒçVÆÂò~(	Br¢7B‡çvV–v‡B—ÓÂ÷7G&öæsãÂ÷7ããÇ7ãí
+¢Ç7G&öæsç·&2ÓÒçVÆÂò~(	Br¢7B‡&2—ÓÂ÷7G&öæsãÂ÷7ããÆF—b6Æ74æÖSÒ'‡&’×&—6²Ö&'2#ãÆ’7G–ÆS×·²v–GFƒ¢G·çvV–v‡BÓÒçVÆÂò¢ÖF‚æÖ–âƒÂÖF‚æÖ‚ƒÂçvV–v‡B¢’—ÒV×ÒóãÆ’7G–ÆS×·²v–GFƒ¢G·&2ÓÒçVÆÂò¢ÖF‚æÖ–âƒÂÖF‚æÖ‚ƒÂ&2¢’—ÒV×ÒóãÂöF—cãÂöF—câÒ—ÓÂöF—cçÐ¢Ç6Æ74æÖSÒ&6F–öâ#í
+Ý’(	B-]²Mí½]-í-½’(	B-­½B"f&–æ6Râ	MÝÝ½S¢¶æÖG&—…6×ÆWÒãÂ÷à¢Âö'F–6ÆSà¢Æ'F–6ÆR6Æ74æÖSÒ&6&B#ãÆƒ#í	M-]M­móÂöƒ#ãÆF—b6Æ74æÖSÒ'‡&’ÖF—fW'6–f–6F–öâ#ãÆF—cãÇ7ãäçVÖ&W"öb†öÆF–æw3Â÷7ããÆ#ç·6æ6†÷Bç÷6—F–öç2æÆVæwF‡ÓÂö#ãÂöF—cãÆF—cãÇ7ãäVffV7F—fR†öÆF–æw3Â÷7ããÆ#ç¶æ6öæ6VçG&F–öãòæVffV7F—fU÷6—F–öç3òçFôf—†VBƒ’óò}	Ý]Mí--í}ÝâMÝÝ½RwÓÂö#ãÂöF—cãÆF—cãÇ7ãí
+]MÝýò­í]½ýmóÂ÷7ããÆ#ç¶æfW&vT6÷'&VÆF–öâÓÒçVÆÂò}	Ý]Mí--í}ÝâMÝÝ½Rr¢æfW&vT6÷'&VÆF–öâçFôf—†VBƒ"—ÓÂö#ãÂöF—cãÆF—cãÇ7ãå÷'FföÆ–òföÆF–Æ—G“Â÷7ããÆ#ç¶æ7W'&VçE&—6³òçföÆF–Æ—G’ÓÒçVÆÂò}	Ý]Mí--í}ÝâMÝÝ½Rr¢7B†æ7W'&VçE&—6²çföÆF–Æ—G’—ÓÂö#ãÂöF—cãÆF—cãÇ7ãåvV–v‡FVB76WBföÆF–Æ—G“Â÷7ããÆ#ç¶æ7W'&VçE&—6³òçvV–v‡FVDfW&vT76WEföÆF–Æ—G’ÓÒçVÆÂò}	Ý]Mí--í}ÝâMÝÝ½Rr¢7B†æ7W'&VçE&—6²çvV–v‡FVDfW&vT76WEföÆF–Æ—G’—ÓÂö#ãÂöF—cãÆF—cãÇ7ãå&—6²†÷&—¦öãÂ÷7ããÆ#ç¶2ç&—6´†÷&—¦öçÓÂö#ãÂöF—cãÂöF—cà¢Äf÷&×VÆæÖSÒ$F—fW'6–f–6F–öâ&F–ò"f÷&×VÆÒ$E"Òê2‡~Z"9rø>Z"’òø>()¢#í	-]‚æçVÆ—¦VBföÆF–Æ—G’]=-òríMÝí=â-½ÝÝí=âí­Ý¶2ç&—6´†÷&—¦öçÓ²6÷f&–æ6Rýí½Í}=]"í’ÝíÝ½íM]Ý’ãÂôf÷&×VÆà¢Âö'F–6ÆSà¢Æ'F–6ÆR6Æ74æÖSÒ&6&B#ãÆF—b6Æ74æÖSÒ'6V7F–öâÖ†VF–ær#ãÆF—cãÆƒ#í	­½í}]-½RÝ½íM]ÝóÂöƒ#ãÇ6Æ74æÖSÒ&6F–öâ#í
+M­-²Â}-ÝÝ½Rýâ-]­=ÂMÝÝ½Âýí-M]½òãÂ÷ãÂöF—cãÇ7â6Æ74æÖSÒ'Fr#äFWFW&Ö–æ—7F–3Â÷7ããÂöF—cà¢¶ö'6W'fF–öç2æÆVæwF‚òÇVÂ6Æ74æÖSÒ'‡&’Öö'6W'fF–öç2#ç¶ö'6W'fF–öç2æÖ†—FVÒÓâ²6öç7BF&vWBÒ—FVÒæ6FVv÷'’ÓÓÒw&—6²ròw&—6²r¢—FVÒæ6FVv÷'’ÓÓÒvF—fW'6–f–6F–öâròvF—fW'6–f–6F–öâr¢—FVÒæ6FVv÷'’ÓÓÒwW&f÷&Öæ6RròwW&f÷&Öæ6Rr¢vGG&–'WF–öâs²&WGW&âÆÆ’¶W“×¶—FVÒæ–GÒFF×6WfW&—G“×¶—FVÒç6WfW&—G—ÓãÇ7ãç¶—FVÒçF—FÆWÓÂ÷7ããÇç¶—FVÒæÖW76vWÓÂ÷ãÆ'WGFöâ6Æ74æÖSÒ'FW‡BÖ'WGFöâ"G—SÒ&'WGFöâ"öä6Æ–6³×²‚’Óâ6WEF"‡F&vWB—Óí	í-­½-Â}M]²(i#Âö'WGFöããÂöÆ“ã²Ò—ÓÂ÷VÃâ¢Ç6Æ74æÖSÒ&6F–öâ#í	ýíí=í-½RÝ½íM]ÝòÝR-½ý-½]Ý²½âMÝÝ½Rýí­Ý]Mí--í}ÝâãÂ÷çÐ¢Âö'F–6ÆSà¢ÄFFVÆ—G•æVÂ6æ6†÷C×·6æ6†÷GÒ6öçG&öÆÆW#×¶7Òóà¢Â÷6V7F–öãà¢Ç6V7F–öâ6Æ74æÖSÒ&6&B‡&’×6†÷'F7WG2#ãÆF—b6Æ74æÖSÒ'6V7F–öâÖ†VF–ær#ãÆF—cãÆƒ#í	ý]]-‚¢½]Mí-ÝãÂöƒ#ãÇ6Æ74æÖSÒ&6F–öâ#í	½-½’ý]]]íBr-íM­‚¢Ý½-}]­ÂM]-½ýÂãÂ÷ãÂöF—cãÂöF—cãÆF—b6Æ74æÖSÒ'‡&’×6†÷'F7WBÖÆ—7B#çµµ²w&—6²rÂuf–Wr&—6²'VFvWBuÒÅ²w&—6²rÂt÷VâG&vF÷vâÆ"uÒÅ²vF—fW'6–f–6F–öârÂtW‡Æ÷&R6÷'&VÆF–öç2uÒÅ²v&Væ6†Ö&²rÂt6ö×&R&Væ6†Ö&²uÒÅ²vGG&–'WF–öârÂt÷VâGG&–'WF–öâuÒÅ²w66Væ&–÷2rÂu7G&W72÷'FföÆ–òuÒÅ²w66Væ&–÷2rÂu'Vâv†BÖ–buÕÒæÖ‚…·F&vWBÆÆ&VÅÒÆ–æFW‚“ÓãÆ'WGFöâ¶W“×¶G·F&vWGÒÒG¶–æFW‡ÖÒ6Æ74æÖSÒ&'Fâ'FâÖv†÷7B"G—SÒ&'WGFöâ"öä6Æ–6³×²‚“Óç6WEF"‡F&vWB—Óç¶Æ&VÇÓÂö'WGFöãâ—ÓÂöF—cãÂ÷6V7F–öãà¢ÂóçÐ ¢·F"ÓÓÒwW&f÷&Öæ6RrbbçW&f÷&Öæ6Rç&V6öâbb2æÆöF–ærbb€¢Ç6Æ74æÖSÒ&æ÷F–6R#ç¶çW&f÷&Öæ6Rç&V6öçÓÂ÷à¢—Ð¢·F"ÓÓÒw&—6²rbbç&—6µ&V6öâbb2æÆöF–ærbb€¢Ç6Æ74æÖSÒ&æ÷F–6R#ç·&÷f–FW%&V6öâóòç&—6µ&V6öçÓÂ÷à¢—Ð¢·F"ÓÓÒwW&f÷&Öæ6Rrbb€¢Ãà¢Å÷'FföÆ–ô†—7F÷'”6†'@¢6öçG&öÆÆW#×¶7Ð¢7W'&Væ7“×·6æ6†÷Bç÷'FföÆ–òæ&6Uö7W'&Væ7—Ð¢óà¢Ç6V7F–öâ6Æ74æÖSÒ&6&B#à¢ÆF—b6Æ74æÖSÒ&æÇ—F–72ÖÖWG&–72#à¢²€¢°¢wGw"rÀ¢v6w"rÀ¢wF÷FÅ&WGW&ârÀ¢v&W7DF’rÀ¢wv÷'7DF’rÀ¢w÷6—F—fTF—2rÀ¢væVvF—fTF—2rÀ¢Ò26öç7@¢’æÖ‚†ÖWG&–2’Óâ€¢ÄæÇ—F–74ÖWG&–0¢¶W“×¶ÖWG&–7Ð¢ÖWG&–3×¶ÖWG&–7Ð¢fÇVS×¶çW&f÷&Öæ6U¶ÖWG&–5×Ð¢6×ÆS×·6×ÆWÐ¢&V6öã×¶çW&f÷&Öæ6Rç&V6öçÐ¢óà¢’—Ð¢ÂöF—cà¢Â÷6V7F–öãà¢Ä6—FÅ7VÖÖ'’6æ6†÷C×·6æ6†÷GÒóà¢ÄÖöçF†Ç•&WGW&ç4†VFÖ ¢ÖöçF‡3×¶çW&f÷&Öæ6RæÖöçF†Ç—Ð¢ÆöF–æs×¶2æÆöF–æwÐ¢6×ÆS×·6×ÆWÐ¢óà¢Âóà¢—Ð¢·F"ÓÓÒw&—6²rbb€¢Ãà¢Ç6V7F–öâ6Æ74æÖSÒ&6&B#à¢ÆF—b6Æ74æÖSÒ'6V7F–öâÖ†VF–ær#à¢ÆF—cà¢Æƒ#ä7W'&VçB†öÆF–æw2&—6³Âöƒ#à¢Ç6Æ74æÖSÒ&6F–öâ#í	-í}]­òím]Ý­­-]­=]=âí--ýí-M]½òýâF§W7FVB&WGW&ç2‚]=íMÝýÝÂ½Ýí}Ý½Â-]Ââ
+Ý-âÝRM­-}]­òMí]íMÝí-Âýí½Í}í--]½òãÂ÷à¢ÂöF—cà¢Ç7â6Æ74æÖSÒ'Fr#ç¶2ç&—6´†÷&—¦öçÒ†—7F÷&–6ÂÆöö¶&6³Â÷7ãà¢ÂöF—cà¢¶ç&÷‡’ç&—6µv–æF÷rç&V6öâbbÇ6Æ74æÖSÒ&æ÷F–6R#ç¶ç&÷‡’ç&—6µv–æF÷rç&V6öçÓÂ÷çÐ¢ÆF—b6Æ74æÖSÒ&æÇ—F–72ÖÖWG&–72#à¢ÄæÇ—F–74ÖWG&–2ÖWG&–3Ò'föÆF–Æ—G’"Æ&VÃÒ%föÆF–Æ—G’+r7W'&VçB†öÆF–æw2"fÇVS×¶ç&÷‡’çföÆF–Æ—G—Ò6×ÆS×¶G¶2ç&—6´†÷&—¦öçÒ+rG¶ç&÷‡’ç&—6µv–æF÷ræf–Æ&ÆTö'6W'fF–öç7ÒíR&÷‡’ÝÝ-]-½í&Ò&V6öã×¶ç&÷‡’ç&—6µv–æF÷rç&V6öâóò‚ç&÷‡’çföÆF–Æ—G’ò}
+¢-]­=yÛËh‘éì¶»§q«^uÑ¥Í5•ÑÉ¥Œ­•äõíµ•ÑÉ¥ôµ•ÑÉ¥Œõíµ•ÑÉ¥ô±…‰•°õí€‘íµ•ÑÉ¥Œ€ôôô€Ù½±…Ñ¥±¥Ñäœ€ü€Y½±…Ñ¥±¥Ñäœ€èµ•ÑÉ¥Œ€ôôô€Í¡…ÉÁ”œ€ü€M¡…ÉÁ”œ€èµ•ÑÉ¥Œ€ôôô€Í½ÉÑ¥¹¼œ€ü€M½ÉÑ¥¹¼œ€èµ•ÑÉ¥Œ€ôôô€…±µ…Èœ€ü€…±µ…Èœ€èµ•ÑÉ¥Œ€ôôô€Ù…ÈäÔœ€ü€Y…H€äÔ”œ€è€áÁ•Ñ•M¡½ÉÑ™…±°€äÔ”ôƒ
+ÜÑÕ…±ôÙ…±Õ”õí„¹É¥Í­mµ•ÑÉ¥uôÍ…µÁ±”õí„¹É¥Í­M…µÁ±•ôÉ…Ñ¥¼õílÍ¡…ÉÁ”œ°€Í½ÉÑ¥¹¼œ°€…±µ…Èt¹¥¹±Õ‘•Ì¡µ•ÑÉ¥Œ¥ôÉ•…Í½¸õíµ•ÑÉ¥Œ€ôôô€Ù…ÈäÔœñðµ•ÑÉ¥Œ€ôôô€•ÌäÔœ€ü„¹Ñ…¥±I¥Í­I•…Í½¸€èµ•ÑÉ¥Œ€ôôô€Í½ÉÑ¥¹¼œ€ü„¹Í½ÉÑ¥¹½I•…Í½¸€èµ•ÑÉ¥Œ€ôôô€…±µ…Èœ€ü„¹Á•É™½Éµ…¹”¹É•…Í½¸€üü„¹É¥Í­I•…Í½¸€è„¹É¥Í­I•…Í½¹ô€¼ø¥ô(€€€€€€€€€€€€€€ñ¹…±åÑ¥Í5•ÑÉ¥Œµ•ÑÉ¥Œô‰µ…áÉ…Ý‘½Ý¸ˆ±…‰•°ô‰5…àÉ…Ý‘½Ý¸ƒ
+ÜÑÕ…°ˆÙ…±Õ”õí„¹‘É…Ý‘½Ý¸ü¹µ…à€üü¹Õ±±ôÍ…µÁ±”õíÍ…µÁ±•ôÉ•…Í½¸õí„¹Á•É™½Éµ…¹”¹É•…Í½¸€üü„¹É¥Í­I•…Í½¹ô€¼ø(€€€€€€€€€€€€€€ñ¹…±åÑ¥Í5•ÑÉ¥Œµ•ÑÉ¥Œô‰ÕÉÉ•¹ÑÉ…Ý‘½Ý¸ˆ±…‰•°ô‰ÕÉÉ•¹ÐÉ…Ý‘½Ý¸ƒ
+ÜÑÕ…°ˆÙ…±Õ”õí„¹‘É…Ý‘½Ý¸ü¹ÕÉÉ•¹Ð€üü¹Õ±±ôÍ…µÁ±”õíÍ…µÁ±•ôÉ•…Í½¸õí„¹Á•É™½Éµ…¹”¹É•…Í½¸€üü„¹É¥Í­I•…Í½¹ô€¼ø(€€€€€€€€€€€€ð½‘¥Øùô(€€€€€€€€€€ð½Í•Ñ¥½¸ø(€€€€€€€€€€ñÍ•Ñ¥½¸±…ÍÍ9…µ”ô‰…Éˆø(€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰Í•Ñ¥½¸µ¡•…‘¥¹œˆøñ‘¥Øøñ ÈùI¥Í¬	Õ‘•Ðð½ ÈøñÀ±…ÍÍ9…µ”ô‰…ÁÑ¥½¸ˆûBKBëBïBÃBÐƒBëBÃBÛBÓBûBäƒBÿBûBßBãFBãBàƒBÈ…¹¹Õ…±¥é•Ù½±…Ñ¥±¥ÑäƒBßBÀíŒ¹É¥Í­!½É¥é½¹ô¸ð½Àøð½‘¥ØøñÍÁ…¸±…ÍÍ9…µ”ô‰Ñ…œˆû:Œ¹½Éµ…±¥é•Ií„¹ÕÉÉ•¹ÑI¥Í¬€üÁÐ¡„¹ÕÉÉ•¹ÑI¥Í¬¹¹½Éµ…±¥é•‘I¥Í­½¹ÑÉ¥‰ÕÑ¥½¹MÕ´¤€è€ŸŠPôð½ÍÁ…¸øð½‘¥Øø(€€€€€€€€€€€ì…„¹ÕÉÉ•¹ÑI¥Í¬€˜˜€ñÀ±…ÍÍ9…µ”ô‰¹½Ñ¥”ˆùíÕÉÉ•¹ÑI¥Í­I•…Í½¹ôð½Àùô(€€€€€€€€€€€í„¹ÕÉÉ•¹ÑI¥Í¬€˜˜€ðø(€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰É¥Í¬µ‰Õ‘•ÐµÍÕµµ…Éäˆøñ‘¥ØøñÍÁ…¸ù1…É•ÍÐI¥Í¬½¹ÑÉ¥‰ÕÑ½Èð½ÍÁ…¸øñˆùí„¹ÕÉÉ•¹ÑI¥Í¬¹±…É•ÍÑI¥Í­½¹ÑÉ¥‰ÕÑ½Èü¹Íåµ‰½°€üü€ŸŠPôƒ
+Üí„¹ÕÉÉ•¹ÑI¥Í¬¹±…É•ÍÑI¥Í­½¹ÑÉ¥‰ÕÑ½È€üÁÐ¡„¹ÕÉÉ•¹ÑI¥Í¬¹±…É•ÍÑI¥Í­½¹ÑÉ¥‰ÕÑ½È¹½¹ÑÉ¥‰ÕÑ¥½¸¤€è€ŸŠPôð½ˆøð½‘¥Øøñ‘¥ØøñÍÁ…¸ùQ½À€ÌI¥Í¬½¹ÑÉ¥‰ÕÑ¥½¸ð½ÍÁ…¸øñˆùíÁÐ¡„¹ÕÉÉ•¹ÑI¥Í¬¹Ñ½ÀÍI¥Í­½¹ÑÉ¥‰ÕÑ¥½¸¥ôð½ˆøð½‘¥Øøñ‘¥ØøñÍÁ…¸ùI¥Í¬½¹•¹ÑÉ…Ñ¥½¸ƒ
+Üƒ:Œ¡I—
+È¤ð½ÍÁ…¸øñˆùí¹Õµ•É¥Œ¡„¹ÕÉÉ•¹ÑI¥Í¬¹É¥Í­½¹•¹ÑÉ…Ñ¥½¸¥ôð½ˆøð½‘¥Øøð½‘¥Øø(€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰É¥Í¬µ‰Õ‘•Ðµ±••¹ˆøñÍÁ…¸øñ¤€¼ø]•¥¡Ðð½ÍÁ…¸øñÍÁ…¸øñ¤€¼øI¥Í¬½¹ÑÉ¥‰ÕÑ¥½¸€”ð½ÍÁ…¸øð½‘¥Øø(€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰É¥Í¬µ‰Õ‘•Ðµ±¥ÍÐˆùí„¹ÕÉÉ•¹ÑI¥Í¬¹½¹ÑÉ¥‰ÕÑ¥½¹Ì¹µ…À¡¥Ñ•´€ôø€ñ‘¥Ø±…ÍÍ9…µ”ô‰É¥Í¬µ‰Õ‘•ÐµÉ½Üˆ­•äõí¥Ñ•´¹Íåµ‰½±ôøñˆùí¥Ñ•´¹Íåµ‰½±ôð½ˆøñ‘¥Ø±…ÍÍ9…µ”ô‰É¥Í¬µ‰Õ‘•Ðµ‰…ÉÌˆÑ¥Ñ±”õí€‘í¥Ñ•´¹Íåµ‰½±ôè]•¥¡Ð€‘íÁÐ¡¥Ñ•´¹Ý•¥¡Ð¥ôƒ
+ÜI¥Í¬½¹ÑÉ¥‰ÕÑ¥½¸€‘íÁÐ¡¥Ñ•´¹¹½Éµ…±¥é•‘I¥õôøñ¤ÍÑå±”õíìÝ¥‘Ñ è€‘í5…Ñ ¹µ¥¸ ÄÀÀ°5…Ñ ¹…‰Ì¡¥Ñ•´¹Ý•¥¡Ð¤€¨€ÄÀÀ¥ô•€õô€¼øñ¤ÍÑå±”õíìÝ¥‘Ñ è€‘í5…Ñ ¹µ¥¸ ÄÀÀ°5…Ñ ¹…‰Ì¡¥Ñ•´¹¹½Éµ…±¥é•‘I¤€¨€ÄÀÀ¥ô•€°‰…­É½Õ¹è¥Ñ•´¹¹½Éµ…±¥é•‘I€ð€À€ü€Ù…È ´µ¹•…Ñ¥Ù”¤œ€èÕ¹‘•™¥¹•õô€¼øð½‘¥ØøñÍÁ…¸ùíÁÐ¡¥Ñ•´¹Ý•¥¡Ð¥ôð½ÍÁ…¸øñÍÑÉ½¹œùíÁÐ¡¥Ñ•´¹¹½Éµ…±¥é•‘I¥ôð½ÍÑÉ½¹œøð½‘¥Øø¥ôð½‘¥Øø(€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰Ñ…‰±”µÍÉ½±°ˆøñÑ…‰±”øñÑ¡•…øñÑÈøñÑ ûBCBëFBãBÈð½Ñ øñÑ ûBKB×Fð½Ñ øñÑ ùÍÍ•ÐY½±…Ñ¥±¥Ñäð½Ñ øñÑ ù5K†Öˆð½Ñ øñÑ ùI†Öˆð½Ñ øñÑ ùI€”ð½Ñ øñÑ ùI¥Í¬€¼]•¥¡Ðð½Ñ øð½ÑÈøð½Ñ¡•…øñÑ‰½‘äùí„¹ÕÉÉ•¹ÑI¥Í¬¹½¹ÑÉ¥‰ÕÑ¥½¹Ì¹µ…À¡¥Ñ•´€ôø€ñÑÈ­•äõí¥Ñ•´¹Íåµ‰½±ôøñÑùí¥Ñ•´¹Íåµ‰½±ôð½ÑøñÑùíÁÐ¡¥Ñ•´¹Ý•¥¡Ð¥ôð½ÑøñÑùíÁÐ¡¥Ñ•´¹…ÍÍ•ÑY½±…Ñ¥±¥Ñä¥ôð½ÑøñÑùíÁÐ¡¥Ñ•´¹µÈ¥ôð½ÑøñÑùíÁÐ¡¥Ñ•´¹ÉŒ¥ôð½ÑøñÑùíÁÐ¡¥Ñ•´¹¹½Éµ…±¥é•‘I¥ôð½ÑøñÑùí¥Ñ•´¹É¥Í­]•¥¡ÑI…Ñ¥¼€ôô¹Õ±°€ü€ŸBwB×BÓBûFFBÃFBûFB÷BøƒBÓBÃB÷B÷F/Fœ€è¹Õµ•É¥Œ¡¥Ñ•´¹É¥Í­]•¥¡ÑI…Ñ¥¼¥ôð½Ñøð½ÑÈø¥ôð½Ñ‰½‘äøð½Ñ…‰±”øð½‘¥Øø(€€€€€€€€€€€€€€ñ½ÉµÕ±„¹…µ”ô‰I¥Í¬	Õ‘•Ðˆ™½ÉµÕ±„ô‰5K†Öˆô£:Ü§†Öˆ¿>Š
+hìI†Öˆõß†Ö‹]5K†Öˆì¹½Éµ…±¥é•I†ÖˆõI†Öˆ¿>Š
+hˆûBSBûBïF<¹½Éµ…±¥é•IƒFFBóBóBãFFB×FFF<ƒBÿFBãBóB×FB÷BøƒBÓBø€ÄÀÀ”¸ƒB—B×BÓBÛBãFFF;F'BãBÔƒBÿBûBßBãFBãBàƒBóBûBÏFFƒBãBóB×FF0ƒBûFFBãFBÃFB×BïF3B÷F/BäƒBËBëBïBÃBÐ¸I¥Í¬½¹•¹ÑÉ…Ñ¥½¸ƒŠPƒFFBóBóBÀƒBëBËBÃBÓFBÃFBûBÈƒBÓBûBïB×Bä¹½Éµ…±¥é•I°ƒB÷BÔƒBÿFBûBÏB÷BûBÜƒBàƒB÷BÔƒFB×BëBûBóB×B÷BÓBÃFBãF<¸ð½½ÉµÕ±„ø(€€€€€€€€€€€€ð¼ùô(€€€€€€€€€€ð½Í•Ñ¥½¸ø(€€€€€€€€€€ñÉ…Ý‘½Ý¹¡…ÉÐ…¹…±åÑ¥Ìõí…ô±½…‘¥¹œõíŒ¹±½…‘¥¹ô€¼ø(€€€€€€€€€€ñÍ•Ñ¥½¸±…ÍÍ9…µ”ô‰…Éˆø(€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰Í•Ñ¥½¸µ¡•…‘¥¹œˆø(€€€€€€€€€€€€€€ñ‘¥Øøñ ÈûB‡BëBûBïF3BßF?F'BÃF<ƒBËBûBïBÃFBãBïF3B÷BûFFF0ð½ ÈøñÀ±…ÍÍ9…µ”ô‰…ÁÑ¥½¸ˆûBcFFBûFBãFB×FBëBãBäÉ½±±¥¹œ·BÏFBÃFBãBèƒBãFBÿBûBïF3BßFB×FƒBûFBÓB×BïF3B÷F/BäÁ•É™½Éµ…¹”Á•É¥½èíŒ¹Á•É¥½‘ô¸ð½Àøð½‘¥Øø(€€€€€€€€€€€€€€ñA•É¥½‘M•±•Ñ½È½¹ÑÉ½±±•Èõíô€¼ø(€€€€€€€€€€€€ð½‘¥Øø(€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰¡…ÉÐµÁ•É¥½‘Ìˆ…É¥„µ±…‰•°ô‹B{BëB÷BøƒBËBûBïBÃFBãBïF3B÷BûFFBàˆø(€€€€€€€€€€€€€ì¡lÈÀ°€ØÀ°€ÈÔÉt…Ì½¹ÍÐ¤¹µ…À ¡¸¤€ôø€ (€€€€€€€€€€€€€€€€ñ‰ÕÑÑ½¸­•äõí¹ô…É¥„µÁÉ•ÍÍ•õíÙ½±]¥¹‘½Ü€ôôô¹ô½¹±¥¬õì ¤€ôøÍ•ÑY½±]¥¹‘½Ü¡¸¥ôùí¹õð½‰ÕÑÑ½¸ø(€€€€€€€€€€€€€€¤¥ô(€€€€€€€€€€€€ð½‘¥Øø(€€€€€€€€€€€€ñ¹…±åÑ¥Í¡…ÉÐ­•äõíÙ½°´‘íÙ½±]¥¹‘½Ýô´‘íŒ¹Á•É¥½‘õôÁ½¥¹ÑÌõí„¹É½±±¥¹œ¹Ù½±…Ñ¥±¥ÑåmÙ½±]¥¹‘½Ýuô±…‰•°ô‹B‡BëBûBïF3BßF?F'BÃF<ƒBËBûBïBÃFBãBïF3B÷BûFFF0ˆ™½Éµ…ÐõíÁÑô±½…‘¥¹œõíŒ¹±½…‘¥¹ôÉ•…Í½¸õíÁÉ½Ù¥‘•ÉI•…Í½¸€üü„¹É¥Í­I•…Í½¹ô€¼ø(€€€€€€€€€€€€ñ½ÉµÕ±„¹…µ”ô‹B{BëB÷BøƒBËBûBïBÃFBãBïF3B÷BûFFBàˆ™½ÉµÕ±„ô‹>}Ý¥¹‘½Ü€ôÍÑ‘•Ù}Í…µÁ±”¡É}Ý¥¹‘½Ü¤ƒ\ƒŠ"hÈÔÈˆø(€€€€€€€€€€€€€ƒBwFBÛB÷BøƒBÿBûBïB÷BûBÔƒBûBëB÷BøƒBãBÜíÙ½±]¥¹‘½ÝôƒFBãFFF/FƒBÓBûFBûBÓB÷BûFFB×Bä¸ƒBFBÃFFBûBèƒBÓBøƒB÷BÃBëBûBÿBïB×B÷BãF<ƒBûBëB÷BÀƒBàƒBûBëB÷BÀ°ƒBÿB×FB×FB×BëBÃF;F'BãBÔƒBãFBëBïF;FFGB÷B÷F/BäÑÉ…‘”½…ÀƒBãB÷FB×FBËBÃBì°ƒB÷BÔƒBËF/BÓFBóF/BËBÃF;FFF<¸ƒBSBÃB÷B÷F/BÔèíÍ…µÁ±•ô¸(€€€€€€€€€€€€ð½½ÉµÕ±„ø(€€€€€€€€€€ð½Í•Ñ¥½¸ø(€€€€€€€€€€ñÍ•Ñ¥½¸±…ÍÍ9…µ”ô‰…Éˆø(€€€€€€€€€€€€ñ ÈûB‡BëBûBïF3BßF?F'BãBäM¡…ÉÁ”ð½ Èø(€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰¡…ÉÐµÁ•É¥½‘Ìˆ…É¥„µ±…‰•°ô‹B{BëB÷BøM¡…ÉÁ”ˆø(€€€€€€€€€€€€€ì¡lÈÀ°€ØÀ°€ÈÔÉt…Ì½¹ÍÐ¤¹µ…À ¡¸¤€ôø€ (€€€€€€€€€€€€€€€€ñ‰ÕÑÑ½¸­•äõí¹ô…É¥„µÁÉ•ÍÍ•õíÍ¡…ÉÁ•]¥¹‘½Ü€ôôô¹ô½¹±¥¬õì ¤€ôøÍ•ÑM¡…ÉÁ•]¥¹‘½Ü¡¸¥ôùí¹õð½‰ÕÑÑ½¸ø(€€€€€€€€€€€€€€¤¥ô(€€€€€€€€€€€€ð½‘¥Øø(€€€€€€€€€€€€ñ¹…±åÑ¥Í¡…ÉÐ­•äõíÍ¡…ÉÁ”´‘íÍ¡…ÉÁ•]¥¹‘½Ýô´‘íŒ¹Á•É¥½‘õôÁ½¥¹ÑÌõí„¹É½±±¥¹œ¹Í¡…ÉÁ•mÍ¡…ÉÁ•]¥¹‘½Ýuô±…‰•°ô‹B‡BëBûBïF3BßF?F'BãBäM¡…ÉÁ”ˆ™½Éµ…Ðõì¡Ø¤€ôøØ¹Ñ½¥á• È¥ô±½…‘¥¹œõíŒ¹±½…‘¥¹ôÉ•…Í½¸õíÁÉ½Ù¥‘•ÉI•…Í½¸€üü„¹É¥Í­I•…Í½¹ô€¼ø(€€€€€€€€€€€€ñ½ÉµÕ±„¹…µ”ô‹B{BëB÷BøM¡…ÉÁ”ˆ™½ÉµÕ±„ô‰M¡…ÉÁ”ô ÈÔË]µ•…¸¡È§Š"II™}…¹¹Õ…°¤¿>}…¹¹Õ…°ˆø(€€€€€€€€€€€€€ƒBBûBïB÷BûBÔƒBûBëB÷BøíÍ¡…ÉÁ•]¥¹‘½ÝôƒFBãFFF/FƒBÓBûFBûBÓB÷BûFFB×Bä°I˜íŒ¹É™ô”ƒBÈƒBÏBûBÐ¸ƒBFBàƒB÷FBïB×BËBûBäƒBËBûBïBÃFBãBïF3B÷BûFFBàƒFFBÃFFBûBèƒB÷B×BÓBûFFFBÿB×Bô¸ƒBSBÃB÷B÷F/BÔèíÍ…µÁ±•ô¸(€€€€€€€€€€€€ð½½ÉµÕ±„ø(€€€€€€€€€€ð½Í•Ñ¥½¸ø(€€€€€€€€ð¼ø(€€€€€€¥ô(€€€€€íÑ…ˆ€ôôô€‘¥Ù•ÉÍ¥™¥…Ñ¥½¸œ€˜˜€ (€€€€€€€€ðø(€€€€€€€€€€ñÍ•Ñ¥½¸±…ÍÍ9…µ”ô‰…Éˆø(€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰Í•Ñ¥½¸µ¡•…‘¥¹œˆøñ‘¥Øøñ Èù¥Ù•ÉÍ¥™¥…Ñ¥½¸=Ù•ÉÙ¥•Üð½ ÈøñÀ±…ÍÍ9…µ”ô‰…ÁÑ¥½¸ˆûBkBÃBÿBãFBÃBì°ƒFBûBËBóB×FFB÷F/BäƒFBãFBèƒBàƒBëBûB÷FB×B÷FFBÃFBãF<É¥Í¬½¹ÑÉ¥‰ÕÑ¥½¹Ìƒ
+ÜíŒ¹É¥Í­!½É¥é½¹ô¸ð½Àøð½‘¥ØøñÍÁ…¸±…ÍÍ9…µ”ô‰Ñ…œˆùíŒ¹É¥Í­!½É¥é½¹ôð½ÍÁ…¸øð½‘¥Øø(€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰…¹…±åÑ¥Ìµµ•ÑÉ¥Ìˆø(€€€€€€€€€€€€€€ñaI…å5•ÑÉ¥Œ±…‰•°ô‰ÑÕ…°!½±‘¥¹ÌˆÙ…±Õ”õíÍ¹…ÁÍ¡½Ð¹Á½Í¥Ñ¥½¹Ì¹±•¹Ñ¡ô™½ÉµÕ±„ô‹BkBûBïBãFB×FFBËBøƒBûFBëFF/FF/FƒBÿBûBßBãFBãBäˆÍ…µÁ±”ô‹B‹B×BëFF'BãBäƒBÿBûFFFB×BïF0ˆ€¼ø(€€€€€€€€€€€€€€ñaI…å5•ÑÉ¥Œ±…‰•°ô‰™™•Ñ¥Ù”!½±‘¥¹ÌˆÙ…±Õ”õí„¹½¹•¹ÑÉ…Ñ¥½¸ü¹•™™•Ñ¥Ù•A½Í¥Ñ¥½¹Íô™½ÉµÕ±„ôˆÄ€¼ƒ:Œ¡ß†Ö‹
+È¤ˆÍ…µÁ±”ô‹B‹B×BëFF'BãBÔƒFF/B÷BûFB÷F/BÔƒBËB×FBÀˆ€¼ø(€€€€€€€€€€€€€€ñ¹…±åÑ¥Í5•ÑÉ¥Œµ•ÑÉ¥Œô‰‘¥Ù•ÉÍ¥™¥…Ñ¥½¹I…Ñ¥¼ˆÙ…±Õ”õí¡…Í5Õ±Ñ¥Á±•!½±‘¥¹Ì€ü„¹ÕÉÉ•¹ÑI¥Í¬ü¹‘¥Ù•ÉÍ¥™¥…Ñ¥½¹I…Ñ¥¼€è¹Õ±±ôÍ…µÁ±”õí„¹µ…ÑÉ¥áM…µÁ±•ôÉ…Ñ¥¼É•…Í½¸õì…¡…Í5Õ±Ñ¥Á±•!½±‘¥¹Ì€ü‘¥Ù•ÉÍ¥™¥…Ñ¥½¹I•…Í½¸€è€…„¹ÕÉÉ•¹ÑI¥Í¬€üÕÉÉ•¹ÑI¥Í­I•…Í½¸€è¹Õ±±ô€¼ø(€€€€€€€€€€€€€€ñ¹…±åÑ¥Í5•ÑÉ¥Œµ•ÑÉ¥Œô‰…Ù•É…•½ÉÉ•±…Ñ¥½¸ˆÙ…±Õ”õí„¹…Ù•É…•½ÉÉ•±…Ñ¥½¹ôÍ…µÁ±”õí„¹µ…ÑÉ¥áM…µÁ±•ôÉ…Ñ¥¼É•…Í½¸õì…„¹µ…ÑÉ¥à€üµ…ÑÉ¥áI•…Í½¸€è¹Õ±±ô€¼ø(€€€€€€€€€€€€€€ñaI…å5•ÑÉ¥Œ±…‰•°ô‰1…É•ÍÐA½Í¥Ñ¥½¸]•¥¡ÐˆÙ…±Õ”õí„¹½¹•¹ÑÉ…Ñ¥½¹MÕµµ…Éäü¹±…É•ÍÑA½Í¥Ñ¥½¹]•¥¡ÑôÁ•É•¹Ð™½ÉµÕ±„ô‰µ…à¡ß†Öˆ¤ˆÍ…µÁ±”ô‹B‹B×BëFF'BãBÔƒFF/B÷BûFB÷F/BÔƒBËB×FBÀˆ€¼ø(€€€€€€€€€€€€€€ñaI…å5•ÑÉ¥Œ±…‰•°ô‰Q½À€Ì]•¥¡ÐˆÙ…±Õ”õí„¹½¹•¹ÑÉ…Ñ¥½¹MÕµµ…Éäü¹Ñ½ÀÍ]•¥¡ÑôÁ•É•¹Ð™½ÉµÕ±„ô‹:ŒƒBËB×FBÀƒFFFGFƒBëFFBÿB÷B×BçF#BãFƒBÿBûBßBãFBãBäˆÍ…µÁ±”ô‹B‹B×BëFF'BãBÔƒFF/B÷BûFB÷F/BÔƒBËB×FBÀˆ€¼ø(€€€€€€€€€€€€€€ñaI…å5•ÑÉ¥Œ±…‰•°ô‰1…É•ÍÐI¥Í¬½¹ÑÉ¥‰ÕÑ½ÈˆÙ…±Õ”õí„¹ÕÉÉ•¹ÑI¥Í¬ü¹±…É•ÍÑI¥Í­½¹ÑÉ¥‰ÕÑ½Èü¹½¹ÑÉ¥‰ÕÑ¥½¹ôÁ•É•¹ÐÉ•…Í½¸õì…„¹ÕÉÉ•¹ÑI¥Í¬€üÕÉÉ•¹ÑI¥Í­I•…Í½¸€è¹Õ±±ô™½ÉµÕ±„ô‰µ…à¡¹½Éµ…±¥é•I†Öˆ¤ˆÍ…µÁ±”õí„¹µ…ÑÉ¥áM…µÁ±•ô€¼ø(€€€€€€€€€€€€€€ñaI…å5•ÑÉ¥Œ±…‰•°ô‰A½ÉÑ™½±¥¼Y½±…Ñ¥±¥ÑäˆÙ…±Õ”õí„¹ÕÉÉ•¹ÑI¥Í¬ü¹Ù½±…Ñ¥±¥ÑåôÁ•É•¹ÐÉ•…Í½¸õì…„¹ÕÉÉ•¹ÑI¥Í¬€üÕÉÉ•¹ÑI¥Í­I•…Í½¸€è¹Õ±±ô™½ÉµÕ±„ô‹Š"h¡ß†Ö:Ü¤ˆÍ…µÁ±”õí„¹µ…ÑÉ¥áM…µÁ±•ô€¼ø(€€€€€€€€€€€€€€ñaI…å5•ÑÉ¥Œ±…‰•°ô‰]•¥¡Ñ•ÍÍ•ÐY½±…Ñ¥±¥ÑäˆÙ…±Õ”õí„¹ÕÉÉ•¹ÑI¥Í¬ü¹Ý•¥¡Ñ•‘Ù•É…•ÍÍ•ÑY½±…Ñ¥±¥ÑåôÁ•É•¹ÐÉ•…Í½¸õì…„¹ÕÉÉ•¹ÑI¥Í¬€üÕÉÉ•¹ÑI¥Í­I•…Í½¸€è¹Õ±±ô™½ÉµÕ±„ô‹:Œ¡ß†Öˆƒ\ƒ>†Öˆ¤ˆÍ…µÁ±”õí„¹µ…ÑÉ¥áM…µÁ±•ô€¼ø(€€€€€€€€€€€€ð½‘¥Øø(€€€€€€€€€€ð½Í•Ñ¥½¸ø(€€€€€€€€€€ñÍ•Ñ¥½¸±…ÍÍ9…µ”ô‰…Éˆø(€€€€€€€€€€€ì…„¹µ…ÑÉ¥à€˜˜€ñÀ±…ÍÍ9…µ”ô‰¹½Ñ¥”ˆùíµ…ÑÉ¥áI•…Í½¹ôð½Àùô(€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰…¹…±åÑ¥Ìµµ•ÑÉ¥Ìˆø(€€€€€€€€€€€€€€ñ¹…±åÑ¥Í5•ÑÉ¥Œµ•ÑÉ¥Œô‰½Ù…É¥…¹•Y½°ˆÙ…±Õ”õí„¹ÕÉÉ•¹ÑI¥Í¬ü¹Ù½±…Ñ¥±¥ÑåôÍ…µÁ±”õí„¹µ…ÑÉ¥áM…µÁ±•ôÉ•…Í½¸õì…„¹ÕÉÉ•¹ÑI¥Í¬€üÕÉÉ•¹ÑI¥Í­I•…Í½¸€è¹Õ±±ô€¼ø(€€€€€€€€€€€€€€ñ¹…±åÑ¥Í5•ÑÉ¥Œµ•ÑÉ¥Œô‰‘¥Ù•ÉÍ¥™¥…Ñ¥½¹I…Ñ¥¼ˆÙ…±Õ”õí¡…Í5Õ±Ñ¥Á±•!½±‘¥¹Ì€ü„¹ÕÉÉ•¹ÑI¥Í¬ü¹‘¥Ù•ÉÍ¥™¥…Ñ¥½¹I…Ñ¥¼€è¹Õ±±ôÍ…µÁ±”õí„¹µ…ÑÉ¥áM…µÁ±•ôÉ…Ñ¥¼É•…Í½¸õì…¡…Í5Õ±Ñ¥Á±•!½±‘¥¹Ì€ü‘¥Ù•ÉÍ¥™¥…Ñ¥½¹I•…Í½¸€è€…„¹ÕÉÉ•¹ÑI¥Í¬€üÕÉÉ•¹ÑI¥Í­I•…Í½¸€è¹Õ±±ô€¼ø(€€€€€€€€€€€€€€ñ¹…±åÑ¥Í5•ÑÉ¥Œµ•ÑÉ¥Œô‰…Ù•É…•½ÉÉ•±…Ñ¥½¸ˆÙ…±Õ”õí„¹…Ù•É…•½ÉÉ•±…Ñ¥½¹ôÍ…µÁ±”õí„¹µ…ÑÉ¥áM…µÁ±•ôÉ…Ñ¥¼É•…Í½¸õì…„¹µ…ÑÉ¥à€üµ…ÑÉ¥áI•…Í½¸€è¹Õ±±ô€¼ø(€€€€€€€€€€€€€€ñ¹…±åÑ¥Í5•ÑÉ¥Œµ•ÑÉ¥Œô‰¡¡¤ˆÙ…±Õ”õí„¹½¹•¹ÑÉ…Ñ¥½¸ü¹¡¡¥ôÍ…µÁ±”ô‹FB×BëFF'BãBÔƒFF/B÷BûFB÷F/BÔƒBËB×FBÀˆÉ…Ñ¥¼€¼ø(€€€€€€€€€€€€€€ñ¹…±åÑ¥Í5•ÑÉ¥Œµ•ÑÉ¥Œô‰•™™•Ñ¥Ù•A½Í¥Ñ¥½¹ÌˆÙ…±Õ”õí„¹½¹•¹ÑÉ…Ñ¥½¸ü¹•™™•Ñ¥Ù•A½Í¥Ñ¥½¹ÍôÍ…µÁ±”ô‹FB×BëFF'BãBÔƒFF/B÷BûFB÷F/BÔƒBËB×FBÀˆÉ…Ñ¥¼€¼ø(€€€€€€€€€€€€ð½‘¥Øø(€€€€€€€€€€ð½Í•Ñ¥½¸ø(€€€€€€€€€€ñÍ•Ñ¥½¸±…ÍÍ9…µ”ô‰…É½ÉÉ•±…Ñ¥½¸µ•áÁ±½É•Èˆø(€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰Í•Ñ¥½¸µ¡•…‘¥¹œˆøñ‘¥Øøñ Èù½ÉÉ•±…Ñ¥½¸áÁ±½É•Èð½ ÈøñÀ±…ÍÍ9…µ”ô‰…ÁÑ¥½¸ˆûBkBûFFB×BïF?FBãBàƒFB×BëFF'B×BÏBøÉ¥Í¬Ý¥¹‘½ÜƒBàÉ½±±¥¹œÁ…¥È½ÉÉ•±…Ñ¥½¹ÌƒBßBÀƒBÓBûFFFBÿB÷FF8ƒBãFFBûFBãF8¸ð½Àøð½‘¥Øøñ±…‰•°ûBKF/BÇFBÃB÷B÷F/BäƒBÃBëFBãBÈñÍ•±•Ð±…ÍÍ9…µ”ô‰¥¹ÁÕÐˆÙ…±Õ”õíŒ¹Í•±•Ñ•‘½ÉÉ•±…Ñ¥½¹ÍÍ•Ñô½¹¡…¹”õí•Ù•¹Ð€ôøìŒ¹Í•ÑM•±•Ñ•‘½ÉÉ•±…Ñ¥½¹ÍÍ•Ð¡•Ù•¹Ð¹Ñ…É•Ð¹Ù…±Õ”¤ìÍ•ÑM•±•Ñ•‘½ÉÉ•±…Ñ¥½¹A••È œœ¤ìõôùíÍ¹…ÁÍ¡½Ð¹Á½Í¥Ñ¥½¹Ì¹µ…À¡Á½Í¥Ñ¥½¸€ôø€ñ½ÁÑ¥½¸­•äõíÁ½Í¥Ñ¥½¸¹Íåµ‰½±ôÙ…±Õ”õíÁ½Í¥Ñ¥½¸¹Íåµ‰½±ôùíÁ½Í¥Ñ¥½¸¹Íåµ‰½±ôð½½ÁÑ¥½¸ø¥ôð½Í•±•Ðøð½±…‰•°øð½‘¥Øø(€€€€€€€€€€€ì…„¹µ…ÑÉ¥àñð€…¡…Í5Õ±Ñ¥Á±•!½±‘¥¹Ì€ü€ñÀ±…ÍÍ9…µ”ô‰¹½Ñ¥”ˆùí¡…Í5Õ±Ñ¥Á±•!½±‘¥¹Ì€üµ…ÑÉ¥áI•…Í½¸€è€½ÉÉ•±…Ñ¥½¸áÁ±½É•ÈÉ•ÅÕ¥É•Ì…Ð±•…ÍÐÑÝ¼¡½±‘¥¹Ì¸ôð½Àø€è€ðø(€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰É¥Í¬µ‰Õ‘•ÐµÍÕµµ…Éäˆøñ‘¥ØøñÍÁ…¸ù!¥¡•ÍÐ½ÉÉ•±…Ñ¥½¸ð½ÍÁ…¸øñˆùíŒ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹¡¥¡•ÍÐ€ü€‘íŒ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹¡¥¡•ÍÐ¹Íåµ‰½±ôƒ
+Ü€‘í¹Õµ•É¥Œ¡Œ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹¡¥¡•ÍÐ¹Ù…±Õ”¥õ€€è€ŸBwB×BÓBûFFBÃFBûFB÷BøƒBÓBÃB÷B÷F/Fôð½ˆøð½‘¥Øøñ‘¥ØøñÍÁ…¸ù1½Ý•ÍÐ½ÉÉ•±…Ñ¥½¸ð½ÍÁ…¸øñˆùíŒ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹±½Ý•ÍÐ€ü€‘íŒ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹±½Ý•ÍÐ¹Íåµ‰½±ôƒ
+Ü€‘í¹Õµ•É¥Œ¡Œ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹±½Ý•ÍÐ¹Ù…±Õ”¥õ€€è€ŸBwB×BÓBûFFBÃFBûFB÷BøƒBÓBÃB÷B÷F/Fôð½ˆøð½‘¥Øøñ‘¥ØøñÍÁ…¸ù	•¹¡µ…É¬ƒ
+ÜíŒ¹‰•¹¡µ…É­ôð½ÍÁ…¸øñˆùíŒ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹‰•¹¡µ…É¬ü¹Ù…±Õ”€ôô¹Õ±°€ü€ŸBwB×BÓBûFFBÃFBûFB÷BøƒBÓBÃB÷B÷F/Fœ€è¹Õµ•É¥Œ¡Œ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹‰•¹¡µ…É¬¹Ù…±Õ”¥ôð½ˆøð½‘¥Øøð½‘¥Øø(€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰Ñ…‰±”µÍÉ½±°ˆøñÑ…‰±”øñÑ¡•…øñÑÈøñÑ ûBBÃFBÀð½Ñ øñÑ ù½ÉÉ•±…Ñ¥½¸ð½Ñ øñÑ ù=‰Í•ÉÙ…Ñ¥½¹Ìð½Ñ øñÑ ùI½±±¥¹œ‘•Ñ…¥°ð½Ñ øð½ÑÈøð½Ñ¡•…øñÑ‰½‘äùíŒ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹É½ÝÌ¹µ…À¡É½Ü€ôø€ñÑÈ­•äõíÉ½Ü¹Íåµ‰½±ôøñÑùíŒ¹Í•±•Ñ•‘½ÉÉ•±…Ñ¥½¹ÍÍ•Ñô€¼íÉ½Ü¹Íåµ‰½±ôð½ÑøñÑùíÉ½Ü¹Ù…±Õ”€ôô¹Õ±°€ü€ŸBwB×BÓBûFFBÃFBûFB÷BøƒBÓBÃB÷B÷F/Fœ€è¹Õµ•É¥Œ¡É½Ü¹Ù…±Õ”¥ôð½ÑøñÑùíÉ½Ü¹½‰Í•ÉÙ…Ñ¥½¹Íôð½ÑøñÑøñ‰ÕÑÑ½¸±…ÍÍ9…µ”ô‰‰Ñ¸‰Ñ¸µ¡½ÍÐˆ…É¥„µÁÉ•ÍÍ•õí…Ñ¥Ù•½ÉÉ•±…Ñ¥½¹A••È€ôôôÉ½Ü¹Íåµ‰½°ñð€ ……Ñ¥Ù•½ÉÉ•±…Ñ¥½¹A••È€˜˜Í•±•Ñ•‘½ÉÉ•±…Ñ¥½¹I½Üü¹Íåµ‰½°€ôôôÉ½Ü¹Íåµ‰½°¥ô½¹±¥¬õì ¤€ôøÍ•ÑM•±•Ñ•‘½ÉÉ•±…Ñ¥½¹A••È¡É½Ü¹Íåµ‰½°¥ôûB{FBëFF/FF0ð½‰ÕÑÑ½¸øð½Ñøð½ÑÈø¥õíŒ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹‰•¹¡µ…É¬€˜˜€ñÑÈøñÑùíŒ¹Í•±•Ñ•‘½ÉÉ•±…Ñ¥½¹ÍÍ•Ñô€¼íŒ¹‰•¹¡µ…É­ôð½ÑøñÑùíŒ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹‰•¹¡µ…É¬¹Ù…±Õ”€ôô¹Õ±°€ü€ŸBwB×BÓBûFFBÃFBûFB÷BøƒBÓBÃB÷B÷F/Fœ€è¹Õµ•É¥Œ¡Œ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹‰•¹¡µ…É¬¹Ù…±Õ”¥ôð½ÑøñÑùíŒ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹‰•¹¡µ…É¬¹½‰Í•ÉÙ…Ñ¥½¹Íôð½ÑøñÑøñ‰ÕÑÑ½¸±…ÍÍ9…µ”ô‰‰Ñ¸‰Ñ¸µ¡½ÍÐˆ…É¥„µÁÉ•ÍÍ•õí…Ñ¥Ù•½ÉÉ•±…Ñ¥½¹A••È€ôôôŒ¹‰•¹¡µ…É­ô½¹±¥¬õì ¤€ôøÍ•ÑM•±•Ñ•‘½ÉÉ•±…Ñ¥½¹A••È¡Œ¹‰•¹¡µ…É¬¥ôûB{FBëFF/FF0ð½‰ÕÑÑ½¸øð½Ñøð½ÑÈùôð½Ñ‰½‘äøð½Ñ…‰±”øð½‘¥Øø(€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰¡…ÉÐµÁ•É¥½‘Ìˆ…É¥„µ±…‰•°ô‰I½±±¥¹œ½ÉÉ•±…Ñ¥½¸Ý¥¹‘½Üˆùì¡lÈÀ°€ØÀ°€ÈÔÉt…Ì½¹ÍÐ¤¹µ…À¡¸€ôø€ñ‰ÕÑÑ½¸­•äõí¹ô…É¥„µÁÉ•ÍÍ•õí½ÉÉ•±…Ñ¥½¹]¥¹‘½Ü€ôôô¹ô½¹±¥¬õì ¤€ôøÍ•Ñ½ÉÉ•±…Ñ¥½¹]¥¹‘½Ü¡¸¥ôùí¹õð½‰ÕÑÑ½¸ø¥ôð½‘¥Øø(€€€€€€€€€€€€€€ñ¹…±åÑ¥Í¡…ÉÐÁ½¥¹ÑÌõì¡…Ñ¥Ù•½ÉÉ•±…Ñ¥½¹A••È€ôôôŒ¹‰•¹¡µ…É¬€üŒ¹½ÉÉ•±…Ñ¥½¹áÁ±½É•È¹‰•¹¡µ…É¬ü¹É½±±¥¹m½ÉÉ•±…Ñ¥½¹]¥¹‘½Ýt€üümt€èÍ•±•Ñ•‘½ÉÉ•±…Ñ¥½¹I½Üü¹É½±±¥¹m½ÉÉ•±…Ñ¥½¹]¥¹‘½Ýt€üümt¤¹µ…À¡Á½¥¹Ð€ôø€¡ì€¸¸¹Á½¥¹Ð°…ÁÑ¥½¸è€‘í½ÉÉ•±…Ñ¥½¹]¥¹‘½Ýõƒ
+Ü€‘íÁ½¥¹Ð¹½‰Í•ÉÙ…Ñ¥½¹Íô½‰Í•ÉÙ…Ñ¥½¹Í€ô¤¥ô±…‰•°õíI½±±¥¹œ½ÉÉ•±…Ñ¥½¸€‘íŒ¹Í•±•Ñ•‘½ÉÉ•±…Ñ¥½¹ÍÍ•Ñô€¼€‘í…Ñ¥Ù•½ÉÉ•±…Ñ¥½¹A••ÈñðÍ•±•Ñ•‘½ÉÉ•±…Ñ¥½¹I½Üü¹Íåµ‰½°ñð€…ÍÍ•Ðõô™½Éµ…Ðõí¹Õµ•É¥ô±½…‘¥¹œõíŒ¹±½…‘¥¹ôÉ•…Í½¸õíƒBwB×BÓBûFFBÃFBûFB÷Bø€‘í½ÉÉ•±…Ñ¥½¹]¥¹‘½ÝôƒBûBÇF'BãFƒBÿBûFBïB×BÓBûBËBÃFB×BïF3B÷F/FƒB÷BÃBÇBïF;BÓB×B÷BãBäƒBÓBïF<É½±±¥¹œ½ÉÉ•±…Ñ¥½¸¹ô€¼ø(€€€€€€€€€€€€€€ñ½ÉµÕ±„¹…µ”ô‰½ÉÉ•±…Ñ¥½¸áÁ±½É•Èˆ™½ÉµÕ±„ô‹>¡±¤õ½Ø¡I±I¤¼£>>¤ˆùÕÉÉ•¹Ð½ÉÉ•±…Ñ¥½¸ƒBãFBÿBûBïF3BßFB×FƒBûBÇF'FF8ƒBËF/BÇBûFBëFƒFB×BëFF'B×BÏBøÉ¥Í¬Ý¥¹‘½ÜíŒ¹É¥Í­!½É¥é½¹ô€¡í„¹É¥Í­5…ÑÉ¥à¹½µµ½¹=‰Í•ÉÙ…Ñ¥½¹Íô½‰Í•ÉÙ…Ñ¥½¹Ì¤¸I½±±¥¹œ½ÉÉ•±…Ñ¥½¸ƒBãFBÿBûBïF3BßFB×Fí½ÉÉ•±…Ñ¥½¹]¥¹‘½ÝôƒFBûFB÷F/FƒBûBÇF'BãFƒBÿBûFBïB×BÓBûBËBÃFB×BïF3B÷F/FƒBÓB÷B×BËB÷F/FƒBãB÷FB×FBËBÃBïBûBÈìƒBÿFBûBÿFFBëBàƒB÷BÔƒBßBÃBÿBûBïB÷F?F;FFF<¸ð½½ÉµÕ±„ø(€€€€€€€€€€€€ð¼ùô(€€€€€€€€€€ð½Í•Ñ¥½¸ø(€€€€€€€€€€ñ½ÉÉ•±…Ñ¥½¹5…ÑÉ¥àµ…ÑÉ¥àõí„¹µ…ÑÉ¥áô±½…‘¥¹œõíŒ¹±½…‘¥¹ôÉ•…Í½¸õíµ…ÑÉ¥áI•…Í½¹ô€¼ø(€€€€€€€€€€ñÍ•Ñ¥½¸±…ÍÍ9…µ”ô‰…Éˆø(€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰Í•Ñ¥½¸µ¡•…‘¥¹œˆøñ ÈûBKBëBïBÃBÐƒBÈƒFBãFBèƒFB×BëFF'B×BÏBøƒFBûFFBÃBËBÀð½ ÈøñÍÁ…¸±…ÍÍ9…µ”ô‰Ñ…œˆùíŒ¹É¥Í­!½É¥é½¹ôð½ÍÁ…¸øð½‘¥Øø(€€€€€€€€€€€ì…„¹ÕÉÉ•¹ÑI¥Í¬€˜˜€ñÀ±…ÍÍ9…µ”ô‰¹½Ñ¥”ˆùíÕÉÉ•¹ÑI¥Í­I•…Í½¹ôð½Àùô(€€€€€€€€€€€€ñ‘¥Ø±…ÍÍ9…µ”ô‰Ñ…‰±”µÍÉ½±°ˆø(€€€€€€€€€€€€€€ñÑ…‰±”ø(€€€€€€€€€€€€€€€€ñÑ¡•…øñÑÈøñÑ ûBCBëFBãBÈð½Ñ øñÑ ûBKB×Fð½Ñ øñÑ ûBSBûBïF<Ù…É¥…¹”ð½Ñ øñÑ ù5H€ô€£:Ü§†Öˆð½Ñ øñÑ ùI€ôß†Ö‰5K†Öˆð½Ñ øð½ÑÈøð½Ñ¡•…ø(€€€€€€€€€€€€€€€€ñÑ‰½‘äø(€€€€€€€€€€€€€€€€€í„¹ÕÉÉ•¹ÑI¥Í¬ü¹½¹ÑÉ¥‰ÕÑ¥½¹Ì¹µ…À ¡¥Ñ•´¤€ôø€ (€€€€€€€€€€€€€€€€€€€€ñÑÈ­•äõí¥Ñ•´¹Íåµ‰½±ôø(€€€€€€€€€€€€€€€€€€€€€€ñÑùí¥Ñ•´¹Íåµ‰½±ôð½ÑøñÑùíÁÐ¡¥Ñ•´¹Ý•¥¡Ð¥ôð½ÑøñÑùíÁÐ¡¥Ñ•´¹™É…Ñ¥½¸¥ôð½ÑøñÑùí¥Ñ•´¹µ…É¥¹…°¹Ñ½¥á• Ø¥ôð½ÑøñÑùí¥Ñ•´¹…‰Í½±ÕÑ”¹Ñ½¥á• Ø¥ôð½Ñø(€€€€€€€€€€€€€€€€€€€€ð½ÑÈø(€€€€€€€€€€€€€€€€€€¤¥ô(€€€€€€€€€€€€€€€€ð½Ñ‰½‘äø(€€€€€€€€€€€€€€ð½Ñ…‰±”ø(€€€€€€€€€€€€ð½‘¥Øø(€€€€€€€€€€€€ñ½ÉµÕ±„¹…µ”ô‹BƒBÃBßBïBûBÛB×B÷BãBÔÙ…É¥…¹”ˆ™½ÉµÕ±„ô‹>Ã
+ÈõßŠË:Üì5K†Öˆô£:Ü§†ÖˆìI†Öˆõß†Ö‰5K†ÖˆìÍ¡…É—†ÖˆõI†Öˆ¿>Ã
+Èˆø(€€€€€€€€€€€€€ƒBOBûBÓBûBËBÃF<½Ù…É¥…¹”µ…ÑÉ¥àƒBÿBûFFFBûB×B÷BÀƒBÿBøƒBûBÓB÷BûBäƒBàƒFBûBäƒBÛBÔƒBËF/BÇBûFBëBÔƒBãBÜƒBÿBûFBïB×BÓB÷BãFí„¹É¥Í­5…ÑÉ¥à¹É•ÅÕ¥É•‘ôƒBûBÇF'BãFÉ•ÑÕÉ¸·BãB÷FB×FBËBÃBïBûBÈƒBÓBïF<ƒBËFB×FƒBÃBëFBãBËBûBÈ¸ƒ:I†Öˆ€ôƒ>Ã
+È°ƒBÀƒFFBóBóBÀƒBÓBûBïB×BäIƒFBÃBËB÷BÀ€ÄƒFƒFBãFBïB×B÷B÷BûBäƒBÿBûBÏFB×F#B÷BûFFF3F8¸ƒB{FFBãFBÃFB×BïF3B÷F/BäƒBËBëBïBÃBÐƒBËBûBßBóBûBÛB×BôƒFƒFB×BÓBÛBãFFF;F'B×BÏBøƒBÃBëFBãBËBÀ¸ƒBSBÃB÷B÷F/BÔèí„¹µ…ÑÉ¥áM…µÁ±•ô¸(€€€€€€€€€€€€ð½½ÉµÕ±„ø(€€€€€€€€€€ð½Í•Ñ¥½¸ø(€€€€€€€€ð¼ø(€€€€€€¥ô(€€€€€íÑ…ˆ€ôôô€…ÑÑÉ¥‰ÕÑ¥½¸œ€˜˜€ñÑÑÉ¥‰ÕÑ¥½¹A…¹•°…¹…±åÑ¥Ìõí…ôÕÉÉ•¹äõíÍ¹…ÁÍ¡½Ð¹Á½ÉÑ™½±¥¼¹‰…Í•}ÕÉÉ•¹åôÁ½Í¥Ñ¥½¹ÌõíÍ¹…ÁÍ¡½Ð¹Á½Í¥Ñ¥½¹Íô€¼ùô(€€€€€íÑ…ˆ€ôôô€Í•¹…É¥½Ìœ€˜˜€ñM•¹…É¥½ÍA…¹•°Í¹…ÁÍ¡½ÐõíÍ¹…ÁÍ¡½Ñô½¹ÑÉ½±±•ÈõíôÝ•¥¡ÑÌõíÍ•¹…É¥½]•¥¡ÑÍô½¹]•¥¡ÑÍ¡…¹”õíÍ•ÑM•¹…É¥½]•¥¡ÑÍô€¼ùô(€€€€€íÑ…ˆ€ôôô€‰•¹¡µ…É¬œ€˜˜€ñ	•¹¡µ…É­A…¹•°½¹ÑÉ½±±•Èõíô‘•Ñ…¥±•€¼ùô(€€€€€íÑ…ˆ€„ôô€áÉ…äœ€˜˜€ñ1…‰½É…Ñ½Éå…Ñ…½¹Ñ•áÐÍ¹…ÁÍ¡½ÐõíÍ¹…ÁÍ¡½Ñô½¹ÑÉ½±±•Èõíô€¼ùô(€€€€ð¼ø(€€¤ì)ô()™Õ¹Ñ¥½¸1…‰½É…Ñ½Éå…Ñ…½¹Ñ•áÐ¡ìÍ¹…ÁÍ¡½Ð°½¹ÑÉ½±±•ÈèŒôèìÍ¹…ÁÍ¡½ÐèA½ÉÑ™½±¥½M¹…ÁÍ¡½Ðì½¹ÑÉ½±±•Èè¹…±åÑ¥Í½¹ÑÉ½±±•Èô¤ì(€½¹ÍÐ„€ôŒ¹…¹…±åÑ¥Ìì(€½¹ÍÐ±…Ñ•ÍÑAÉ¥•…Ñ”€ô„¹‘…Ñ…EÕ…±¥Ñä¹±…Ñ•ÍÑAÉ¥•…Ñ”ì(€É•ÑÕÉ¸€ñ‘•Ñ…¥±Ì±…ÍÍ9…µ”ô‰…É±…ˆµ‘…Ñ„µ½¹Ñ•áÐˆøñÍÕµµ…Éäù…Ñ„EÕ…±¥Ñä€™…µÀì5•Ñ¡½‘½±½ä€ñÍÁ…¸ùíŒ¹É¥Í­!½É¥é½¹ôƒ
+Üí„¹É¥Í­5…ÑÉ¥à¹½µµ½¹=‰Í•ÉÙ…Ñ¥½¹Íô½µµ½¸½‰Í•ÉÙ…Ñ¥½¹Ìð½ÍÁ…¸øð½ÍÕµµ…Éäøñ‘¥Ø±…ÍÍ9…µ”ô‰‘…Ñ„µÅÕ…±¥ÑäµÉ¥ˆøñ‘¥ØøñÍÁ…¸ùI¥Í¬]¥¹‘½Üð½ÍÁ…¸øñˆùíŒ¹É¥Í­!½É¥é½¹ôð½ˆøð½‘¥Øøñ‘¥ØøñÍÁ…¸ù½Ù…É¥…¹”½‰Í•ÉÙ…Ñ¥½¹Ìð½ÍÁ…¸øñˆùí„¹É¥Í­5…ÑÉ¥à¹½µµ½¹=‰Í•ÉÙ…Ñ¥½¹Íô½í„¹É¥Í­5…ÑÉ¥à¹É•ÅÕ¥É•‘ôð½ˆøð½‘¥Øøñ‘¥ØøñÍÁ…¸ù	•¹¡µ…É¬½Ù•É±…Àƒ
+ÜíŒ¹‰•¹¡µ…É­ôð½ÍÁ…¸øñˆùí„¹ÕÉÉ•¹Ñ	•¹¡µ…É­I¥Í¬¹½‰Í•ÉÙ…Ñ¥½¹Íôð½ˆøð½‘¥Øøñ‘¥ØøñÍÁ…¸ùAÉ¥”½Ù•É…”ð½ÍÁ…¸øñˆùíÍ¹…ÁÍ¡½Ð¹Ù…±Õ…Ñ¥½¸¹ÁÉ¥•‘A½Í¥Ñ¥½¹Íô½íÍ¹…ÁÍ¡½Ð¹Ù…±Õ…Ñ¥½¸¹Ñ½Ñ…±A½Í¥Ñ¥½¹Íôð½ˆøð½‘¥Øøñ‘¥ØøñÍÁ…¸ù5¥ÍÍ¥¹œÍåµ‰½±Ìð½ÍÁ…¸øñˆùíÍ¹…ÁÍ¡½Ð¹Ù…±Õ…Ñ¥½¸¹Õ¹ÁÉ¥•‘Måµ‰½±Ì¹±•¹Ñ €üÍ¹…ÁÍ¡½Ð¹Ù…±Õ…Ñ¥½¸¹Õ¹ÁÉ¥•‘Måµ‰½±Ì¹©½¥¸ œ°€œ¤€è€9½¹”É•Á½ÉÑ•ôð½ˆøð½‘¥Øøñ‘¥ØøñÍÁ…¸ù5¥ÍÍ¥¹œ¥¹Ñ•ÉÙ…±Ìð½ÍÁ…¸øñˆùí„¹¡¥ÍÑ½Éä¹µ¥ÍÍ¥¹…Ñ•Ì¹±•¹Ñ¡ôð½ˆøð½‘¥Øøñ‘¥ØøñÍÁ…¸ù1…ÍÐ…Ù…¥±…‰±”ÁÉ¥”‘…Ñ”ð½ÍÁ…¸øñˆùí±…Ñ•ÍÑAÉ¥•…Ñ”€üü€ŸBwB×BÓBûFFBÃFBûFB÷BøƒBÓBÃB÷B÷F/Fôð½ˆøð½‘¥Øøñ‘¥ØøñÍÁ…¸ù=ÁÑ¥µ¥é…Ñ¥½¸½‰Í•ÉÙ…Ñ¥½¹Ìð½ÍÁ…¸øñˆùí„¹É¥Í­5…ÑÉ¥à¹µ…ÑÉ¥àü¹½‰Í•ÉÙ…Ñ¥½¹Ì€üü€ŸBwB×BÓBûFFBÃFBûFB÷BøƒBÓBÃB÷B÷F/Fôð½ˆøð½‘¥Øøñ‘¥ØøñÍÁ…¸ù!¥ÍÑ½É¥…°Í•¹…É¥¼Ý¥¹‘½ÝÌð½ÍÁ…¸øñˆùí„¹¡¥ÍÑ½É¥…±I•Á±…ä¹µ…À ¡¥Ñ•´¤€ôø¥Ñ•´¹Ý¥¹‘½Ü¤¹©½¥¸ œ°€œ¤ñð€U¹…Ù…¥±…‰±”ôð½ˆøð½‘¥Øøð½‘¥Øùì…„¹µ…ÑÉ¥à€˜˜€ñÀ±…ÍÍ9…µ”ô‰…ÁÑ¥½¸ˆùí„¹É¥Í­5…ÑÉ¥à¹É•…Í½¹ôð½Àùôð½‘•Ñ…¥±Ìøì)ô()™Õ¹Ñ¥½¸aI…å5•ÑÉ¥Œ¡ì±…‰•°°Ù…±Õ”°Á•É•¹Ð€ô™…±Í”°É•…Í½¸°™½ÉµÕ±„°Í…µÁ±”ôèì±…‰•°èÍÑÉ¥¹œìÙ…±Õ”è¹Õµ‰•Èð¹Õ±°ðÕ¹‘•™¥¹•ìÁ•É•¹Ðüè‰½½±•…¸ìÉ•…Í½¸üèÍÑÉ¥¹œð¹Õ±°ì™½ÉµÕ±„èÍÑÉ¥¹œìÍ…µÁ±”èÍÑÉ¥¹œô¤ì(€½¹ÍÐ‘¥ÍÁ±…ä€ôÙ…±Õ”€ôô¹Õ±°ñð€…9Õµ‰•È¹¥Í¥¹¥Ñ”¡Ù…±Õ”¤€ü€ŸBwB×BÓBûFFFBÿB÷Bøœ€èÁ•É•¹Ð€üÁÐ¡Ù…±Õ”¤€è¹Õµ•É¥Œ¡Ù…±Õ”¤ì(€É•ÑÕÉ¸€ñ‘¥Ø±…ÍÍ9…µ”ô‰áÉ…äµÍÕµµ…Éäµµ•ÑÉ¥ŒˆøñÍÁ…¸ùí±…‰•±ôð½ÍÁ…¸øñˆÑ¥Ñ±”õíÙ…±Õ”€ôô¹Õ±°€üÉ•…Í½¸€üüÕ¹‘•™¥¹•€èÕ¹‘•™¥¹•‘ôùí‘¥ÍÁ±…åôð½ˆøñÍµ…±°ùíÙ…±Õ”€ôô¹Õ±°€üÉ•…Í½¸€üü€ŸBwB×BÓBûFFBÃFBûFB÷BøƒBÓBÃB÷B÷F/FƒBÓBïF<ƒFBÃFFFGFBÀ¸œ€èÍ…µÁ±•ôð½Íµ…±°øñ‘•Ñ…¥±Ì±…ÍÍ9…µ”ô‰áÉ…äµµ•ÑÉ¥Œµ‘•Ñ…¥±ÌˆøñÍÕµµ…ÉäûBBûBÓFBûBÇB÷B×BÔð½ÍÕµµ…Éäøñ½‘”ùí™½ÉµÕ±…ôð½½‘”øñÀùíÉ•…Í½¸€üü€ŸBƒBÃFFFBãFBÃB÷BøƒBÿBøƒBÓB×FB×FBóBãB÷BãFBûBËBÃB÷B÷BûBä…¹…±åÑ¥Ì·BóBûBÓB×BïBà¸ôƒBSBÃB÷B÷F/BÔèíÍ…µÁ±•ô¸ð½Àøð½‘•Ñ…¥±Ìøð½‘¥Øøì)ô

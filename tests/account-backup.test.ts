@@ -24,7 +24,7 @@ describe('full account backup', () => {
     expect(restored.analyticsPreferences.riskHorizon).toBe('60D');
   });
 
-  it('defaults old backups without riskHorizon to 20D on restore', () => {
+  it('defaults old backups without riskHorizon to 60D on restore', () => {
     const backup = buildAccountBackup(
       { version: 1, portfolio, transactions: [trade] },
       { cashEvents: [cash], targetAllocation: [] },
@@ -33,7 +33,7 @@ describe('full account backup', () => {
     );
     const legacyShape = JSON.parse(JSON.stringify(backup));
     delete legacyShape.analyticsPreferences.riskHorizon;
-    expect(validateAccountBackup(legacyShape).analyticsPreferences.riskHorizon).toBe('20D');
+    expect(validateAccountBackup(legacyShape).analyticsPreferences.riskHorizon).toBe('60D');
   });
 
   it('rejects an ID reused across trade and cash namespaces', () => {
