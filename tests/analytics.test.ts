@@ -399,6 +399,14 @@ describe("benchmark, attribution and scenarios", () => {
     expect(result.activeReturn).toBeCloseTo(0);
   });
 
+  it('does not publish beta or alpha below the shared 20-observation minimum', () => {
+    const short = dated(rs.slice(0, 19));
+    const result = benchmarkMetrics(short, short, 0.04);
+    expect(result.beta).toBeNull();
+    expect(result.alpha).toBeNull();
+    expect(result.correlation).toBeNull();
+  });
+
   it('calculates upside and downside capture only with enough matching benchmark days', () => {
     const returns = Array.from({ length: 80 }, (_, i) => i % 2 ? -.01 : .01);
     const same = dated(returns);

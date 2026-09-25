@@ -66,6 +66,9 @@ export function DataQualityPanel({
         <div><span>{c.riskHorizon} Risk Matrix</span><b>{commonIntervals}/{requiredRiskIntervals} · {a.riskMatrix.matrix ? 'Ready' : 'Unavailable'}</b></div>
         <div><span>Benchmark aligned</span><b>{benchmarkIntervals}</b></div>
         <div><span>Current-holdings proxy</span><b>{proxyReturns.length}</b></div>
+        <div><span>Last price date</span><b>{a.dataQuality.latestPriceDate ?? 'Недостаточно данных'}</b></div>
+        <div><span>Missing history intervals</span><b>{a.history.missingDates.length}</b></div>
+        <div><span>Benchmark overlap</span><b>{a.currentBenchmarkRisk.observations}</b></div>
       </div>
 
       {a.riskMatrix.limitingSymbols.length > 0 && !a.riskMatrix.matrix && (

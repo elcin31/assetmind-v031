@@ -21,6 +21,10 @@ export interface XRayInsightInput {
   activeDrawdown?: number | null;
   commonObservations: number;
   requiredObservations: number;
+  pnlContributions?: { symbol: string; unrealizedPnL: number | null }[];
+  stressScenario?: { name: string; impactPct: number | null; assetImpacts: { symbol: string; impactPct: number }[] };
+  scenarioComparison?: { currentVolatility: number | null; scenarioVolatility: number | null; currentEffectiveHoldings: number | null; scenarioEffectiveHoldings: number | null };
+  minimumVarianceVolatility?: { current: number | null; minimumVariance: number | null };
 }
 
 export const HIGH_AVERAGE_PAIRWISE_CORRELATION = 0.7;
@@ -35,6 +39,10 @@ export const VERY_HIGH_BETA_THRESHOLD = 1.75;
 export const SIGNIFICANT_ACTIVE_DRAWDOWN_THRESHOLD = 0.05;
 export const LARGE_CURRENT_DRAWDOWN_THRESHOLD = 0.1;
 export const VERY_LARGE_CURRENT_DRAWDOWN_THRESHOLD = 0.2;
+export const PNL_CONTRIBUTION_CONCENTRATION_THRESHOLD = 0.5;
+export const STRESS_CONTRIBUTION_CONCENTRATION_THRESHOLD = 0.5;
+export const LARGE_SCENARIO_VOLATILITY_CHANGE_THRESHOLD = 0.2;
+export const LARGE_MIN_VARIANCE_RISK_GAP_THRESHOLD = 0.2;
 
 const valid = (n: number | null | undefined): n is number => n !== null && n !== undefined && Number.isFinite(n);
 const percent = (value: number) => (value * 100).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -68,6 +76,31 @@ export function buildXRayInsights(input: XRayInsightInput): XRayObservation[] {
   if (valid(input.activeDrawdown) && input.activeDrawdown <= -SIGNIFICANT_ACTIVE_DRAWDOWN_THRESHOLD) observations.push({ id: 'large-active-drawdown', category: 'performance', severity: 'medium', title: 'Просадка относительно benchmark', message: `Относительный индекс портфеля просел на ${percent(Math.abs(input.activeDrawdown))}% от своего максимума.`, metric: input.activeDrawdown });
   if (valid(input.currentDrawdown) && valid(input.maxDrawdown) && input.maxDrawdown > 0 && input.currentDrawdown < 0 && Math.abs(input.currentDrawdown) >= input.maxDrawdown * SIGNIFICANT_DRAWDOWN_FRACTION) observations.push({ id: 'significant-current-drawdown', category: 'performance', severity: 'medium', title: 'Текущая просадка', message: `Текущая просадка составляет ${percent(Math.abs(input.currentDrawdown) / input.maxDrawdown)}% исторического максимума глубины.`, metric: input.currentDrawdown });
   if (Number.isFinite(input.commonObservations) && Number.isFinite(input.requiredObservations) && input.commonObservations >= 0 && input.commonObservations < Math.max(input.requiredObservations, LIMITED_OBSERVATIONS_THRESHOLD)) observations.push({ id: 'limited-risk-sample', category: 'data', severity: 'info', title: 'Ограниченная выборка риска', message: `Расчёт риска основан на ${input.commonObservations} общих дневных наблюдениях (окно ${input.requiredObservations}).`, metric: input.commonObservations });
+
+  const pnlItems = (input.pnlContributions ?? []).filter((item) => valid(item.unrealizedPnL));
+  const pnlBase = pnlItems.reduce((sum, item) => sum + Math.abs(item.unrealizedPnL!), 0);
+  const largestPnl = [...pnlItems].sort((a, b) => Math.abs(b.unrealizedPnL!) - Math.abs(a.unrealizedPnL!))[0];
+  if (largestPnl && pnlBase > 0 && Math.abs(largestPnl.unrealizedPnL!) / pnlBase >= PNL_CONTRIBUTION_CONCENTRATION_THRESHOLD) observations.push({ id: `pnl-concentration-${largestPnl.symbol}`, category: 'performance', severity: 'medium', title: 'Концентрация нереализованного P&L', message: `${largestPnl.symbol} формирует ${percent(Math.abs(largestPnl.unrealizedPnL!) / pnlBase)}% абсолютного нереализованного P&L открытых позиций.`, symbol: largestPnl.symbol, metric: Math.abs(largestPnl.unrealizedPnL!) / pnlBase });
+
+  const stress = input.stressScenario;
+  const stressBase = stress?.assetImpacts.reduce((sum, item) => sum + Math.abs(item.impactPct), 0) ?? 0;
+  const largestStress = stress?.assetImpacts.slice().sort((a, b) => Math.abs(b.impactPct) - Math.abs(a.impactPct))[0];
+  if (stress && valid(stress.impactPct) && largestStress && stressBase > 0 && Math.abs(largestStress.impactPct) / stressBase >= STRESS_CONTRIBUTION_CONCENTRATION_THRESHOLD) observations.push({ id: `stress-concentration-${largestStress.symbol}`, category: 'risk', severity: 'info', title: 'Концентрация стресс-сценария', message: `${largestStress.symbol} формирует ${percent(Math.abs(largestStress.impactPct) / stressBase)}% абсолютного расчётного вклада в сценарии «${stress.name}».`, symbol: largestStress.symbol, metric: Math.abs(largestStress.impactPct) / stressBase });
+
+  const scenario = input.scenarioComparison;
+  if (scenario && valid(scenario.currentVolatility) && valid(scenario.scenarioVolatility) && scenario.currentVolatility > 0) {
+    const relativeChange = scenario.scenarioVolatility / scenario.currentVolatility - 1;
+    if (Math.abs(relativeChange) >= LARGE_SCENARIO_VOLATILITY_CHANGE_THRESHOLD) observations.push({ id: 'whatif-volatility-change', category: 'risk', severity: 'info', title: 'Изменение сценарной волатильности', message: `В текущем sandbox расчётная volatility изменилась на ${percent(Math.abs(relativeChange))}% относительно текущих весов.`, metric: relativeChange });
+  }
+  if (scenario && valid(scenario.currentEffectiveHoldings) && valid(scenario.scenarioEffectiveHoldings)) {
+    const difference = scenario.scenarioEffectiveHoldings - scenario.currentEffectiveHoldings;
+    if (Math.abs(difference) >= 1) observations.push({ id: 'whatif-effective-holdings-change', category: 'diversification', severity: 'info', title: 'Изменение эффективных позиций', message: `В what-if sandbox Effective Holdings изменились на ${difference > 0 ? '+' : ''}${difference.toFixed(1)} относительно текущих весов.`, metric: difference });
+  }
+  const minimumVariance = input.minimumVarianceVolatility;
+  if (minimumVariance && valid(minimumVariance.current) && valid(minimumVariance.minimumVariance) && minimumVariance.current > 0) {
+    const gap = (minimumVariance.current - minimumVariance.minimumVariance) / minimumVariance.current;
+    if (gap >= LARGE_MIN_VARIANCE_RISK_GAP_THRESHOLD) observations.push({ id: 'minimum-variance-risk-gap', category: 'risk', severity: 'info', title: 'Исторический риск Minimum Variance', message: `Минимальная historical variance ниже текущей volatility на ${percent(gap)}% в рассчитанной выборке.`, metric: gap });
+  }
 
   const rank: Record<XRaySeverity, number> = { high: 0, medium: 1, info: 2 };
   return observations.sort((a, b) => rank[a.severity] - rank[b.severity] || a.id.localeCompare(b.id)).slice(0, 5);

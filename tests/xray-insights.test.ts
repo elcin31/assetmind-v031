@@ -37,6 +37,18 @@ describe('portfolio concentration', () => {
     expect(buildXRayInsights({ ...base, activeDrawdown: -.08 }).some(item => item.id === 'large-active-drawdown')).toBe(true);
     expect(buildXRayInsights({ ...base, currentDrawdown: -.12 }).some(item => item.id === 'large-current-drawdown')).toBe(true);
   });
+  it('reports deterministic P&L, stress and sandbox concentration facts without recommendations', () => {
+    const base = { positions: [], averagePairwiseCorrelation: null, currentDrawdown: null, maxDrawdown: null, commonObservations: 60, requiredObservations: 60 };
+    const pnl = buildXRayInsights({ ...base, pnlContributions: [{ symbol: 'AAA', unrealizedPnL: 80 }, { symbol: 'BBB', unrealizedPnL: 20 }] });
+    expect(pnl.some(item => item.id === 'pnl-concentration-AAA')).toBe(true);
+    const stress = buildXRayInsights({ ...base, stressScenario: { name: 'Broad −10%', impactPct: -.1, assetImpacts: [{ symbol: 'AAA', impactPct: -.08 }, { symbol: 'BBB', impactPct: -.02 }] } });
+    expect(stress.some(item => item.id === 'stress-concentration-AAA')).toBe(true);
+    const whatIf = buildXRayInsights({ ...base, scenarioComparison: { currentVolatility: .2, scenarioVolatility: .25, currentEffectiveHoldings: 2, scenarioEffectiveHoldings: 3.5 } });
+    expect(whatIf.some(item => item.id === 'whatif-volatility-change')).toBe(true);
+    expect(whatIf.some(item => item.id === 'whatif-effective-holdings-change')).toBe(true);
+    const minVariance = buildXRayInsights({ ...base, minimumVarianceVolatility: { current: .3, minimumVariance: .2 } });
+    expect(minVariance.some(item => item.id === 'minimum-variance-risk-gap')).toBe(true);
+  });
   it('handles missing and zero denominators without non-finite observations', () => {
     const results = buildXRayInsights({ positions: [{ symbol: 'AAA', weight: 0, riskContribution: 1 }, { symbol: 'BBB', weight: NaN, riskContribution: Infinity }], averagePairwiseCorrelation: Infinity, currentDrawdown: -Infinity, maxDrawdown: 0, commonObservations: 0, requiredObservations: 20 });
     expect(results.every(item => item.metric == null || Number.isFinite(item.metric))).toBe(true);

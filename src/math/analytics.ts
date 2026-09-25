@@ -29,6 +29,7 @@ import { concentration, concentrationSummary } from './lab';
 import { annualRateToDaily, EPSILON, volatility } from './statistics';
 import { calculatePositions } from './positions';
 import { buildCurrentHoldingsRiskProxy } from './returns';
+import { currentWeightsHistoricalReplay } from './historicalStress';
 import {
   HISTORICAL_TAIL_MIN_OBSERVATIONS,
   buildRiskReturnMatrix,
@@ -176,6 +177,13 @@ export function calculatePortfolioAnalytics(
     matrix && complete
       ? riskContributions(symbols, weights, matrix.covariance)
       : null;
+  const historicalReplay = complete && symbols.length > 0
+    ? currentWeightsHistoricalReplay(
+        symbols,
+        weights,
+        symbols.map((symbol) => datedReturns(clean.get(symbol) ?? [])),
+      )
+    : [];
 
   // Proxy always starts from full available adjusted history; only current-risk
   // metrics use the selected horizon. This remains explicitly a current-holdings
@@ -319,7 +327,7 @@ export function calculatePortfolioAnalytics(
           ).beta,
           riskContribution:
             currentRisk?.contributions.find((c) => c.symbol === p.symbol)
-              ?.fraction ?? null,
+              ?.normalizedRC ?? null,
         },
       ];
     }),
@@ -347,10 +355,29 @@ export function calculatePortfolioAnalytics(
     benchmark: benchmarkResult,
     relativeDrawdown,
     currentBenchmarkRisk,
+    whatIfBenchmarkReturns: benchmarkRiskWindow.available ? benchmarkRiskWindow.returns : [],
+    historicalReplay,
     rolling,
     pnl,
     contributions,
+    contributionReason: linked
+      ? null
+      : !first || !last
+        ? 'Нет непрерывного return-периода для атрибуции.'
+        : hasTradeAfterBaseline
+          ? 'В выбранном периоде есть BUY/SELL; веса позиций менялись, точный связанный вклад недоступен.'
+          : hasCashEventAfterBaseline
+            ? 'В выбранном периоде есть cash flow; позиционный return contribution не вычисляется.'
+            : !attributionEligible
+              ? 'Не удалось восстановить значения позиций на начало периода.'
+              : 'Недостаточно общих валидных return-интервалов для связанного вклада.',
     details,
+    dataQuality: {
+      latestPriceDate: [...clean.values()].flatMap((bars) => bars.map((bar) => bar.date)).sort().at(-1) ?? null,
+      returnObservations: performance.riskReturns.length,
+      commonObservations: riskMatrix.commonObservations,
+      benchmarkOverlap: currentBenchmarkRisk.observations,
+    },
     proxy: {
       ...proxy,
       riskWindow: proxyRiskWindow,

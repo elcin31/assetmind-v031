@@ -24,7 +24,7 @@ export function benchmarkMetrics(
   const b = aligned.map((r) => r.benchmark);
   const variance = covariance(b, b);
   const beta =
-    variance !== null && variance > EPSILON
+    aligned.length >= MIN_OBSERVATIONS && variance !== null && variance > EPSILON
       ? safeRatio(covariance(p, b), variance)
       : null;
   const pm = mean(p);
@@ -33,7 +33,7 @@ export function benchmarkMetrics(
   const active = p.map((r, i) => r - b[i]);
   const trackingError = volatility(active);
   const alpha =
-    beta === null || pm === null || bm === null || dailyRf === null
+    aligned.length < MIN_OBSERVATIONS || beta === null || pm === null || bm === null || dailyRf === null
       ? null
       : finite((pm - dailyRf - beta * (bm - dailyRf)) * 252);
   const averageActive = mean(active);
