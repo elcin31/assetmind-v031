@@ -30,7 +30,7 @@ interface HistoryResult {
 }
 
 export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: string) {
-  const initial = userId ? readLocalAnalyticsPreferences(userId) : { period: '1Y' as Period, riskHorizon: '20D' as RiskHorizon, benchmark: 'SPY' as BenchmarkSymbol, rf: 0, mar: 0 };
+  const initial = userId ? readLocalAnalyticsPreferences(userId) : { period: '1Y' as Period, riskHorizon: '60D' as RiskHorizon, benchmark: 'SPY' as BenchmarkSymbol, rf: 0, mar: 0 };
   const [period, setPeriod] = useState<Period>(initial.period);
   const [riskHorizon, setRiskHorizon] = useState<RiskHorizon>(initial.riskHorizon);
   const [benchmark, setBenchmark] = useState<BenchmarkSymbol>(initial.benchmark);

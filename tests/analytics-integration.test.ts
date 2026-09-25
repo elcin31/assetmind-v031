@@ -135,6 +135,8 @@ describe("analytics data model", () => {
     expect(a.details.A.weight).toBeNull();
     expect(a.pnl[0].totalPnL).toBeNull();
     expect(a.performance.totalReturn).not.toBeNull();
+    expect(a.proxy.riskWindow.available).toBe(false);
+    expect(a.proxy.volatility).toBeNull();
   });
 
   it("requires a pre-January baseline for YTD and preserves unavailable months", () => {
@@ -197,6 +199,94 @@ describe("analytics data model", () => {
         ).beta,
       ).toBeNull();
     }
+  });
+});
+
+function recentPortfolioAnalytics({
+  days = 365,
+  horizon = '60D' as const,
+  benchmarkOffset = 0,
+}: { days?: number; horizon?: '20D' | '60D' | '1Y'; benchmarkOffset?: number } = {}) {
+  const symbols = ['AAPL', 'AMD', 'PLTR'];
+  const makeBars = (symbolIndex: number, count: number, offset = 0): HistoryBar[] =>
+    Array.from({ length: count }, (_, i) => {
+      const n = i + offset;
+      const date = new Date(Date.UTC(2025, 0, 1 + n)).toISOString().slice(0, 10);
+      const trend = 1 + (symbolIndex + 1) * 0.00015;
+      return {
+        date,
+        close: 100 * trend ** i * (1 + 0.012 * Math.sin(i * (0.19 + symbolIndex * 0.04))),
+      };
+    });
+  const asOf = new Date(Date.UTC(2025, 0, days)).toISOString().slice(0, 10);
+  const tradeDate = new Date(Date.parse(`${asOf}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+  const transactions: Transaction[] = symbols.map((symbol, index) => ({
+    ...transaction,
+    id: `buy-${symbol}`,
+    symbol,
+    quantity: index + 1,
+    timestamp: `${tradeDate}T12:00:00Z`,
+    created_at: `${tradeDate}T12:01:00Z`,
+  }));
+  const allBars = new Map<string, HistoryBar[]>(symbols.map((symbol, index) => [symbol, makeBars(index, days)]));
+  allBars.set('SPY', makeBars(3, days, benchmarkOffset));
+  const latestQuotes = new Map(symbols.map((symbol) => {
+    const price = allBars.get(symbol)!.at(-1)!.close;
+    return [symbol, { symbol, price, change: 0, changePercent: 0, timestamp: 0 }];
+  }));
+  const currentSnapshot: PortfolioSnapshot = {
+    ...snapshot(transactions),
+    ...enrichPositionsWithQuotes(transactions, latestQuotes),
+  };
+  return calculatePortfolioAnalytics(currentSnapshot, allBars, 'SPY', 'ALL', horizon, asOf, 0, 0);
+}
+
+describe('Current Holdings Historical Risk regression', () => {
+  it('calculates current risk on historical asset returns even when the portfolio is one day old', () => {
+    const analytics = recentPortfolioAnalytics();
+    expect(analytics.proxy.riskWindow.returns).toHaveLength(60);
+    expect(analytics.proxy.volatility).not.toBeNull();
+    expect(analytics.matrix).not.toBeNull();
+    expect(analytics.matrix!.observations).toBe(60);
+    expect(analytics.currentRisk?.contributions.length).toBe(3);
+    expect(analytics.currentRisk?.diversificationRatio).not.toBeNull();
+    expect(analytics.currentBenchmarkRisk.beta).not.toBeNull();
+    expect(analytics.currentBenchmarkRisk.correlation).not.toBeNull();
+    expect(analytics.proxy.tail?.var).not.toBeNull();
+    expect(analytics.proxy.tail?.es).not.toBeNull();
+    expect(analytics.actualRiskWindow.available).toBe(false);
+    expect(analytics.risk.sharpe).toBeNull();
+    expect(analytics.performance.cagr).toBeNull();
+    expect(analytics.drawdown).toBeNull();
+    expect(analytics.proxy.drawdown).not.toBeNull();
+  });
+
+  it('uses the selected 60D asset lookback independently of portfolio age', () => {
+    const analytics = recentPortfolioAnalytics({ horizon: '60D' });
+    expect(analytics.proxy.riskWindow.availableObservations).toBe(60);
+    expect(analytics.riskMatrix.matrix?.observations).toBe(60);
+  });
+
+  it('requires at least 20 common observations for the current risk matrix', () => {
+    const analytics = recentPortfolioAnalytics({ days: 16, horizon: '60D' });
+    expect(analytics.riskMatrix.matrix).toBeNull();
+    expect(analytics.riskMatrix.reason).toContain('20');
+    expect(analytics.proxy.riskWindow.available).toBe(false);
+  });
+
+  it('keeps current risk metrics available when there is no benchmark overlap', () => {
+    const analytics = recentPortfolioAnalytics({ benchmarkOffset: -900 });
+    expect(analytics.proxy.volatility).not.toBeNull();
+    expect(analytics.currentRisk).not.toBeNull();
+    expect(analytics.currentBenchmarkRisk.beta).toBeNull();
+    expect(analytics.currentBenchmarkRisk.observations).toBe(0);
+  });
+
+  it('never places the current-holdings drawdown proxy in actual drawdown', () => {
+    const analytics = recentPortfolioAnalytics();
+    expect(analytics.drawdown).toBeNull();
+    expect(analytics.proxy.drawdown).not.toBeNull();
+    expect(analytics.risk.calmar).toBeNull();
   });
 });
 

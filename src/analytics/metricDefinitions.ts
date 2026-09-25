@@ -52,12 +52,12 @@ export const definitions = {
   maxDrawdown: [
     'Максимальная просадка',
     'minₜ(Wₜ / maxₛ≤ₜ Wₛ − 1)',
-    'Просадка actual cumulative performance index. Не строится через неизвестный cash-flow/trade разрыв.',
+    'Просадка рассчитывается по источнику, указанному в подписи метрики: actual transaction-aware performance или отдельному historical current-holdings proxy. Эти ряды не смешиваются.',
   ],
   currentDrawdown: [
     'Текущая просадка',
     'W_last / max(W) − 1',
-    'Отклонение последнего значения actual performance index от максимума выбранного непрерывного периода.',
+    'Отклонение последнего значения ряда от максимума. Источник и период явно указаны в подписи метрики.',
   ],
   bestDay: [
     'Лучший день',

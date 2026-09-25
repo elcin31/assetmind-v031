@@ -32,8 +32,8 @@ import { buildCurrentHoldingsRiskProxy } from './returns';
 import { currentWeightsHistoricalReplay } from './historicalStress';
 import {
   HISTORICAL_TAIL_MIN_OBSERVATIONS,
+  MIN_RISK_OBSERVATIONS,
   buildRiskReturnMatrix,
-  selectActualPortfolioRiskWindow,
   selectRiskWindow,
 } from './riskHorizon';
 
@@ -47,7 +47,7 @@ export interface AccountAnalyticsMarketData {
 
 /**
  * The final arguments retain compatibility with the pre-risk-horizon call shape
- * so older integration callers safely receive the new 20D default.
+ * so older integration callers safely receive the new 60D default.
  */
 export function calculatePortfolioAnalytics(
   snapshot: PortfolioSnapshot,
@@ -63,7 +63,7 @@ export function calculatePortfolioAnalytics(
   const explicitRiskHorizon = RISK_HORIZONS.has(riskHorizonOrAsOf as RiskHorizon);
   const riskHorizon: RiskHorizon = explicitRiskHorizon
     ? (riskHorizonOrAsOf as RiskHorizon)
-    : '20D';
+    : '60D';
   const asOf = explicitRiskHorizon ? String(asOfOrRf) : riskHorizonOrAsOf;
   const rf = explicitRiskHorizon ? rfOrMar : Number(asOfOrRf);
   const mar = explicitRiskHorizon ? (maybeMar ?? 0) : rfOrMar;
@@ -102,10 +102,18 @@ export function calculatePortfolioAnalytics(
   // Performance period and current-risk horizon are intentionally independent.
   const points = selectPeriod(history.points, period, asOf);
   const performance = performanceMetrics(points);
-  const actualRiskWindow = selectActualPortfolioRiskWindow(
-    history.points,
-    riskHorizon,
-  );
+  // The horizon is a lookback only for the current-holdings model. Actual risk
+  // uses the available transaction-aware performance stream for this period.
+  const actualRiskWindow = {
+    horizon: riskHorizon,
+    required: MIN_RISK_OBSERVATIONS,
+    availableObservations: performance.riskReturns.length,
+    returns: performance.riskReturns.length >= MIN_RISK_OBSERVATIONS ? performance.riskReturns : [],
+    available: performance.riskReturns.length >= MIN_RISK_OBSERVATIONS,
+    reason: performance.riskReturns.length >= MIN_RISK_OBSERVATIONS
+      ? null
+      : `Для actual risk требуется минимум ${MIN_RISK_OBSERVATIONS} валидных transaction-aware return-интервалов; доступно ${performance.riskReturns.length}.`,
+  };
   const riskValues = actualRiskWindow.available
     ? actualRiskWindow.returns.map((r) => r.value)
     : [];
@@ -120,7 +128,9 @@ export function calculatePortfolioAnalytics(
         })),
       ]
     : [];
-  const drawdown = drawdowns(returnIndex);
+  const drawdown = performance.riskReturns.length >= MIN_RISK_OBSERVATIONS
+    ? drawdowns(returnIndex)
+    : null;
   const valueDrawdown = drawdowns(
     points.map((p) => ({ date: p.date, value: p.value })),
   );
@@ -143,12 +153,12 @@ export function calculatePortfolioAnalytics(
   const riskReason =
     actualRiskWindow.reason ??
     (risk.volatility === null
-      ? `${riskHorizon} volatility математически не определена: дисперсия ряда нулевая или некорректна.`
+      ? 'Actual volatility математически не определена: дисперсия ряда нулевая или некорректна.'
       : null);
   const tailRiskReason =
     actualRiskWindow.reason ??
     (riskValues.length < HISTORICAL_TAIL_MIN_OBSERVATIONS
-      ? `Для historical VaR / Expected Shortfall требуется минимум ${HISTORICAL_TAIL_MIN_OBSERVATIONS} валидных return-интервалов. В ${riskHorizon} окне доступно: ${riskValues.length}.`
+      ? `Для actual historical VaR / Expected Shortfall требуется минимум ${HISTORICAL_TAIL_MIN_OBSERVATIONS} transaction-aware return-интервалов. Доступно: ${riskValues.length}.`
       : tail === null
         ? 'Historical VaR / Expected Shortfall математически не определены для текущей выборки.'
         : null);
@@ -185,20 +195,48 @@ export function calculatePortfolioAnalytics(
       )
     : [];
 
-  // Proxy always starts from full available adjusted history; only current-risk
-  // metrics use the selected horizon. This remains explicitly a current-holdings
-  // historical risk proxy, not actual account performance.
-  const proxy = buildCurrentHoldingsRiskProxy(snapshot.positions, clean);
+  // Reuse adjusted asset returns and today's market weights for the current
+  // holdings proxy; this is a constant-mix risk model, not actual performance.
+  const proxy = buildCurrentHoldingsRiskProxy(
+    snapshot.positions,
+    clean,
+    complete ? weights : [],
+  );
   const proxyReturns = proxy.available ? proxy.returns : [];
-  const proxyRiskWindow = selectRiskWindow(proxyReturns, riskHorizon);
+  const selectedProxyWindow = selectRiskWindow(proxyReturns, riskHorizon);
+  const proxyRiskWindow = proxy.available
+    ? selectedProxyWindow
+    : {
+        ...selectedProxyWindow,
+        reason: proxy.reason === 'missing_current_market_weights' || proxy.reason === 'invalid_current_market_weights'
+          ? 'Нужны полные текущие рыночные стоимости для расчёта нормированных весов.'
+          : proxy.reason?.startsWith('insufficient_history_for_')
+            ? `Нет достаточной adjusted history для ${proxy.reason.slice('insufficient_history_for_'.length)}.`
+            : 'Недостаточно общих исторических return-интервалов текущих позиций.',
+      };
   const proxyRiskValues = proxyRiskWindow.available
     ? proxyRiskWindow.returns.map((r) => r.value)
     : [];
-  const proxyDrawdown = proxy.available
-    ? drawdowns(
-        proxy.dates.map((date, i) => ({ date, value: proxy.values[i] })),
-      )
+  const proxyDrawdownContinuous = proxyRiskWindow.available && proxyRiskWindow.returns.every(
+    (item, index, selected) => index === 0 || item.startDate === selected[index - 1].date,
+  );
+  const proxyDrawdownReturns = proxyRiskWindow.available && proxyDrawdownContinuous
+    ? proxyRiskWindow.returns
+    : [];
+  let proxyWealth = 100;
+  const proxyDrawdown = proxyDrawdownReturns.length >= MIN_RISK_OBSERVATIONS
+    ? drawdowns([
+        { date: proxyDrawdownReturns[0].startDate, value: proxyWealth },
+        ...proxyDrawdownReturns.map((item) => ({ date: item.date, value: (proxyWealth *= 1 + item.value) })),
+      ])
     : null;
+  const proxyDrawdownReason = !proxyRiskWindow.available
+    ? proxyRiskWindow.reason
+    : !proxyDrawdownContinuous
+      ? 'В выбранном окне есть разрыв общих интервалов; drawdown не строится через пропущенные даты.'
+      : proxyDrawdown === null
+        ? 'Для historical drawdown нужно минимум 20 последовательных общих return-интервалов.'
+        : null;
 
   const benchmarkReturns = datedReturns(rangeHistories.get(benchmark) ?? []);
   const benchmarkResult = benchmarkMetrics(
@@ -211,7 +249,7 @@ export function calculatePortfolioAnalytics(
     : null;
   const benchmarkRiskWindow = selectRiskWindow(datedReturns(clean.get(benchmark) ?? []), riskHorizon);
   const currentBenchmarkRisk = benchmarkMetrics(
-    actualRiskWindow.available ? actualRiskWindow.returns : [],
+    proxyRiskWindow.available ? proxyRiskWindow.returns : [],
     benchmarkRiskWindow.available ? benchmarkRiskWindow.returns : [],
     rf,
   );
@@ -383,10 +421,15 @@ export function calculatePortfolioAnalytics(
       riskWindow: proxyRiskWindow,
       volatility: volatility(proxyRiskValues),
       sharpe: sharpeRatio(proxyRiskValues, rf),
+      downside: dailyMar === null ? null : downsideDeviation(proxyRiskValues, dailyMar),
+      sortino: sortinoRatio(proxyRiskValues, mar),
+      tail: historicalTailRisk(proxyRiskValues, 0.95, HISTORICAL_TAIL_MIN_OBSERVATIONS),
+      benchmark: currentBenchmarkRisk,
       drawdown: proxyDrawdown,
+      drawdownReason: proxyDrawdownReason,
     },
     sample: `${points[0]?.date ?? '—'} — ${points.at(-1)?.date ?? '—'} · ${performance.riskReturns.length} чистых return-интервалов`,
-    riskSample: `${riskHorizon} · ${actualRiskWindow.availableObservations}/${actualRiskWindow.required} фактических валидных интервалов`,
+    riskSample: `${actualRiskWindow.availableObservations} actual transaction-aware return-интервалов`,
     matrixSample: `${riskHorizon} · ${riskMatrix.commonObservations}/${riskMatrix.required} общих интервалов`,
   };
 }

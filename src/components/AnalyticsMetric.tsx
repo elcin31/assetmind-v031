@@ -23,35 +23,40 @@ export function Formula({
 }
 export function AnalyticsMetric({
   metric,
+  label: labelOverride,
   value,
   sample,
   ratio = false,
   reason,
 }: {
   metric: MetricKey;
+  label?: string;
   value: number | null | undefined;
   sample: string;
   ratio?: boolean;
   reason?: string | null;
 }) {
-  const [label, formula, explanation] = definitions[metric];
+  const [definitionLabel, formula, explanation] = definitions[metric];
+  const label = labelOverride ?? definitionLabel;
+  const unavailableReason = reason ?? "Недостаточно данных для расчёта.";
   return (
     <div className="analytics-metric">
-      <span>{label}</span>
+      <span className="metric-label">{label}</span>
       <strong
         title={
           value == null
-            ? (reason ?? "Недостаточно истории или коэффициент не определён.")
+            ? unavailableReason
             : undefined
         }
       >
-        {ratio ? numeric(value) : pct(value)}
+        {value == null ? "Недоступно" : ratio ? numeric(value) : pct(value)}
       </strong>
-      <Formula name="Расчёт" formula={formula}>
-        {explanation} Данные: {sample}.
-        {value == null &&
-          ` ${reason ?? "Недостаточно истории или коэффициент не определён."}`}
-      </Formula>
+      <small className="metric-sample">{value == null ? unavailableReason : sample}</small>
+      <details className="metric-details">
+        <summary>Подробнее</summary>
+        <code>{formula}</code>
+        <p>{explanation} Данные: {sample}.{value == null ? ` ${unavailableReason}` : ""}</p>
+      </details>
     </div>
   );
 }

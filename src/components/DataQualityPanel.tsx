@@ -23,14 +23,13 @@ export function DataQualityPanel({
   const lastProxyDate = datedProxyReturns.length ? datedProxyReturns[datedProxyReturns.length - 1].date : null;
   const cleanIntervals = a.performance.riskReturns.length;
   const commonIntervals = a.riskMatrix.commonObservations;
-  const requiredRiskIntervals = a.riskMatrix.required;
   const benchmarkIntervals = a.benchmark.observations;
   const historyNotStarted = Boolean(firstTransaction && lastProxyDate && firstTransaction > lastProxyDate && cleanIntervals === 0);
   const providerPartial = c.errors.length > 0;
   const valuationPartial = !snapshot.valuation.complete;
   const cashIncomplete = Boolean(snapshot.cashLedger && !snapshot.cashLedger.complete && (snapshot.transactions.length || snapshot.cashEvents?.length));
   const actualHistoryUnavailable = Boolean(a.history.reason && snapshot.transactions.length > 0 && !c.loading);
-  const riskUnavailable = !a.riskMatrix.matrix || !a.actualRiskWindow.available;
+  const riskUnavailable = !a.riskMatrix.matrix || !a.proxy.riskWindow.available;
   const needsAttention = providerPartial || valuationPartial || cashIncomplete || actualHistoryUnavailable || historyNotStarted || riskUnavailable;
 
   return (
@@ -62,8 +61,8 @@ export function DataQualityPanel({
         <div><span>Рыночная оценка</span><b>{snapshot.valuation.pricedPositions}/{snapshot.valuation.totalPositions} позиций</b></div>
         <div><span>Cash ledger</span><b>{snapshot.cashLedger?.complete ? 'reconciled' : 'incomplete'}</b></div>
         <div><span>Первая сделка</span><b>{day(firstTransaction)}</b></div>
-        <div><span>Фактический {c.riskHorizon} Risk</span><b>{a.actualRiskWindow.availableObservations}/{a.actualRiskWindow.required}</b></div>
-        <div><span>{c.riskHorizon} Risk Matrix</span><b>{commonIntervals}/{requiredRiskIntervals} · {a.riskMatrix.matrix ? 'Ready' : 'Unavailable'}</b></div>
+        <div><span>Actual risk history</span><b>{a.actualRiskWindow.availableObservations}/{a.actualRiskWindow.required} минимум</b></div>
+        <div><span>{c.riskHorizon} Historical Risk Matrix</span><b>{commonIntervals} общих · {a.riskMatrix.matrix?.observations ?? `минимум 20`} использовано</b></div>
         <div><span>Benchmark aligned</span><b>{benchmarkIntervals}</b></div>
         <div><span>Current-holdings proxy</span><b>{proxyReturns.length}</b></div>
         <div><span>Last price date</span><b>{a.dataQuality.latestPriceDate ?? 'Недостаточно данных'}</b></div>

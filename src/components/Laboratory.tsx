@@ -140,11 +140,12 @@ export function Laboratory({
         <section className="xray-summary">
           <div className="xray-summary-main"><span className="eyebrow">PORTFOLIO X-RAY</span><h2>Портфель под микроскопом</h2><p>{snapshot.positions.length} открытых позиций · данные на {new Date().toLocaleDateString('ru-RU')}</p><strong>{snapshot.valuation.complete ? money(snapshot.accountValue ?? snapshot.portfolioValue) : 'Недостаточно данных'}</strong><small>Стоимость портфеля</small></div>
           <div className="xray-summary-metrics">
-            <XRayMetric label="Total Return / TWR" value={a.performance.twr} percent reason={a.performance.reason} formula="TWR = ∏(1 + rₜ) − 1" sample={sample} />
-            <XRayMetric label="Волатильность" value={a.risk.volatility} percent reason={a.riskReason} formula="σ annual = stdev(r) × √252" sample={a.riskSample} />
-            <XRayMetric label="Sharpe Ratio" value={a.risk.sharpe} reason={a.riskReason} formula="(252 × mean(r) − Rf) / σ annual" sample={a.riskSample} />
-            <XRayMetric label="Max Drawdown" value={a.drawdown?.max} percent reason={a.performance.reason} formula="min(Vₜ / max(V₀…Vₜ) − 1)" sample={sample} />
-            <XRayMetric label="Portfolio Beta" value={a.benchmark.beta} reason={a.benchmark.observations < 20 ? 'Недостаточно общих наблюдений с benchmark.' : null} formula="Cov(rₚ, rᵦ) / Var(rᵦ)" sample={`${a.benchmark.observations} benchmark observations`} />
+            <XRayMetric label="Total Return / TWR · Actual" value={a.performance.twr} percent reason={a.performance.reason ?? 'Требуется фактическая transaction-aware история.'} formula="TWR = ∏(1 + rₜ) − 1" sample={sample} />
+            <XRayMetric label="Volatility · Current Holdings" value={a.proxy.volatility} percent reason={a.proxy.riskWindow.reason ?? (!a.proxy.volatility ? 'Риск текущего состава математически не определён.' : null)} formula="σₚ = √(wᵀΣw) × √252" sample={`${c.riskHorizon} · Current Holdings Risk`} />
+            <XRayMetric label="Sharpe · Current Holdings" value={a.proxy.sharpe} reason={a.proxy.riskWindow.reason ?? (!a.proxy.sharpe ? 'Sharpe не определён при недостаточной или нулевой волатильности.' : null)} formula="(252 × mean(rₚ) − Rf) / σₚ,ann" sample={`${c.riskHorizon} · Current Holdings Risk`} />
+            <XRayMetric label="Actual Max Drawdown" value={a.drawdown?.max} percent reason={a.performance.reason ?? a.riskReason ?? 'Для actual drawdown требуется минимум 20 фактических return-интервалов.'} formula="min(Vₜ / max(V₀…Vₜ) − 1)" sample={sample} />
+            <XRayMetric label="Portfolio Beta · Current Holdings" value={a.currentBenchmarkRisk.beta} reason={a.currentBenchmarkRisk.observations < 20 ? `Недостаточно общих benchmark интервалов: ${a.currentBenchmarkRisk.observations}/20.` : null} formula="Cov(rₚ,rᵦ) / Var(rᵦ)" sample={`${a.currentBenchmarkRisk.observations} общих интервалов · ${c.benchmark}`} />
+            <XRayMetric label="Holdings Proxy Max Drawdown" value={a.proxy.drawdown?.max} percent reason={a.proxy.drawdownReason} formula="min(Vₜ / max(V₀…Vₜ) − 1), V₀ = 100" sample={`${c.riskHorizon} · Current Holdings; не actual drawdown`} />
             <XRayMetric label="Diversification Ratio" value={hasMultipleHoldings ? a.currentRisk?.diversificationRatio : null} reason={diversificationReason} formula="Σ(wᵢ × σᵢ) / σₚ" sample={a.matrixSample} />
             <XRayMetric label="Effective Holdings" value={a.concentration?.effectivePositions} reason={!a.concentration ? 'Нужны полные текущие рыночные веса.' : null} formula="1 / Σ(wᵢ²)" sample="Текущие рыночные веса" />
           </div>
@@ -220,64 +221,34 @@ export function Laboratory({
           <section className="card">
             <div className="section-heading">
               <div>
-                <h2>{c.riskHorizon} Risk · фактический портфель</h2>
-                <p className="caption">Transaction-aware risk требует полного выбранного окна. BUY/SELL, неизвестный external flow и ценовые gaps не перескакиваются ради добора выборки.</p>
+                <h2>Current Holdings Risk</h2>
+                <p className="caption">Историческая оценка риска текущего состава портфеля по adjusted returns и сегодняшним рыночным весам. Это не фактическая доходность пользователя.</p>
               </div>
-              <span className="tag">{c.riskHorizon}</span>
+              <span className="tag">{c.riskHorizon} Historical Lookback</span>
             </div>
-            {c.riskHorizon === '20D' && <p className="caption">20D Sharpe чувствителен к короткой выборке.</p>}
+            {a.proxy.riskWindow.reason && <p className="notice">{a.proxy.riskWindow.reason}</p>}
             <div className="analytics-metrics">
-              {(
-                [
-                  'volatility',
-                  'downside',
-                  'sharpe',
-                  'sortino',
-                  'calmar',
-                  'var95',
-                  'es95',
-                ] as const
-              ).map((metric) => (
-                <AnalyticsMetric
-                  key={metric}
-                  metric={metric}
-                  value={a.risk[metric]}
-                  sample={metric === 'calmar' ? sample : a.riskSample}
-                  ratio={['sharpe', 'sortino', 'calmar'].includes(metric)}
-                  reason={
-                    providerReason ??
-                    (metric === 'var95' || metric === 'es95'
-                      ? a.tailRiskReason
-                      : metric === 'sortino'
-                        ? a.sortinoReason
-                        : metric === 'calmar'
-                          ? (a.performance.reason ?? a.riskReason)
-                          : a.riskReason)
-                  }
-                />
-              ))}
-              <AnalyticsMetric
-                metric="maxDrawdown"
-                value={a.drawdown?.max}
-                sample={sample}
-                reason={providerReason ?? a.performance.reason}
-              />
-              <AnalyticsMetric
-                metric="currentDrawdown"
-                value={a.drawdown?.current}
-                sample={sample}
-                reason={providerReason ?? a.performance.reason}
-              />
-              <XRayMetric label="Portfolio Beta" value={a.currentBenchmarkRisk.beta} reason={a.currentBenchmarkRisk.observations < 20 ? `Недостаточно общих интервалов: ${a.currentBenchmarkRisk.observations}/20.` : null} formula="Cov(Rₚ,Rᵦ) / Var(Rᵦ)" sample={`${c.riskHorizon} · ${a.currentBenchmarkRisk.observations} общих интервалов · ${c.benchmark}`} />
+              <AnalyticsMetric metric="volatility" label="Volatility · Current Holdings" value={a.proxy.volatility} sample={`${c.riskHorizon} · ${a.proxy.riskWindow.availableObservations} общих proxy-интервалов`} reason={a.proxy.riskWindow.reason ?? (!a.proxy.volatility ? 'Риск текущего состава математически не определён.' : null)} />
+              <AnalyticsMetric metric="sharpe" label="Sharpe · Current Holdings" value={a.proxy.sharpe} sample={`${c.riskHorizon} · Rf ${c.rf}%`} ratio reason={a.proxy.riskWindow.reason ?? (!a.proxy.sharpe ? 'Sharpe не определён при недостаточной или нулевой волатильности.' : null)} />
+              <AnalyticsMetric metric="sortino" label="Sortino · Current Holdings" value={a.proxy.sortino} sample={`${c.riskHorizon} · MAR ${c.mar}%`} ratio reason={a.proxy.riskWindow.reason ?? (!a.proxy.sortino ? 'Sortino требует достаточную downside-выборку и ненулевой downside deviation.' : null)} />
+              <AnalyticsMetric metric="var95" label="Historical VaR 95% · Current Holdings" value={a.proxy.tail?.var ?? null} sample={`${c.riskHorizon} proxy returns`} reason={a.proxy.riskWindow.reason ?? (a.proxy.riskWindow.availableObservations < 60 ? 'Для исторического VaR 95% нужно минимум 60 наблюдений.' : null)} />
+              <AnalyticsMetric metric="es95" label="Expected Shortfall 95% · Current Holdings" value={a.proxy.tail?.es ?? null} sample={`${c.riskHorizon} proxy returns`} reason={a.proxy.riskWindow.reason ?? (a.proxy.riskWindow.availableObservations < 60 ? 'Для Expected Shortfall 95% нужно минимум 60 наблюдений.' : null)} />
+              <AnalyticsMetric metric="beta" label="Beta · Current Holdings" value={a.currentBenchmarkRisk.beta} sample={`${a.currentBenchmarkRisk.observations} общих наблюдений · ${c.benchmark}`} ratio reason={a.currentBenchmarkRisk.observations < 20 ? `Недостаточно benchmark overlap: ${a.currentBenchmarkRisk.observations}/20 общих наблюдений.` : null} />
+              <AnalyticsMetric metric="benchmarkCorrelation" label="Correlation · Benchmark" value={a.currentBenchmarkRisk.correlation} sample={`${a.currentBenchmarkRisk.observations} общих наблюдений · ${c.benchmark}`} ratio reason={a.currentBenchmarkRisk.observations < 20 ? `Недостаточно benchmark overlap: ${a.currentBenchmarkRisk.observations}/20 общих наблюдений.` : null} />
               <AnalyticsMetric metric="diversificationRatio" value={hasMultipleHoldings ? a.currentRisk?.diversificationRatio : null} sample={a.matrixSample} ratio reason={!hasMultipleHoldings ? diversificationReason : !a.currentRisk ? currentRiskReason : null} />
-              <AnalyticsMetric metric="averageCorrelation" value={a.averageCorrelation} sample={a.matrixSample} ratio reason={!a.matrix ? matrixReason : null} />
+              <XRayMetric label="Risk Concentration" value={a.currentRisk?.riskConcentration} reason={!a.currentRisk ? currentRiskReason : null} formula="Σ(RCᵢ%²)" sample={a.matrixSample} />
+              <AnalyticsMetric metric="maxDrawdown" label="Historical Drawdown · Current Holdings" value={a.proxy.drawdown?.max ?? null} sample={`${c.riskHorizon} common proxy returns`} reason={a.proxy.drawdownReason} />
+              <AnalyticsMetric metric="currentDrawdown" label="Current Historical Drawdown · Current Holdings" value={a.proxy.drawdown?.current ?? null} sample={`${c.riskHorizon} common proxy returns`} reason={a.proxy.drawdownReason} />
             </div>
-            <Formula
-              name={`${c.riskHorizon} annualized volatility`}
-              formula="σ_daily = stdev_sample(r); σ_annual = σ_daily × √252"
-            >
-              Оценка annualized, рассчитанная только по выбранному окну {c.riskHorizon}; это не «годовая история», если выбрано 20D или 60D. Данные: {a.riskSample}.
-            </Formula>
+            <Formula name="Модель текущего состава" formula="rₚ,t = Σ wᵢ,current × rᵢ,t; σₚ = √(wᵀΣw)">Для 20D, 60D и 1Y берутся последние общие исторические интервалы доходностей активов. Требуется минимум 20 наблюдений; никакие сделки или исторические количества портфеля не моделируются.</Formula>
+          </section>
+          <section className="card">
+            <div className="section-heading"><div><h2>Actual Portfolio Risk / Performance</h2><p className="caption">Рассчитано по фактической transaction-aware истории портфеля за выбранный период {c.period}.</p></div><span className="tag">Actual history</span></div>
+            {a.riskReason && !c.loading ? <div className="notice actual-risk-empty"><strong>Фактическая история пока недостаточна</strong><span>{a.riskReason} Current Holdings Risk выше рассчитан по историческим данным активов.</span></div> : <div className="analytics-metrics">
+              {(['volatility', 'sharpe', 'sortino', 'calmar', 'var95', 'es95'] as const).map(metric => <AnalyticsMetric key={metric} metric={metric} label={`${metric === 'volatility' ? 'Volatility' : metric === 'sharpe' ? 'Sharpe' : metric === 'sortino' ? 'Sortino' : metric === 'calmar' ? 'Calmar' : metric === 'var95' ? 'VaR 95%' : 'Expected Shortfall 95%'} · Actual`} value={a.risk[metric]} sample={a.riskSample} ratio={['sharpe', 'sortino', 'calmar'].includes(metric)} reason={metric === 'var95' || metric === 'es95' ? a.tailRiskReason : metric === 'sortino' ? a.sortinoReason : metric === 'calmar' ? a.performance.reason ?? a.riskReason : a.riskReason} />)}
+              <AnalyticsMetric metric="maxDrawdown" label="Max Drawdown · Actual" value={a.drawdown?.max ?? null} sample={sample} reason={a.performance.reason ?? a.riskReason} />
+              <AnalyticsMetric metric="currentDrawdown" label="Current Drawdown · Actual" value={a.drawdown?.current ?? null} sample={sample} reason={a.performance.reason ?? a.riskReason} />
+            </div>}
           </section>
           <section className="card">
             <div className="section-heading"><div><h2>Risk Budget</h2><p className="caption">Вклад каждой позиции в annualized volatility за {c.riskHorizon}.</p></div><span className="tag">Σ normalized RC {a.currentRisk ? pct(a.currentRisk.normalizedRiskContributionSum) : '—'}</span></div>
@@ -316,21 +287,6 @@ export function Laboratory({
             <AnalyticsChart key={`sharpe-${sharpeWindow}-${c.period}`} points={a.rolling.sharpe[sharpeWindow]} label="Скользящий Sharpe" format={(v) => v.toFixed(2)} loading={c.loading} reason={providerReason ?? a.riskReason} />
             <Formula name="Окно Sharpe" formula="Sharpe=(252×mean(r)−Rf_annual)/σ_annual">
               Полное окно {sharpeWindow} чистых доходностей, Rf {c.rf}% в год. При нулевой волатильности участок недоступен. Данные: {sample}.
-            </Formula>
-          </section>
-          <section className="card">
-            <div className="section-heading">
-              <div><h2>Исторический риск текущего состава · proxy</h2><p className="caption">Как сегодняшний состав портфеля вёл бы себя на прошлых adjusted close. Это модель, не фактическая доходность портфеля.</p></div>
-              <span className="tag">{c.riskHorizon} Risk</span>
-            </div>
-            {a.proxy.riskWindow.reason && <p className="notice">{a.proxy.riskWindow.reason}</p>}
-            <div className="analytics-metrics">
-              <AnalyticsMetric metric="volatility" value={a.proxy.volatility} sample={`${c.riskHorizon} · ${a.proxy.riskWindow.availableObservations}/${a.proxy.riskWindow.required} proxy-интервалов`} reason={a.proxy.riskWindow.reason} />
-              <AnalyticsMetric metric="sharpe" value={a.proxy.sharpe} sample={`${c.riskHorizon} proxy · Rf ${c.rf}%`} ratio reason={a.proxy.riskWindow.reason} />
-              <AnalyticsMetric metric="maxDrawdown" value={a.proxy.drawdown?.max} sample="полная proxy value series; не Risk Horizon" />
-            </div>
-            <Formula name="Текущие количества" formula="V_proxy(t) = Σqᵢ(today)Pᵢ(t)">
-              Фиксированные сегодняшние количества. Доходности считаются только на return-интервалах, где у каждого актива есть обе цены start/end; пропуск не превращается в 0 и не создаёт мост через дату. Для {c.riskHorizon} current-risk требуется полное окно из {a.proxy.riskWindow.required} валидных интервалов.
             </Formula>
           </section>
         </>
@@ -408,6 +364,6 @@ function LaboratoryDataContext({ snapshot, controller: c }: { snapshot: Portfoli
 }
 
 function XRayMetric({ label, value, percent = false, reason, formula, sample }: { label: string; value: number | null | undefined; percent?: boolean; reason?: string | null; formula: string; sample: string }) {
-  const display = value == null || !Number.isFinite(value) ? 'Недостаточно данных' : percent ? pct(value) : numeric(value);
-  return <div className="xray-summary-metric"><span>{label}<Formula name={label} formula={formula}>{reason ?? 'Метрика рассчитана из существующего analytics layer.'} Данные: {sample}.</Formula></span><b title={value == null ? reason ?? undefined : undefined}>{display}</b></div>;
+  const display = value == null || !Number.isFinite(value) ? 'Недоступно' : percent ? pct(value) : numeric(value);
+  return <div className="xray-summary-metric"><span>{label}</span><b title={value == null ? reason ?? undefined : undefined}>{display}</b><small>{value == null ? reason ?? 'Недостаточно данных для расчёта.' : sample}</small><details className="xray-metric-details"><summary>Подробнее</summary><code>{formula}</code><p>{reason ?? 'Рассчитано по детерминированной analytics-модели.'} Данные: {sample}.</p></details></div>;
 }

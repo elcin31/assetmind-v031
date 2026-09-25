@@ -16,6 +16,7 @@ export const RISK_HORIZON_INTERVALS: Readonly<Record<RiskHorizon, number>> = {
 };
 
 export const HISTORICAL_TAIL_MIN_OBSERVATIONS = 60;
+export const MIN_RISK_OBSERVATIONS = 20;
 
 export interface RiskHorizonConfig {
   horizon: RiskHorizon;
@@ -58,20 +59,20 @@ export function selectRiskWindow(
   const ordered = [...returns].sort(
     (a, b) => a.date.localeCompare(b.date) || a.startDate.localeCompare(b.startDate),
   );
-  if (ordered.length < required) {
+  if (ordered.length < MIN_RISK_OBSERVATIONS) {
     return {
       horizon,
       required,
       availableObservations: ordered.length,
       returns: [],
       available: false,
-      reason: `Для ${horizon} Risk нужно ${required} валидных торговых return-интервалов. Доступно: ${ordered.length}.`,
+      reason: `Нужно минимум ${MIN_RISK_OBSERVATIONS} общих исторических return-интервалов для ${horizon} Risk. Доступно: ${ordered.length}.`,
     };
   }
   return {
     horizon,
     required,
-    availableObservations: required,
+    availableObservations: Math.min(required, ordered.length),
     returns: ordered.slice(-required),
     available: true,
     reason: null,
@@ -161,22 +162,23 @@ export function buildRiskReturnMatrix(
     (_, index) => series[index].length === shortest,
   );
 
-  if (commonObservations < required) {
+  if (commonObservations < MIN_RISK_OBSERVATIONS) {
     return {
       horizon,
       required,
       commonObservations,
       matrix: null,
       limitingSymbols,
-      reason: `Для ${horizon} covariance matrix нужно ${required} общих интервалов для ${symbols.join(', ')}. Доступно: ${commonObservations}.`,
+      reason: `Нужно минимум ${MIN_RISK_OBSERVATIONS} общих исторических интервалов для covariance matrix (${symbols.join(', ')}). Доступно: ${commonObservations}.`,
     };
   }
 
-  const keys = commonKeys.slice(-required);
+  const observations = Math.min(required, commonObservations);
+  const keys = commonKeys.slice(-observations);
   const returns = maps.map((map) => keys.map((key) => map.get(key)!));
   const values = returns.map((row) => row.map((r) => r.value));
-  const cov = values.map((a) => values.map((b) => covariance(a, b, required)));
-  const corr = values.map((a) => values.map((b) => correlation(a, b, required)));
+  const cov = values.map((a) => values.map((b) => covariance(a, b, observations)));
+  const corr = values.map((a) => values.map((b) => correlation(a, b, observations)));
 
   if (
     cov.some((row) => row.some((value) => value === null || !Number.isFinite(value))) ||
@@ -188,7 +190,7 @@ export function buildRiskReturnMatrix(
       commonObservations,
       matrix: null,
       limitingSymbols,
-      reason: `Для ${horizon} correlation/covariance matrix есть ${required} общих интервалов, но как минимум у одного актива нулевая дисперсия или матрица математически не определена.`,
+      reason: `Correlation/covariance matrix не определена: нулевая дисперсия актива или некорректная матрица на ${observations} общих интервалах.`,
     };
   }
 
@@ -205,7 +207,7 @@ export function buildRiskReturnMatrix(
         row.map((value) => value * TRADING_DAYS),
       ),
       correlation: corr as number[][],
-      observations: required,
+      observations,
     },
   };
 }

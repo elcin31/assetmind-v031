@@ -48,15 +48,15 @@ describe('risk horizon configuration and exact windows', () => {
   });
 
   it.each([
-    ['20D', 19],
-    ['60D', 59],
-    ['1Y', 251],
-  ] as const)('leaves %s unavailable rather than relabelling a short sample', (horizon, count) => {
+    ['20D', 19, false],
+    ['60D', 59, true],
+    ['1Y', 251, true],
+  ] as const)('uses available observations below the %s lookback cap when at least 20 exist', (horizon, count, available) => {
     const result = selectRiskWindow(datedReturns(count), horizon);
-    expect(result.available).toBe(false);
-    expect(result.returns).toEqual([]);
+    expect(result.available).toBe(available);
+    expect(result.returns).toHaveLength(available ? count : 0);
     expect(result.availableObservations).toBe(count);
-    expect(result.reason).toContain(`Доступно: ${count}`);
+    if (!available) expect(result.reason).toContain('20');
   });
 
   it('keeps the centralized interval mapping as the single source of truth', () => {
@@ -166,7 +166,13 @@ describe('actual portfolio risk and tail risk', () => {
   it.each(['20D', '60D', '1Y'] as RiskHorizon[])('never fabricates observations for %s', (horizon) => {
     const required = RISK_HORIZON_INTERVALS[horizon];
     const result = selectRiskWindow(datedReturns(required - 1), horizon);
-    expect(result.available).toBe(false);
-    expect(result.returns).toHaveLength(0);
+    if (required - 1 < 20) {
+      expect(result.available).toBe(false);
+      expect(result.returns).toHaveLength(0);
+    } else {
+      expect(result.available).toBe(true);
+      expect(result.returns).toHaveLength(required - 1);
+      expect(result.returns).toEqual(datedReturns(required - 1));
+    }
   });
 });
