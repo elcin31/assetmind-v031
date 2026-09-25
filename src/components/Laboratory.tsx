@@ -1,281 +1,24 @@
-import { CapitalSummary } from './CapitalSummary';
-import { DataQualityPanel } from './DataQualityPanel';
-import { useState } from 'react';
-import type { PortfolioSnapshot } from '../types';
-import type { AnalyticsController } from '../analytics/usePortfolioAnalytics';
-import { AnalyticsMetric, Formula } from './AnalyticsMetric';
-import { PortfolioHistoryChart, PeriodSelector } from './PortfolioHistoryChart';
-import { MonthlyReturnsHeatmap } from './MonthlyReturnsHeatmap';
-import { DrawdownChart } from './DrawdownChart';
-import { CorrelationMatrix } from './CorrelationMatrix';
-import { BenchmarkPanel } from './BenchmarkPanel';
-import { AttributionPanel } from './AttributionPanel';
-import { ScenariosPanel } from './ScenariosPanel';
-import { AnalyticsChart } from './AnalyticsChart';
-import { RiskHorizonSelector } from './RiskHorizonSelector';
-import { rollingMetric } from '../math/rolling';
-import { buildXRayInsights } from '../math/xrayInsights';
-import { numeric, pct } from '../utils/analyticsFormat';
+Y™Áäx-ÆÈ‹j◊ù¢Îi∫⁄+äßj[hëÈ‹¢ÈÌ◊^}Ò:-jZ.∂õ≠ñ)ﬁ≥Vñ◊˜'B≤6óF≈7V÷÷'í“g&ˆ“r‚Ù6óF≈7V÷÷'ís∞¶ñ◊˜'B≤FFV∆óGïÊV¬“g&ˆ“r‚ÙFFV∆óGïÊV¬s∞¶ñ◊˜'B≤W6U7FFR“g&ˆ“w&V7Bs∞¶ñ◊˜'BGóR≤˜'Ffˆ∆ñı6Ê6Ü˜B“g&ˆ“r‚‚˜GóW2s∞¶ñ◊˜'BGóR≤Ê«óFñ746ˆÁG&ˆ∆∆W"“g&ˆ“r‚‚ˆÊ«óFñ72˜W6U˜'Ffˆ∆ñÙÊ«óFñ72s∞¶ñ◊˜'B≤Ê«óFñ74÷WG&ñ2¬f˜&◊V∆“g&ˆ“r‚ÙÊ«óFñ74÷WG&ñ2s∞¶ñ◊˜'B≤˜'Ffˆ∆ñÙÜó7F˜'î6Ü'B¬W&ñˆE6V∆V7F˜"“g&ˆ“r‚ı˜'Ffˆ∆ñÙÜó7F˜'î6Ü'Bs∞¶ñ◊˜'B≤÷ˆÁFÜ«ï&WGW&Á4ÜVF÷“g&ˆ“r‚Ù÷ˆÁFÜ«ï&WGW&Á4ÜVF÷s∞¶ñ◊˜'B≤G&vF˜v‰6Ü'B“g&ˆ“r‚ÙG&vF˜v‰6Ü'Bs∞¶ñ◊˜'B≤6˜'&V∆Fñˆ‰÷G&óÇ“g&ˆ“r‚Ù6˜'&V∆Fñˆ‰÷G&óÇs∞¶ñ◊˜'B≤&VÊ6Ü÷&µÊV¬“g&ˆ“r‚Ù&VÊ6Ü÷&µÊV¬s∞¶ñ◊˜'B≤GG&ñ'WFñˆÂÊV¬“g&ˆ“r‚ÙGG&ñ'WFñˆÂÊV¬s∞¶ñ◊˜'B≤66VÊ&ñ˜5ÊV¬“g&ˆ“r‚ı66VÊ&ñ˜5ÊV¬s∞¶ñ◊˜'B≤Ê«óFñ746Ü'B“g&ˆ“r‚ÙÊ«óFñ746Ü'Bs∞¶ñ◊˜'B≤&ó6¥Ü˜&ó¶ˆÂ6V∆V7F˜"“g&ˆ“r‚ı&ó6¥Ü˜&ó¶ˆÂ6V∆V7F˜"s∞¶ñ◊˜'B≤'Vñ∆EÖ&îñÁ6ñváG2“g&ˆ“r‚‚ˆ÷FÇ˜á&îñÁ6ñváG2s∞¶ñ◊˜'B≤ÁV÷W&ñ2¬7B“g&ˆ“r‚‚˜WFñ«2ˆÊ«óFñ74f˜&÷Bs∞†¶6ˆÁ7BF'2“∞¢≤ñC¢wá&ír¬∆&V√¢uÇ’&ír“¿¢≤ñC¢wW&f˜&÷Ê6Rr¬∆&V√¢}	MÌ]ÌM›Ì-¬r“¿¢≤ñC¢w&ó6≤r¬∆&V√¢}
+ç¢r“¿¢≤ñC¢vFófW'6ñfñ6Fñˆ‚r¬∆&V√¢}	Mç-]çMç≠mçÚr“¿¢≤ñC¢v&VÊ6Ü÷&≤r¬∆&V√¢t&VÊ6Ü÷&≤r“¿¢≤ñC¢vGG&ñ'WFñˆ‚r¬∆&V√¢}	-ç=mçÚr“¿¢≤ñC¢w66VÊ&ñ˜2r¬∆&V√¢}
+m]›çÇr“¿•”∞†¶Wá˜'BgVÊ7Fñˆ‚∆&˜&F˜'íá∞¢6Ê6Ü˜B¿¢6ˆÁG&ˆ∆∆W#¢2¿ß”¢∞¢6Ê6Ü˜C¢˜'Ffˆ∆ñı6Ê6Ü˜C∞¢6ˆÁG&ˆ∆∆W#¢Ê«óFñ746ˆÁG&ˆ∆∆W#∞ß“í∞¢6ˆÁ7B∑F"¬6WEF%““W6U7FFRÇwá&írì∞¢6ˆÁ7B∑fˆ≈vñÊF˜r¬6WEfˆ≈vñÊF˜u““W6U7FFS√#¬c¬#S#‚É#ì∞¢6ˆÁ7B∑6Ü'UvñÊF˜r¬6WE6Ü'UvñÊF˜u““W6U7FFS√#¬c¬#S#‚É#ì∞¢6ˆÁ7B∑6V∆V7FVD6˜'&V∆FñˆÂVW"¬6WE6V∆V7FVD6˜'&V∆FñˆÂVW%““W6U7FFRÇrrì∞¢6ˆÁ7B∂6˜'&V∆FñˆÂvñÊF˜r¬6WD6˜'&V∆FñˆÂvñÊF˜u““W6U7FFS√#¬c¬#S#‚É#ì∞¢6ˆÁ7B“2ÊÊ«óFñ73∞¢6ˆÁ7B6◊∆R“G∂Á6◊∆W“+r&bG∂2Á&g“R+r‘"G∂2Ê÷'“V∞¢6ˆÁ7B&˜fñFW%&V6ˆ‚“2ÊW'&˜'2Ê∆VÊwFÇÚ2ÊW'&˜'2Ê¶ˆñ‚Çs≤rí¢ÁV∆√∞¢6ˆÁ7B÷G&óÖ&V6ˆ‚“&˜fñFW%&V6ˆ‚ÛÚÁ&ó6¥÷G&óÇÁ&V6ˆ„∞¢6ˆÁ7B7W'&VÁE&ó6µ&V6ˆ‚“6Ê6Ü˜BÁf«VFñˆ‚Ê6ˆ◊∆WFP¢Ú}	›=m›≤-]≠=ùçR≠Ì-çÌ-≠Ç-]RÌ-≠Ω-ΩR˝Ì}çmçíMΩÚΩ›Ì}›ΩR-]Ì"‚p¢¢Ê÷G&óÄ¢Ú÷G&óÖ&V6ˆ‡¢¢}	-≠ΩB"ç¢Õ-]Õ-ç}]≠Ç›RÌ˝]M]Ω”¢˜'Ffˆ∆ñÚf&ñÊ6RMÌΩm›Ω-¬˝ÌΩÌmç-]ΩÕ›Ìí‚s∞¢6ˆÁ7BvVñváG2“6Ê6Ü˜BÁ˜6óFñˆÁ2Ê÷á”‚á∞¢7ñ÷&ˆ√¢Á7ñ÷&ˆ¬¿¢vVñváC¢ÊFWFñ«5∑Á7ñ÷&ˆ≈”ÚÁvVñváBÛÚÁV∆¬¿¢&ó6¥6ˆÁG&ñ'WFñˆ„¢Ê7W'&VÁE&ó6≥ÚÊ6ˆÁG&ñ'WFñˆÁ2ÊfñÊBÜóFV“”‚óFV“Á7ñ÷&ˆ¬””“Á7ñ÷&ˆ¬ìÚÊg&7Fñˆ‚ÛÚÁV∆¬¿¢÷&∂WEf«VS¢Ê÷&∂WEf«VR¿¢“ííÁ6˜'BÇáÇ¬íí”‚áíÁvVñváBÛÚ”í“áÇÁvVñváBÛÚ”íì∞¢6ˆÁ7B6ˆÊ6VÁG&FñˆÂ7FG2“Ê6ˆÊ6VÁG&FñˆÂ7V÷÷'ì∞¢6ˆÁ7B7FófT6˜'&V∆FñˆÂVW"“2Ê6˜'&V∆Fñˆ‰Wá∆˜&W"Á&˜w2Á6ˆ÷Rá&˜r”‚&˜rÁ7ñ÷&ˆ¬””“6V∆V7FVD6˜'&V∆FñˆÂVW"í«¬6V∆V7FVD6˜'&V∆FñˆÂVW"””“2Ê&VÊ6Ü÷&≤Ú6V∆V7FVD6˜'&V∆FñˆÂVW"¢rs∞¢6ˆÁ7B6V∆V7FVD6˜'&V∆FñˆÂ&˜r“2Ê6˜'&V∆Fñˆ‰Wá∆˜&W"Á&˜w2ÊfñÊBá&˜r”‚&˜rÁ7ñ÷&ˆ¬””“7FófT6˜'&V∆FñˆÂVW"íÛÚ2Ê6˜'&V∆Fñˆ‰Wá∆˜&W"Á&˜w5≥“ÛÚÁV∆√∞¢6ˆÁ7Bˆ'6W'fFñˆÁ2“'Vñ∆EÖ&îñÁ6ñváG2á∞¢˜6óFñˆÁ3¢vVñváG2¿¢fW&vUó'vó6T6˜'&V∆Fñˆ„¢ÊfW&vT6˜'&V∆Fñˆ‚¿¢7W'&VÁDG&vF˜v„¢ÊG&vF˜v„ÚÊ7W'&VÁBÛÚÁV∆¬¿¢÷ÑG&vF˜v„¢ÊG&vF˜v„ÚÊ÷ÇÛÚÁV∆¬¿¢&ó6¥6ˆÊ6VÁG&Fñˆ„¢Ê7W'&VÁE&ó6≥ÚÁ&ó6¥6ˆÊ6VÁG&Fñˆ‚ÛÚÁV∆¬¿¢FófW'6ñfñ6FñˆÂ&FñÛ¢Ê7W'&VÁE&ó6≥ÚÊFófW'6ñfñ6FñˆÂ&FñÚÛÚÁV∆¬¿¢˜'Ffˆ∆ñÙ&WF¢Ê7W'&VÁD&VÊ6Ü÷&µ&ó6≤Ê&WF¿¢7FófTG&vF˜v„¢Á&V∆FófTG&vF˜v„ÚÊ7W'&VÁBÛÚÁV∆¬¿¢6ˆ÷÷ˆ‰ˆ'6W'fFñˆÁ3¢Á&ó6¥÷G&óÇÊ6ˆ÷÷ˆ‰ˆ'6W'fFñˆÁ2¿¢&WVó&VDˆ'6W'fFñˆÁ3¢Á&ó6¥÷G&óÇÁ&WVó&VB¿¢“ì∞¢6ˆÁ7B÷ˆÊWí“áf«VS¢ÁV÷&W"¬ÁV∆¬¬VÊFVfñÊVBí”‚f«VR”“ÁV∆¬«¬ÁV÷&W"Êó4fñÊóFRáf«VRíÚ}	›]MÌ--Ì}›‚M››ΩRr¢ÊWrñÁF¬‰ÁV÷&W$f˜&÷BÇw'R’%Rr¬≤7Gñ∆S¢v7W'&VÊ7ír¬7W'&VÊ7ì¢6Ê6Ü˜BÁ˜'Ffˆ∆ñÚÊ&6Uˆ7W'&VÊ7í¬÷Üñ◊V‘g&7Fñˆ‰FñvóG3¢“íÊf˜&÷Báf«VRì∞†¢&WGW&‚Ä¢√‡¢«6V7Fñˆ‚6∆74Ê÷S“&∆"÷ñÁG&Ú#‡¢∆Fóc‡¢«7‚6∆74Ê÷S“&WñV'&˜r#Ì		›		Ω	ç
+-	ç	≠		˝	Ì
 
-const tabs = [
-  { id: 'xray', label: 'X-Ray' },
-  { id: 'performance', label: '–î–æ—Ö–æ–¥–Ω–æ—Å—Ç—å' },
-  { id: 'risk', label: '–†–∏—Å–∫' },
-  { id: 'diversification', label: '–î–∏–≤–µ—Ä—Å–∏—Ñ–∏–∫–∞—Ü–∏—è' },
-  { id: 'benchmark', label: 'Benchmark' },
-  { id: 'attribution', label: '–ê—Ç—Ä–∏–±—É—Ü–∏—è' },
-  { id: 'scenarios', label: '–°—Ü–µ–Ω–∞—Ä–∏–∏' },
-];
-
-export function Laboratory({
-  snapshot,
-  controller: c,
-}: {
-  snapshot: PortfolioSnapshot;
-  controller: AnalyticsController;
-}) {
-  const [tab, setTab] = useState('xray');
-  const [volWindow, setVolWindow] = useState(20);
-  const [sharpeWindow, setSharpeWindow] = useState(63);
-  const a = c.analytics;
-  const sample = `${a.sample} ¬∑ Rf ${c.rf}% ¬∑ MAR ${c.mar}%`;
-  const vol =
-    tab === 'risk'
-      ? rollingMetric(a.performance.riskReturns, volWindow, 'volatility')
-      : [];
-  const rollingSharpe =
-    tab === 'risk'
-      ? rollingMetric(
-          a.performance.riskReturns,
-          sharpeWindow,
-          'sharpe',
-          c.rf / 100,
-        )
-      : [];
-  const providerReason = c.errors.length ? c.errors.join('; ') : null;
-  const matrixReason = providerReason ?? a.riskMatrix.reason;
-  const currentRiskReason = !snapshot.valuation.complete
-    ? '–ù—É–∂–Ω—ã —Ç–µ–∫—É—â–∏–µ –∫–æ—Ç–∏—Ä–æ–≤–∫–∏ –≤—Å–µ—Ö –æ—Ç–∫—Ä—ã—Ç—ã—Ö –ø–æ–∑–∏—Ü–∏–π –¥–ª—è —Ä—ã–Ω–æ—á–Ω—ã—Ö –≤–µ—Å–æ–≤.'
-    : !a.matrix
-      ? matrixReason
-      : '–í–∫–ª–∞–¥ –≤ —Ä–∏—Å–∫ –º–∞—Ç–µ–º–∞—Ç–∏—á–µ—Å–∫–∏ –Ω–µ –æ–ø—Ä–µ–¥–µ–ª—ë–Ω: portfolio variance –¥–æ–ª–∂–Ω–∞ –±—ã—Ç—å –ø–æ–ª–æ–∂–∏—Ç–µ–ª—å–Ω–æ–π.';
-  const weights = snapshot.positions.map(p => ({
-    symbol: p.symbol,
-    weight: a.details[p.symbol]?.weight ?? null,
-    riskContribution: a.currentRisk?.contributions.find(item => item.symbol === p.symbol)?.fraction ?? null,
-    marketValue: p.marketValue,
-  })).sort((x, y) => (y.weight ?? -1) - (x.weight ?? -1));
-  const concentrationStats = a.concentrationSummary;
-  const observations = buildXRayInsights({
-    positions: weights,
-    averagePairwiseCorrelation: a.averageCorrelation,
-    currentDrawdown: a.drawdown?.current ?? null,
-    maxDrawdown: a.drawdown?.max ?? null,
-    commonObservations: a.riskMatrix.commonObservations,
-    requiredObservations: a.riskMatrix.required,
-  });
-  const money = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö' : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: snapshot.portfolio.base_currency, maximumFractionDigits: 0 }).format(value);
-
-  return (
-    <>
-      <section className="lab-intro">
-        <div>
-          <span className="eyebrow">–ê–ù–ê–õ–ò–¢–ò–ö–ê –ü–û–†–¢–§–ï–õ–Ø</span>
-          <h2>Laboratory</h2>
-          <p>–ò—Å—Å–ª–µ–¥–æ–≤–∞—Ç–µ–ª—å—Å–∫–∏–π —Ü–µ–Ω—Ç—Ä —Å—Ç—Ä—É–∫—Ç—É—Ä—ã, –¥–æ—Ö–æ–¥–Ω–æ—Å—Ç–∏ –∏ —Ä–∏—Å–∫–∞ –ø–æ—Ä—Ç—Ñ–µ–ª—è.</p>
-        </div>
-      </section>
-      <div className="lab-tabs" role="group" aria-label="–†–∞–∑–¥–µ–ª –∞–Ω–∞–ª–∏—Ç–∏–∫–∏">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            aria-pressed={tab === t.id}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-      <div className="analytics-settings">
-        <label>
-          –ë–µ–∑—Ä–∏—Å–∫–æ–≤–∞—è —Å—Ç–∞–≤–∫–∞, % –≤ –≥–æ–¥
-          <input
-            className="input"
-            type="number"
-            min="-10"
-            max="100"
-            step=".25"
-            value={c.rf}
-            onChange={(e) =>
-              c.setRf(Math.max(-10, Math.min(100, Number(e.target.value))))
-            }
-          />
-        </label>
-        <label>
-          MAR, % –≤ –≥–æ–¥
-          <input
-            className="input"
-            type="number"
-            min="-10"
-            max="100"
-            step=".25"
-            value={c.mar}
-            onChange={(e) =>
-              c.setMar(Math.max(-10, Math.min(100, Number(e.target.value))))
-            }
-          />
-        </label>
-      </div>
-
-      {(tab === 'risk' || tab === 'diversification' || tab === 'xray') && (
-        <div className="section-heading">
-          <div>
-            <h2>Risk Horizon</h2>
-            <p className="caption">–û–¥–Ω–æ –æ–∫–Ω–æ –¥–ª—è current-risk, covariance, correlation –∏ diversification. Performance period –æ—Å—Ç–∞—ë—Ç—Å—è –Ω–µ–∑–∞–≤–∏—Å–∏–º—ã–º.</p>
-          </div>
-          <RiskHorizonSelector controller={c} />
-        </div>
-      )}
-      {(tab === 'attribution' || tab === 'benchmark') && <PeriodSelector controller={c} />}
-
-      {tab === 'xray' && <>
-        <section className="xray-summary">
-          <div className="xray-summary-main"><span className="eyebrow">PORTFOLIO X-RAY</span><h2>–ü–æ—Ä—Ç—Ñ–µ–ª—å –ø–æ–¥ –º–∏–∫—Ä–æ—Å–∫–æ–ø–æ–º</h2><p>{snapshot.positions.length} –æ—Ç–∫—Ä—ã—Ç—ã—Ö –ø–æ–∑–∏—Ü–∏–π ¬∑ –¥–∞–Ω–Ω—ã–µ –Ω–∞ {new Date().toLocaleDateString('ru-RU')}</p><strong>{snapshot.valuation.complete ? money(snapshot.accountValue ?? snapshot.portfolioValue) : '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö'}</strong><small>–°—Ç–æ–∏–º–æ—Å—Ç—å –ø–æ—Ä—Ç—Ñ–µ–ª—è</small></div>
-          <div className="xray-summary-metrics">
-            <XRayMetric label="Total Return / TWR" value={a.performance.twr} percent reason={a.performance.reason} formula="TWR = ‚àè(1 + r‚Çú) ‚àí 1" sample={sample} />
-            <XRayMetric label="–í–æ–ª–∞—Ç–∏–ª—å–Ω–æ—Å—Ç—å" value={a.risk.volatility} percent reason={a.riskReason} formula="œÉ annual = stdev(r) √ó ‚àö252" sample={a.riskSample} />
-            <XRayMetric label="Sharpe Ratio" value={a.risk.sharpe} reason={a.riskReason} formula="(252 √ó mean(r) ‚àí Rf) / œÉ annual" sample={a.riskSample} />
-            <XRayMetric label="Max Drawdown" value={a.drawdown?.max} percent reason={a.performance.reason} formula="min(V‚Çú / max(V‚ÇÄ‚Ä¶V‚Çú) ‚àí 1)" sample={sample} />
-            <XRayMetric label="Portfolio Beta" value={a.benchmark.beta} reason={a.benchmark.observations < 20 ? '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –æ–±—â–∏—Ö –Ω–∞–±–ª—é–¥–µ–Ω–∏–π —Å benchmark.' : null} formula="Cov(r‚Çö, r·µ¶) / Var(r·µ¶)" sample={`${a.benchmark.observations} benchmark observations`} />
-            <XRayMetric label="Diversification Ratio" value={a.currentRisk?.diversificationRatio} reason={currentRiskReason} formula="Œ£(w·µ¢ √ó œÉ·µ¢) / œÉ‚Çö" sample={a.matrixSample} />
-            <XRayMetric label="Effective Holdings" value={a.concentration?.effectivePositions} reason={!a.concentration ? '–ù—É–∂–Ω—ã –ø–æ–ª–Ω—ã–µ —Ç–µ–∫—É—â–∏–µ —Ä—ã–Ω–æ—á–Ω—ã–µ –≤–µ—Å–∞.' : null} formula="1 / Œ£(w·µ¢¬≤)" sample="–¢–µ–∫—É—â–∏–µ —Ä—ã–Ω–æ—á–Ω—ã–µ –≤–µ—Å–∞" />
-          </div>
-        </section>
-        <section className="xray-grid">
-          <article className="card xray-concentration"><div className="section-heading"><div><h2>–ö–æ–Ω—Ü–µ–Ω—Ç—Ä–∞—Ü–∏—è –ø–æ—Ä—Ç—Ñ–µ–ª—è</h2><p className="caption">–¢–µ–∫—É—â–∏–µ –ø–æ–∑–∏—Ü–∏–∏, –æ—Ç—Å–æ—Ä—Ç–∏—Ä–æ–≤–∞–Ω–Ω—ã–µ –ø–æ —Ä—ã–Ω–æ—á–Ω–æ–º—É –≤–µ—Å—É.</p></div><span className="tag">{weights.length} –ø–æ–∑–∏—Ü–∏–π</span></div>
-            {!snapshot.valuation.complete && <p className="notice">–î–ª—è —Ç–æ—á–Ω—ã—Ö –≤–µ—Å–æ–≤ –Ω—É–∂–Ω—ã —Ç–µ–∫—É—â–∏–µ –∫–æ—Ç–∏—Ä–æ–≤–∫–∏ –≤—Å–µ—Ö –æ—Ç–∫—Ä—ã—Ç—ã—Ö –ø–æ–∑–∏—Ü–∏–π.</p>}
-            <div className="xray-highlights"><div><span>Largest Position</span><b>{concentrationStats?.largestPositionWeight == null ? '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö' : pct(concentrationStats.largestPositionWeight)}</b></div><div><span>Top 3 Weight</span><b>{concentrationStats ? pct(concentrationStats.top3Weight) : '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö'}</b></div><div><span>Top 5 Weight</span><b>{concentrationStats ? pct(concentrationStats.top5Weight) : '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö'}</b></div><div><span>HHI</span><b>{concentrationStats?.hhi == null ? '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö' : concentrationStats.hhi.toFixed(3)}</b></div></div>
-            <div className="xray-bars">{weights.map(p => <div className="xray-bar-row" key={p.symbol}><b>{p.symbol}</b><div className="xray-bar-track"><i style={{ width: `${Math.max(0, Math.min(100, (p.weight ?? 0) * 100))}%` }} /></div><span>{p.weight == null ? '‚Äî' : `${(p.weight * 100).toFixed(1)}%`}</span><small>{money(p.marketValue)}</small></div>)}</div>
-            <Formula name="HHI –∏ —ç—Ñ—Ñ–µ–∫—Ç–∏–≤–Ω–æ–µ —á–∏—Å–ª–æ –ø–æ–∑–∏—Ü–∏–π" formula="HHI = Œ£(w·µ¢¬≤) ¬∑ Effective Holdings = 1 / HHI">–†–∞—Å—Å—á–∏—Ç–∞–Ω–æ –ø–æ –Ω–æ—Ä–º–∏—Ä–æ–≤–∞–Ω–Ω—ã–º —Ç–µ–∫—É—â–∏–º —Ä—ã–Ω–æ—á–Ω—ã–º –≤–µ—Å–∞–º. HHI –±–ª–∏–∑–∫–∏–π –∫ 1 –æ–∑–Ω–∞—á–∞–µ—Ç –±–æ–ª—å—à—É—é –∫–æ–Ω—Ü–µ–Ω—Ç—Ä–∞—Ü–∏—é.</Formula>
-          </article>
-          <article className="card"><div className="section-heading"><div><h2>–°—Ç—Ä—É–∫—Ç—É—Ä–∞ —Ä–∏—Å–∫–∞</h2><p className="caption">–í–µ—Å –∫–∞–ø–∏—Ç–∞–ª–∞ —Å—Ä–∞–≤–Ω–∏–≤–∞–µ—Ç—Å—è —Å –¥–æ–ª–µ–π –ø–æ—Ä—Ç—Ñ–µ–ª—å–Ω–æ–π variance.</p></div><span className="tag">{c.riskHorizon}</span></div>
-            {!a.currentRisk && <p className="notice">{currentRiskReason}</p>}
-            {a.currentRisk && <div className="xray-risk-list">{weights.map(p => { const rc = p.riskContribution; return <div className="xray-risk-row" key={p.symbol}><b>{p.symbol}</b><span>–í–µ—Å <strong>{p.weight == null ? '‚Äî' : pct(p.weight)}</strong></span><span>–†–∏—Å–∫ <strong>{rc == null ? '‚Äî' : pct(rc)}</strong></span><div className="xray-risk-bars"><i style={{ width: `${p.weight == null ? 0 : Math.min(100, Math.max(0, p.weight * 100))}%` }} /><i style={{ width: `${rc == null ? 0 : Math.min(100, Math.max(0, rc * 100))}%` }} /></div></div> })}</div>}
-            <p className="caption">–°–∏–Ω–∏–π ‚Äî –≤–µ—Å; —Ñ–∏–æ–ª–µ—Ç–æ–≤—ã–π ‚Äî –≤–∫–ª–∞–¥ –≤ variance. –î–∞–Ω–Ω—ã–µ: {a.matrixSample}.</p>
-          </article>
-            <article className="card"><h2>–î–∏–≤–µ—Ä—Å–∏—Ñ–∏–∫–∞—Ü–∏—è</h2><div className="xray-diversification"><div><span>Number of Holdings</span><b>{snapshot.positions.length}</b></div><div><span>Effective Holdings</span><b>{a.concentration?.effectivePositions?.toFixed(1) ?? '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö'}</b></div><div><span>–°—Ä–µ–¥–Ω—è—è –∫–æ—Ä—Ä–µ–ª—è—Ü–∏—è</span><b>{a.averageCorrelation == null ? '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö' : a.averageCorrelation.toFixed(2)}</b></div><div><span>Portfolio Volatility</span><b>{a.currentRisk?.volatility == null ? '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö' : pct(a.currentRisk.volatility)}</b></div><div><span>Weighted Asset Volatility</span><b>{a.currentRisk?.weightedAverageAssetVolatility == null ? '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö' : pct(a.currentRisk.weightedAverageAssetVolatility)}</b></div><div><span>Risk Horizon</span><b>{c.riskHorizon}</b></div></div>
-            <Formula name="Diversification Ratio" formula="DR = Œ£(w·µ¢ √ó œÉ·µ¢) / œÉ‚Çö">–í–µ—Å–∞ –∏ annualized volatility –±–µ—Ä—É—Ç—Å—è –∏–∑ –æ–¥–Ω–æ–≥–æ –≤—ã–±—Ä–∞–Ω–Ω–æ–≥–æ –æ–∫–Ω–∞ {c.riskHorizon}; covariance –∏—Å–ø–æ–ª—å–∑—É–µ—Ç –æ–±—â–∏–π –Ω–∞–±–æ—Ä –Ω–∞–±–ª—é–¥–µ–Ω–∏–π.</Formula>
-          </article>
-          <article className="card"><div className="section-heading"><div><h2>–ö–ª—é—á–µ–≤—ã–µ –Ω–∞–±–ª—é–¥–µ–Ω–∏—è</h2><p className="caption">–§–∞–∫—Ç—ã, —Ä–∞—Å—Å—á–∏—Ç–∞–Ω–Ω—ã–µ –ø–æ —Ç–µ–∫—É—â–∏–º –¥–∞–Ω–Ω—ã–º –ø–æ—Ä—Ç—Ñ–µ–ª—è.</p></div><span className="tag">Deterministic</span></div>
-            {observations.length ? <ul className="xray-observations">{observations.map(item => <li key={item.id} data-severity={item.severity}><span>{item.title}</span><p>{item.message}</p></li>)}</ul> : <p className="caption">–ü–æ—Ä–æ–≥–æ–≤—ã–µ –Ω–∞–±–ª—é–¥–µ–Ω–∏—è –Ω–µ –≤—ã—è–≤–ª–µ–Ω—ã –ª–∏–±–æ –¥–∞–Ω–Ω—ã—Ö –ø–æ–∫–∞ –Ω–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ.</p>}
-          </article>
-          <DataQualityPanel snapshot={snapshot} controller={c} />
-        </section>
-      </>}
-
-      {tab === 'performance' && a.performance.reason && !c.loading && (
-        <p className="notice">{a.performance.reason}</p>
-      )}
-      {tab === 'risk' && a.riskReason && !c.loading && (
-        <p className="notice">{providerReason ?? a.riskReason}</p>
-      )}
-      {tab === 'performance' && (
-        <>
-          <PortfolioHistoryChart
-            controller={c}
-            currency={snapshot.portfolio.base_currency}
-          />
-          <section className="card">
-            <div className="analytics-metrics">
-              {(
-                [
-                  'twr',
-                  'cagr',
-                  'totalReturn',
-                  'bestDay',
-                  'worstDay',
-                  'positiveDays',
-                  'negativeDays',
-                ] as const
-              ).map((metric) => (
-                <AnalyticsMetric
-                  key={metric}
-                  metric={metric}
-                  value={a.performance[metric]}
-                  sample={sample}
-                  reason={a.performance.reason}
-                />
-              ))}
-            </div>
-          </section>
-          <CapitalSummary snapshot={snapshot} />
-          <MonthlyReturnsHeatmap
-            months={a.performance.monthly}
-            loading={c.loading}
-            sample={sample}
-          />
-        </>
-      )}
-      {tab === 'risk' && (
-        <>
-          <section className="card">
-            <div className="section-heading">
-              <div>
-                <h2>{c.riskHorizon} Risk ¬∑ —Ñ–∞–∫—Ç–∏—á–µ—Å–∫–∏–π –ø–æ—Ä—Ç—Ñ–µ–ª—å</h2>
-                <p className="caption">Transaction-aware risk —Ç—Ä–µ–±—É–µ—Ç –ø–æ–ª–Ω–æ–≥–æ –≤—ã–±—Ä–∞–Ω–Ω–æ–≥–æ –æ–∫–Ω–∞. BUY/SELL, –Ω–µ–∏–∑–≤–µ—Å—Ç–Ω—ã–π external flow –∏ —Ü–µ–Ω–æ–≤—ã–µ gaps –Ω–µ –ø–µ—Ä–µ—Å–∫–∞–∫–∏–≤–∞—é—Ç—Å—è —Ä–∞–¥–∏ –¥–æ–±–æ—Ä–∞ –≤—ã–±–æ—Ä–∫–∏.</p>
-              </div>
-              <span className="tag">{c.riskHorizon}</span>
-            </div>
-            {c.riskHorizon === '20D' && <p className="caption">20D Sharpe —á—É–≤—Å—Ç–≤–∏—Ç–µ–ª–µ–Ω –∫ –∫–æ—Ä–æ—Ç–∫–æ–π –≤—ã–±–æ—Ä–∫–µ.</p>}
-            <div className="analytics-metrics">
-              {(
-                [
-                  'volatility',
-                  'downside',
-                  'sharpe',
-                  'sortino',
-                  'calmar',
-                  'var95',
-                  'es95',
-                ] as const
-              ).map((metric) => (
-                <AnalyticsMetric
-                  key={metric}
-                  metric={metric}
-                  value={a.risk[metric]}
-                  sample={metric === 'calmar' ? sample : a.riskSample}
-                  ratio={['sharpe', 'sortino', 'calmar'].includes(metric)}
-                  reason={
-                    providerReason ??
-                    (metric === 'var95' || metric === 'es95'
-                      ? a.tailRiskReason
-                      : metric === 'sortino'
-                        ? a.sortinoReason
-                        : metric === 'calmar'
-                          ? (a.performance.reason ?? a.riskReason)
-                          : a.riskReason)
-                  }
-                />
-              ))}
-              <AnalyticsMetric
-                metric="maxDrawdown"
-                value={a.drawdown?.max}
-                sample={sample}
-                reason={providerReason ?? a.performance.reason}
-              />
-              <AnalyticsMetric
-                metric="currentDrawdown"
-                value={a.drawdown?.current}
-                sample={sample}
-                reason={providerReason ?? a.performance.reason}
-              />
-            </div>
-            <Formula
-              name={`${c.riskHorizon} annualized volatility`}
-              formula="œÉ_daily = stdev_sample(r); œÉ_annual = œÉ_daily √ó ‚àö252"
-            >
-              –û—Ü–µ–Ω–∫–∞ annualized, —Ä–∞—Å—Å—á–∏—Ç–∞–Ω–Ω–∞—è —Ç–æ–ª—å–∫–æ –ø–æ –≤—ã–±—Ä–∞–Ω–Ω–æ–º—É –æ–∫–Ω—É {c.riskHorizon}; —ç—Ç–æ –Ω–µ ¬´–≥–æ–¥–æ–≤–∞—è –∏—Å—Ç–æ—Ä–∏—è¬ª, –µ—Å–ª–∏ –≤—ã–±—Ä–∞–Ω–æ 20D –∏–ª–∏ 60D. –î–∞–Ω–Ω—ã–µ: {a.riskSample}.
-            </Formula>
+-
+M	]	Ω
+Û¬˜7„‡¢∆É#‰∆&˜&F˜'ì¬ˆÉ#‡¢«Ì	çΩ]MÌ--]ΩÕ≠çím]›--=≠-=≤¬MÌ]ÌM›Ì-ÇÇç≠˝Ì-M]ΩÚ„¬˜‡¢¬ˆFóc‡¢¬˜6V7Fñˆ„‡¢∆Fób6∆74Ê÷S“&∆"◊F'2"&ˆ∆S“&w&˜W"&ñ÷∆&V√“-
+}M]≤›Ωç-ç≠Ç#‡¢∑F'2Ê÷ÇáBí”‚Ä¢∆'WGFˆ‡¢∂Wì◊∑BÊñG–¢&ñ◊&W76VC◊∑F"””“BÊñG–¢ˆ‰6∆ñ6≥◊≤Çí”‚6WEF"áBÊñBó–¢‡¢∑BÊ∆&V«–¢¬ˆ'WGFˆ„‡¢íó–¢¬ˆFóc‡¢∆Fób6∆74Ê÷S“&Ê«óFñ72◊6WGFñÊw2#‡¢∆∆&V√‡¢	]}ç≠Ì-Ú--≠¬R"=Ì@¢∆ñÁW@¢6∆74Ê÷S“&ñÁWB ¢GóS“&ÁV÷&W" ¢÷ñ„“"” ¢÷É“# ¢7FW“"„#R ¢f«VS◊∂2Á&g–¢ˆ‰6ÜÊvS◊≤ÜRí”‡¢2Á6WE&bÑ÷FÇÊ÷ÇÇ”¬÷FÇÊ÷ñ‚É¬ÁV÷&W"ÜRÁF&vWBÁf«VRíííê¢–¢Û‡¢¬ˆ∆&V√‡¢∆∆&V√‡¢‘"¬R"=Ì@¢∆ñÁW@¢6∆74Ê÷S“&ñÁWB ¢GóS“&ÁV÷&W" ¢÷ñ„“"” ¢÷É“# ¢7FW“"„#R ¢f«VS◊∂2Ê÷'–¢ˆ‰6ÜÊvS◊≤ÜRí”‡¢2Á6WD÷"Ñ÷FÇÊ÷ÇÇ”¬÷FÇÊ÷ñ‚É¬ÁV÷&W"ÜRÁF&vWBÁf«VRíííê¢–¢Û‡¢¬ˆ∆&V√‡¢¬ˆFóc‡†¢≤áF"””“w&ó6≤r«¬F"””“vFófW'6ñfñ6Fñˆ‚r«¬F"””“wá&íríbbÄ¢∆Fób6∆74Ê÷S“'6V7Fñˆ‚÷ÜVFñÊr#‡¢∆Fóc‡¢∆É#Â&ó6≤Ü˜&ó¶ˆ„¬ˆÉ#‡¢«6∆74Ê÷S“&6Fñˆ‚#Ì	ÌM›‚Ì≠›‚MΩÚ7W'&VÁB◊&ó6≤¬6˜f&ñÊ6R¬6˜'&V∆Fñˆ‚ÇFófW'6ñfñ6Fñˆ‚‚W&f˜&÷Ê6RW&ñˆBÌ--Ú›]}-ççÕΩ¬„¬˜‡¢¬ˆFóc‡¢≈&ó6¥Ü˜&ó¶ˆÂ6V∆V7F˜"6ˆÁG&ˆ∆∆W#◊∂7“Û‡¢¬ˆFóc‡¢ó–¢≤áF"””“vGG&ñ'WFñˆ‚r«¬F"””“v&VÊ6Ü÷&≤ríbb≈W&ñˆE6V∆V7F˜"6ˆÁG&ˆ∆∆W#◊∂7“ÛÁ–†¢∑F"””“wá&írbb√‡¢«6V7Fñˆ‚6∆74Ê÷S“'á&í◊7V÷÷'í#‡¢∆Fób6∆74Ê÷S“'á&í◊7V÷÷'í÷÷ñ‚#„«7‚6∆74Ê÷S“&WñV'&˜r#Âı%DdÙƒîÚÇ’$ì¬˜7„„∆É#Ì	˝Ì-M]Ω¬˝ÌBÕç≠Ì≠Ì˝Ì√¬ˆÉ#„«Á∑6Ê6Ü˜BÁ˜6óFñˆÁ2Ê∆VÊwFá“Ì-≠Ω-ΩR˝Ì}çmçí+rM››ΩR›∂ÊWrFFRÇíÁFÙ∆ˆ6∆TFFU7G&ñÊrÇw'R’%Rró”¬˜„«7G&ˆÊsÁ∑6Ê6Ü˜BÁf«VFñˆ‚Ê6ˆ◊∆WFRÚ÷ˆÊWíá6Ê6Ü˜BÊ66˜VÁEf«VRÛÚ6Ê6Ü˜BÁ˜'Ffˆ∆ñıf«VRí¢}	›]MÌ--Ì}›‚M››ΩRw”¬˜7G&ˆÊs„«6÷∆√Ì
+-ÌçÕÌ-¬˝Ì-M]ΩÛ¬˜6÷∆√„¬ˆFóc‡¢∆Fób6∆74Ê÷S“'á&í◊7V÷÷'í÷÷WG&ñ72#‡¢≈Ö&î÷WG&ñ2∆&V√“%F˜F¬&WGW&‚ÚEu""f«VS◊∂ÁW&f˜&÷Ê6RÁGw'“W&6VÁB&V6ˆ„◊∂ÁW&f˜&÷Ê6RÁ&V6ˆÁ“f˜&◊V∆“%Eu"“(àÚÉ≤.()¬í(â""6◊∆S◊∑6◊∆W“Û‡¢≈Ö&î÷WG&ñ2∆&V√“-	-ÌΩ-çΩÕ›Ì-¬"f«VS◊∂Á&ó6≤Áfˆ∆Fñ∆óGó“W&6VÁB&V6ˆ„◊∂Á&ó6µ&V6ˆÁ“f˜&◊V∆“,¯2ÊÁV¬“7FFWbá"í9r(â£#S""6◊∆S◊∂Á&ó6µ6◊∆W“Û‡¢≈Ö&î÷WG&ñ2∆&V√“%6Ü'R&FñÚ"f«VS◊∂Á&ó6≤Á6Ü'W“&V6ˆ„◊∂Á&ó6µ&V6ˆÁ“f˜&◊V∆“"É#S"9r÷V‚á"í(â"&bíÚ¯2ÊÁV¬"6◊∆S◊∂Á&ó6µ6◊∆W“Û‡¢≈Ö&î÷WG&ñ2∆&V√“$÷ÇG&vF˜v‚"f«VS◊∂ÊG&vF˜v„ÚÊ÷á“W&6VÁB&V6ˆ„◊∂ÁW&f˜&÷Ê6RÁ&V6ˆÁ“f˜&◊V∆“&÷ñ‚Ön()¬Ú÷ÇÖn(((
+en()¬í(â"í"6◊∆S◊∑6◊∆W“Û‡¢≈Ö&î÷WG&ñ2∆&V√“%˜'Ffˆ∆ñÚ&WF"f«VS◊∂Ê&VÊ6Ü÷&≤Ê&WF“&V6ˆ„◊∂Ê&VÊ6Ü÷&≤Êˆ'6W'fFñˆÁ2¬#Ú}	›]MÌ--Ì}›‚ÌùçR›ΩÌM]›çí&VÊ6Ü÷&≤‚r¢ÁV∆«“f˜&◊V∆“$6˜bá.()¢¬.ZbíÚf"á.Zbí"6◊∆S◊∂G∂Ê&VÊ6Ü÷&≤Êˆ'6W'fFñˆÁ7“&VÊ6Ü÷&≤ˆ'6W'fFñˆÁ6“Û‡¢≈Ö&î÷WG&ñ2∆&V√“$FófW'6ñfñ6Fñˆ‚&FñÚ"f«VS◊∂Ê7W'&VÁE&ó6≥ÚÊFófW'6ñfñ6FñˆÂ&Fñ˜“&V6ˆ„◊∂7W'&VÁE&ó6µ&V6ˆÁ“f˜&◊V∆“,Í2á~Z"9r¯>Z"íÚ¯>()¢"6◊∆S◊∂Ê÷G&óÖ6◊∆W“Û‡¢≈Ö&î÷WG&ñ2∆&V√“$VffV7FófRÜˆ∆FñÊw2"f«VS◊∂Ê6ˆÊ6VÁG&Fñˆ„ÚÊVffV7FófU˜6óFñˆÁ7“&V6ˆ„◊≤Ê6ˆÊ6VÁG&Fñˆ‚Ú}	›=m›≤˝ÌΩ›ΩR-]≠=ùçRΩ›Ì}›ΩR-]‚r¢ÁV∆«“f˜&◊V∆“#ÚÍ2á~Z,+"í"6◊∆S“-
+-]≠=ùçRΩ›Ì}›ΩR-]"Û‡¢¬ˆFóc‡¢¬˜6V7Fñˆ„‡¢«6V7Fñˆ‚6∆74Ê÷S“'á&í÷w&ñB#‡¢∆'Fñ6∆R6∆74Ê÷S“&6&Bá&í÷6ˆÊ6VÁG&Fñˆ‚#„∆Fób6∆74Ê÷S“'6V7Fñˆ‚÷ÜVFñÊr#„∆Fóc„∆É#Ì	≠Ì›m]›-mçÚ˝Ì-M]ΩÛ¬ˆÉ#„«6∆74Ê÷S“&6Fñˆ‚#Ì
+-]≠=ùçR˝Ì}çmçÇ¬Ì-Ì-çÌ-››ΩR˝‚Ω›Ì}›ÌÕ2-]2„¬˜„¬ˆFóc„«7‚6∆74Ê÷S“'Fr#Á∑vVñváG2Ê∆VÊwFá“˝Ì}çmçì¬˜7„„¬ˆFóc‡¢≤6Ê6Ü˜BÁf«VFñˆ‚Ê6ˆ◊∆WFRbb«6∆74Ê÷S“&Ê˜Fñ6R#Ì	MΩÚ-Ì}›ΩR-]Ì"›=m›≤-]≠=ùçR≠Ì-çÌ-≠Ç-]RÌ-≠Ω-ΩR˝Ì}çmçí„¬˜Á–¢∆Fób6∆74Ê÷S“'á&í÷ÜñvÜ∆ñváG2#„∆Fóc„«7„‰∆&vW7B˜6óFñˆ„¬˜7„„∆#Á∂6ˆÊ6VÁG&FñˆÂ7FG3ÚÊ∆&vW7E˜6óFñˆÂvVñváB”“ÁV∆¬Ú}	›]MÌ--Ì}›‚M››ΩRr¢7BÜ6ˆÊ6VÁG&FñˆÂ7FG2Ê∆&vW7E˜6óFñˆÂvVñváBó”¬ˆ#„¬ˆFóc„∆Fóc„«7„ÂF˜2vVñváC¬˜7„„∆#Á∂6ˆÊ6VÁG&FñˆÂ7FG2Ú7BÜ6ˆÊ6VÁG&FñˆÂ7FG2ÁF˜5vVñváBí¢}	›]MÌ--Ì}›‚M››ΩRw”¬ˆ#„¬ˆFóc„∆Fóc„«7„ÂF˜RvVñváC¬˜7„„∆#Á∂6ˆÊ6VÁG&FñˆÂ7FG2Ú7BÜ6ˆÊ6VÁG&FñˆÂ7FG2ÁF˜UvVñváBí¢}	›]MÌ--Ì}›‚M››ΩRw”¬ˆ#„¬ˆFóc„∆Fóc„«7„‰ÑÑì¬˜7„„∆#Á∂6ˆÊ6VÁG&FñˆÂ7FG3ÚÊÜÜí”“ÁV∆¬Ú}	›]MÌ--Ì}›‚M››ΩRr¢6ˆÊ6VÁG&FñˆÂ7FG2ÊÜÜíÁFÙfóÜVBÉ2ó”¬ˆ#„¬ˆFóc„¬ˆFóc‡¢∆Fób6∆74Ê÷S“'á&í÷&'2#Á∑vVñváG2Ê÷á”‚∆Fób6∆74Ê÷S“'á&í÷&"◊&˜r"∂Wì◊∑Á7ñ÷&ˆ«”„∆#Á∑Á7ñ÷&ˆ«”¬ˆ#„∆Fób6∆74Ê÷S“'á&í÷&"◊G&6≤#„∆í7Gñ∆S◊∑≤vñGFÉ¢G¥÷FÇÊ÷ÇÉ¬÷FÇÊ÷ñ‚É¬áÁvVñváBÛÚí¢íó“V◊“Û„¬ˆFóc„«7„Á∑ÁvVñváB”“ÁV∆¬Ú~(	Br¢G≤áÁvVñváB¢íÁFÙfóÜVBÉó“V”¬˜7„„«6÷∆√Á∂÷ˆÊWíáÊ÷&∂WEf«VRó”¬˜6÷∆√„¬ˆFóc‚ó”¬ˆFóc‡¢ƒf˜&◊V∆Ê÷S“$ÑÑíÇ›MM]≠-ç-›ÌR}çΩ‚˝Ì}çmçí"f˜&◊V∆“$ÑÑí“Í2á~Z,+"í+rVffV7FófRÜˆ∆FñÊw2“ÚÑÑí#Ì
+}ç-›‚˝‚›ÌÕçÌ-››Ω¬-]≠=ùç¬Ω›Ì}›Ω¬-]¬‚ÑÑíΩç}≠çí¢Ì}›}]"ÌΩÕç=‚≠Ì›m]›-mç‚„¬Ùf˜&◊V∆‡¢¬ˆ'Fñ6∆S‡¢∆'Fñ6∆R6∆74Ê÷S“&6&B#„∆Fób6∆74Ê÷S“'6V7Fñˆ‚÷ÜVFñÊr#„∆Fóc„∆É#Ì
+-=≠-=ç≠¬ˆÉ#„«6∆74Ê÷S“&6Fñˆ‚#Ì	-]≠˝ç-Ω-›ç-]-ÚMÌΩ]í˝Ì-M]ΩÕ›Ìíf&ñÊ6R„¬˜„¬ˆFóc„«7‚6∆74Ê÷S“'Fr#Á∂2Á&ó6¥Ü˜&ó¶ˆÁ”¬˜7„„¬ˆFóc‡¢≤Ê7W'&VÁE&ó6≤bb«6∆74Ê÷S“&Ê˜Fñ6R#Á∂7W'&VÁE&ó6µ&V6ˆÁ”¬˜Á–¢∂Ê7W'&VÁE&ó6≤bb∆Fób6∆74Ê÷S“'á&í◊&ó6≤÷∆ó7B#Á∑vVñváG2Ê÷á”‚≤6ˆÁ7B&2“Á&ó6¥6ˆÁG&ñ'WFñˆ„≤&WGW&‚∆Fób6∆74Ê÷S“'á&í◊&ó6≤◊&˜r"∂Wì◊∑Á7ñ÷&ˆ«”„∆#Á∑Á7ñ÷&ˆ«”¬ˆ#„«7„Ì	-]«7G&ˆÊsÁ∑ÁvVñváB”“ÁV∆¬Ú~(	Br¢7BáÁvVñváBó”¬˜7G&ˆÊs„¬˜7„„«7„Ì
+ç¢«7G&ˆÊsÁ∑&2”“ÁV∆¬Ú~(	Br¢7Bá&2ó”¬˜7G&ˆÊs„¬˜7„„∆Fób6∆74Ê÷S“'á&í◊&ó6≤÷&'2#„∆í7Gñ∆S◊∑≤vñGFÉ¢G∑ÁvVñváB”“ÁV∆¬Ú¢÷FÇÊ÷ñ‚É¬÷FÇÊ÷ÇÉ¬ÁvVñváB¢íó“V◊“Û„∆í7Gñ∆S◊∑≤vñGFÉ¢G∑&2”“ÁV∆¬Ú¢÷FÇÊ÷ñ‚É¬÷FÇÊ÷ÇÉ¬&2¢íó“V◊“Û„¬ˆFóc„¬ˆFóc‚“ó”¬ˆFócÁ–¢«6∆74Ê÷S“&6Fñˆ‚#Ì
+ç›çí(	B-]≤MçÌΩ]-Ì-Ωí(	B-≠ΩB"f&ñÊ6R‚	M››ΩS¢∂Ê÷G&óÖ6◊∆W“„¬˜‡¢¬ˆ'Fñ6∆S‡¢∆'Fñ6∆R6∆74Ê÷S“&6&B#„∆É#Ì	Mç-]çMç≠mçÛ¬ˆÉ#„∆Fób6∆74Ê÷S“'á&í÷FófW'6ñfñ6Fñˆ‚#„∆Fóc„«7„‰ÁV÷&W"ˆbÜˆ∆FñÊw3¬˜7„„∆#Á∑6Ê6Ü˜BÁ˜6óFñˆÁ2Ê∆VÊwFá”¬ˆ#„¬ˆFóc„∆Fóc„«7„‰VffV7FófRÜˆ∆FñÊw3¬˜7„„∆#Á∂Ê6ˆÊ6VÁG&Fñˆ„ÚÊVffV7FófU˜6óFñˆÁ3ÚÁFÙfóÜVBÉíÛÚ}	›]MÌ--Ì}›‚M››ΩRw”¬ˆ#„¬ˆFóc„∆Fóc„«7„Ì
+]M›˝Ú≠Ì]Ω˝mçÛ¬˜7„„∆#Á∂ÊfW&vT6˜'&V∆Fñˆ‚”“ÁV∆¬Ú}	›]MÌ--Ì}›‚M››ΩRr¢ÊfW&vT6˜'&V∆Fñˆ‚ÁFÙfóÜVBÉ"ó”¬ˆ#„¬ˆFóc„∆Fóc„«7„Â˜'Ffˆ∆ñÚfˆ∆Fñ∆óGì¬˜7„„∆#Á∂Ê7W'&VÁE&ó6≥ÚÁfˆ∆Fñ∆óGí”“ÁV∆¬Ú}	›]MÌ--Ì}›‚M››ΩRr¢7BÜÊ7W'&VÁE&ó6≤Áfˆ∆Fñ∆óGíó”¬ˆ#„¬ˆFóc„∆Fóc„«7„ÂvVñváFVB76WBfˆ∆Fñ∆óGì¬˜7„„∆#Á∂Ê7W'&VÁE&ó6≥ÚÁvVñváFVDfW&vT76WEfˆ∆Fñ∆óGí”“ÁV∆¬Ú}	›]MÌ--Ì}›‚M››ΩRr¢7BÜÊ7W'&VÁE&ó6≤ÁvVñváFVDfW&vT76WEfˆ∆Fñ∆óGíó”¬ˆ#„¬ˆFóc„∆Fóc„«7„Â&ó6≤Ü˜&ó¶ˆ„¬˜7„„∆#Á∂2Á&ó6¥Ü˜&ó¶ˆÁ”¬ˆ#„¬ˆFóc„¬ˆFóc‡¢ƒf˜&◊V∆Ê÷S“$FófW'6ñfñ6Fñˆ‚&FñÚ"f˜&◊V∆“$E"“Í2á~Z"9r¯>Z"íÚ¯>()¢#Ì	-]ÇÊÁV∆ó¶VBfˆ∆Fñ∆óGí]=-ÚçrÌM›Ì=‚-Ω››Ì=‚Ì≠›∂2Á&ó6¥Ü˜&ó¶ˆÁ”≤6˜f&ñÊ6Rç˝ÌΩÕ}=]"Ìùçí›Ì›ΩÌM]›çí„¬Ùf˜&◊V∆‡¢¬ˆ'Fñ6∆S‡¢∆'Fñ6∆R6∆74Ê÷S“&6&B#„∆Fób6∆74Ê÷S“'6V7Fñˆ‚÷ÜVFñÊr#„∆Fóc„∆É#Ì	≠ΩÌ}]-ΩR›ΩÌM]›çÛ¬ˆÉ#„«6∆74Ê÷S“&6Fñˆ‚#Ì
+M≠-≤¬}ç-››ΩR˝‚-]≠=ùç¬M››Ω¬˝Ì-M]ΩÚ„¬˜„¬ˆFóc„«7‚6∆74Ê÷S“'Fr#‰FWFW&÷ñÊó7Fñ3¬˜7„„¬ˆFóc‡¢∂ˆ'6W'fFñˆÁ2Ê∆VÊwFÇÚ«V¬6∆74Ê÷S“'á&í÷ˆ'6W'fFñˆÁ2#Á∂ˆ'6W'fFñˆÁ2Ê÷ÜóFV“”‚∆∆í∂Wì◊∂óFV“ÊñG“FF◊6WfW&óGì◊∂óFV“Á6WfW&óGó”„«7„Á∂óFV“ÁFóF∆W”¬˜7„„«Á∂óFV“Ê÷W76vW”¬˜„¬ˆ∆ì‚ó”¬˜V√‚¢«6∆74Ê÷S“&6Fñˆ‚#Ì	˝ÌÌ=Ì-ΩR›ΩÌM]›çÚ›R-Ω˝-Ω]›≤Ωç‚M››ΩR˝Ì≠›]MÌ--Ì}›‚„¬˜Á–¢¬ˆ'Fñ6∆S‡¢ƒFFV∆óGïÊV¬6Ê6Ü˜C◊∑6Ê6Ü˜G“6ˆÁG&ˆ∆∆W#◊∂7“Û‡¢¬˜6V7Fñˆ„‡¢¬ÛÁ–†¢∑F"””“wW&f˜&÷Ê6RrbbÁW&f˜&÷Ê6RÁ&V6ˆ‚bb2Ê∆ˆFñÊrbbÄ¢«6∆74Ê÷S“&Ê˜Fñ6R#Á∂ÁW&f˜&÷Ê6RÁ&V6ˆÁ”¬˜‡¢ó–¢∑F"””“w&ó6≤rbbÁ&ó6µ&V6ˆ‚bb2Ê∆ˆFñÊrbbÄ¢«6∆74Ê÷S“&Ê˜Fñ6R#Á∑&˜fñFW%&V6ˆ‚ÛÚÁ&ó6µ&V6ˆÁ”¬˜‡¢ó–¢∑F"””“wW&f˜&÷Ê6RrbbÄ¢√‡¢≈˜'Ffˆ∆ñÙÜó7F˜'î6Ü'@¢6ˆÁG&ˆ∆∆W#◊∂7–¢7W'&VÊ7ì◊∑6Ê6Ü˜BÁ˜'Ffˆ∆ñÚÊ&6Uˆ7W'&VÊ7ó–¢Û‡¢«6V7Fñˆ‚6∆74Ê÷S“&6&B#‡¢∆Fób6∆74Ê÷S“&Ê«óFñ72÷÷WG&ñ72#‡¢≤Ä¢∞¢wGw"r¿¢v6w"r¿¢wF˜F≈&WGW&‚r¿¢v&W7DFír¿¢wv˜'7DFír¿¢w˜6óFófTFó2r¿¢vÊVvFófTFó2r¿¢“26ˆÁ7@¢íÊ÷ÇÜ÷WG&ñ2í”‚Ä¢ƒÊ«óFñ74÷WG&ñ0¢∂Wì◊∂÷WG&ñ7–¢÷WG&ñ3◊∂÷WG&ñ7–¢f«VS◊∂ÁW&f˜&÷Ê6U∂÷WG&ñ5◊–¢6◊∆S◊∑6◊∆W–¢&V6ˆ„◊∂ÁW&f˜&÷Ê6RÁ&V6ˆÁ–¢Û‡¢íó–¢¬ˆFóc‡¢¬˜6V7Fñˆ„‡¢ƒ6óF≈7V÷÷'í6Ê6Ü˜C◊∑6Ê6Ü˜G“Û‡¢ƒ÷ˆÁFÜ«ï&WGW&Á4ÜVF÷ ¢÷ˆÁFá3◊∂ÁW&f˜&÷Ê6RÊ÷ˆÁFÜ«ó–¢∆ˆFñÊs◊∂2Ê∆ˆFñÊw–¢6◊∆S◊∑6◊∆W–¢Û‡¢¬Û‡¢ó–¢∑F"””“w&ó6≤rbbÄ¢√‡¢«6V7Fñˆ‚6∆74Ê÷S“&6&B#‡¢∆Fób6∆74Ê÷S“'6V7Fñˆ‚÷ÜVFñÊr#‡¢∆Fóc‡¢∆É#Á∂2Á&ó6¥Ü˜&ó¶ˆÁ“&ó6≤+rM≠-ç}]≠çí˝Ì-M]Ω√¬ˆÉ#‡¢«6∆74Ê÷S“&6Fñˆ‚#ÂG&Á67Fñˆ‚÷v&R&ó6≤-]=]"˝ÌΩ›Ì=‚-Ω››Ì=‚Ì≠›‚%Uíı4Tƒ¬¬›]ç}-]-›ΩíWáFW&Ê¬f∆˜rÇm]›Ì-ΩRv2›R˝]]≠≠ç-Ì-ÚMÇMÌÌ-ΩÌ≠Ç„¬˜‡¢¬ˆFóc‡¢«7‚6Õy˜ÀhëÈÏ∂ªßq´^vC·µ¢</th><th>RC %</th><th>Risk / Weight</th></tr></thead><tbody>{a.currentRisk.contributions.map(item => <tr key={item.symbol}><td>{item.symbol}</td><td>{pct(item.weight)}</td><td>{pct(item.assetVolatility)}</td><td>{pct(item.mcr)}</td><td>{pct(item.rc)}</td><td>{pct(item.normalizedRC)}</td><td>{item.riskWeightRatio == null ? '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö' : numeric(item.riskWeightRatio)}</td></tr>)}</tbody></table></div>
+              <Formula name="Risk Budget" formula="MCR·µ¢=(Œ£w)·µ¢/œÉ‚Çö; RC·µ¢=w·µ¢√óMCR·µ¢; normalized RC·µ¢=RC·µ¢/œÉ‚Çö">–î–æ–ª—è normalized RC —Å—É–º–º–∏—Ä—É–µ—Ç—Å—è –ø—Ä–∏–º–µ—Ä–Ω–æ –¥–æ 100%. –•–µ–¥–∂–∏—Ä—É—é—â–∏–µ –ø–æ–∑–∏—Ü–∏–∏ –º–æ–≥—É—Ç –∏–º–µ—Ç—å –æ—Ç—Ä–∏—Ü–∞—Ç–µ–ª—å–Ω—ã–π –≤–∫–ª–∞–¥. Risk concentration ‚Äî —Å—É–º–º–∞ –∫–≤–∞–¥—Ä–∞—Ç–æ–≤ –¥–æ–ª–µ–π normalized RC, –Ω–µ –ø—Ä–æ–≥–Ω–æ–∑ –∏ –Ω–µ —Ä–µ–∫–æ–º–µ–Ω–¥–∞—Ü–∏—è.</Formula>
+            </>}
           </section>
           <DrawdownChart analytics={a} loading={c.loading} />
           <section className="card">
@@ -284,11 +27,11 @@ export function Laboratory({
               <PeriodSelector controller={c} />
             </div>
             <div className="chart-periods" aria-label="–û–∫–Ω–æ –≤–æ–ª–∞—Ç–∏–ª—å–Ω–æ—Å—Ç–∏">
-              {[20, 60, 252].map((n) => (
+              {([20, 60, 252] as const).map((n) => (
                 <button key={n} aria-pressed={volWindow === n} onClick={() => setVolWindow(n)}>{n}D</button>
               ))}
             </div>
-            <AnalyticsChart key={`vol-${volWindow}-${c.period}`} points={vol} label="–°–∫–æ–ª—å–∑—è—â–∞—è –≤–æ–ª–∞—Ç–∏–ª—å–Ω–æ—Å—Ç—å" format={pct} loading={c.loading} reason={providerReason ?? a.riskReason} />
+            <AnalyticsChart key={`vol-${volWindow}-${c.period}`} points={a.rolling.volatility[volWindow]} label="–°–∫–æ–ª—å–∑—è—â–∞—è –≤–æ–ª–∞—Ç–∏–ª—å–Ω–æ—Å—Ç—å" format={pct} loading={c.loading} reason={providerReason ?? a.riskReason} />
             <Formula name="–û–∫–Ω–æ –≤–æ–ª–∞—Ç–∏–ª—å–Ω–æ—Å—Ç–∏" formula="œÉ_window = stdev_sample(r_window) √ó ‚àö252">
               –ù—É–∂–Ω–æ –ø–æ–ª–Ω–æ–µ –æ–∫–Ω–æ –∏–∑ {volWindow} —á–∏—Å—Ç—ã—Ö –¥–æ—Ö–æ–¥–Ω–æ—Å—Ç–µ–π. –£—á–∞—Å—Ç–æ–∫ –¥–æ –Ω–∞–∫–æ–ø–ª–µ–Ω–∏—è –æ–∫–Ω–∞ –∏ –æ–∫–Ω–∞, –ø–µ—Ä–µ—Å–µ–∫–∞—é—â–∏–µ –∏—Å–∫–ª—é—á—ë–Ω–Ω—ã–π trade/gap –∏–Ω—Ç–µ—Ä–≤–∞–ª, –Ω–µ –≤—ã–¥—É–º—ã–≤–∞—é—Ç—Å—è. –î–∞–Ω–Ω—ã–µ: {sample}.
             </Formula>
@@ -296,11 +39,11 @@ export function Laboratory({
           <section className="card">
             <h2>–°–∫–æ–ª—å–∑—è—â–∏–π Sharpe</h2>
             <div className="chart-periods" aria-label="–û–∫–Ω–æ Sharpe">
-              {[63, 126, 252].map((n) => (
+              {([20, 60, 252] as const).map((n) => (
                 <button key={n} aria-pressed={sharpeWindow === n} onClick={() => setSharpeWindow(n)}>{n}D</button>
               ))}
             </div>
-            <AnalyticsChart key={`sharpe-${sharpeWindow}-${c.period}`} points={rollingSharpe} label="–°–∫–æ–ª—å–∑—è—â–∏–π Sharpe" format={(v) => v.toFixed(2)} loading={c.loading} reason={providerReason ?? a.riskReason} />
+            <AnalyticsChart key={`sharpe-${sharpeWindow}-${c.period}`} points={a.rolling.sharpe[sharpeWindow]} label="–°–∫–æ–ª—å–∑—è—â–∏–π Sharpe" format={(v) => v.toFixed(2)} loading={c.loading} reason={providerReason ?? a.riskReason} />
             <Formula name="–û–∫–Ω–æ Sharpe" formula="Sharpe=(252√ómean(r)‚àíRf_annual)/œÉ_annual">
               –ü–æ–ª–Ω–æ–µ –æ–∫–Ω–æ {sharpeWindow} —á–∏—Å—Ç—ã—Ö –¥–æ—Ö–æ–¥–Ω–æ—Å—Ç–µ–π, Rf {c.rf}% –≤ –≥–æ–¥. –ü—Ä–∏ –Ω—É–ª–µ–≤–æ–π –≤–æ–ª–∞—Ç–∏–ª—å–Ω–æ—Å—Ç–∏ —É—á–∞—Å—Ç–æ–∫ –Ω–µ–¥–æ—Å—Ç—É–ø–µ–Ω. –î–∞–Ω–Ω—ã–µ: {sample}.
             </Formula>
@@ -325,6 +68,20 @@ export function Laboratory({
       {tab === 'diversification' && (
         <>
           <section className="card">
+            <div className="section-heading"><div><h2>Diversification Overview</h2><p className="caption">–ö–∞–ø–∏—Ç–∞–ª, —Å–æ–≤–º–µ—Å—Ç–Ω—ã–π —Ä–∏—Å–∫ –∏ –∫–æ–Ω—Ü–µ–Ω—Ç—Ä–∞—Ü–∏—è risk contributions ¬∑ {c.riskHorizon}.</p></div><span className="tag">{c.riskHorizon}</span></div>
+            <div className="analytics-metrics">
+              <XRayMetric label="Actual Holdings" value={snapshot.positions.length} formula="–ö–æ–ª–∏—á–µ—Å—Ç–≤–æ –æ—Ç–∫—Ä—ã—Ç—ã—Ö –ø–æ–∑–∏—Ü–∏–π" sample="–¢–µ–∫—É—â–∏–π –ø–æ—Ä—Ç—Ñ–µ–ª—å" />
+              <XRayMetric label="Effective Holdings" value={a.concentration?.effectivePositions} formula="1 / Œ£(w·µ¢¬≤)" sample="–¢–µ–∫—É—â–∏–µ —Ä—ã–Ω–æ—á–Ω—ã–µ –≤–µ—Å–∞" />
+              <AnalyticsMetric metric="diversificationRatio" value={a.currentRisk?.diversificationRatio} sample={a.matrixSample} ratio reason={!a.currentRisk ? currentRiskReason : null} />
+              <AnalyticsMetric metric="averageCorrelation" value={a.averageCorrelation} sample={a.matrixSample} ratio reason={!a.matrix ? matrixReason : null} />
+              <XRayMetric label="Largest Position Weight" value={a.concentrationSummary?.largestPositionWeight} percent formula="max(w·µ¢)" sample="–¢–µ–∫—É—â–∏–µ —Ä—ã–Ω–æ—á–Ω—ã–µ –≤–µ—Å–∞" />
+              <XRayMetric label="Top 3 Weight" value={a.concentrationSummary?.top3Weight} percent formula="Œ£ –≤–µ—Å–∞ —Ç—Ä—ë—Ö –∫—Ä—É–ø–Ω–µ–π—à–∏—Ö –ø–æ–∑–∏—Ü–∏–π" sample="–¢–µ–∫—É—â–∏–µ —Ä—ã–Ω–æ—á–Ω—ã–µ –≤–µ—Å–∞" />
+              <XRayMetric label="Largest Risk Contributor" value={a.currentRisk?.largestRiskContributor?.contribution} percent reason={!a.currentRisk ? currentRiskReason : null} formula="max(normalized RC·µ¢)" sample={a.matrixSample} />
+              <XRayMetric label="Portfolio Volatility" value={a.currentRisk?.volatility} percent reason={!a.currentRisk ? currentRiskReason : null} formula="‚àö(w·µÄŒ£w)" sample={a.matrixSample} />
+              <XRayMetric label="Weighted Asset Volatility" value={a.currentRisk?.weightedAverageAssetVolatility} percent reason={!a.currentRisk ? currentRiskReason : null} formula="Œ£(w·µ¢ √ó œÉ·µ¢)" sample={a.matrixSample} />
+            </div>
+          </section>
+          <section className="card">
             {!a.matrix && <p className="notice">{matrixReason}</p>}
             <div className="analytics-metrics">
               <AnalyticsMetric metric="covarianceVol" value={a.currentRisk?.volatility} sample={a.matrixSample} reason={!a.currentRisk ? currentRiskReason : null} />
@@ -333,6 +90,17 @@ export function Laboratory({
               <AnalyticsMetric metric="hhi" value={a.concentration?.hhi} sample="—Ç–µ–∫—É—â–∏–µ —Ä—ã–Ω–æ—á–Ω—ã–µ –≤–µ—Å–∞" ratio />
               <AnalyticsMetric metric="effectivePositions" value={a.concentration?.effectivePositions} sample="—Ç–µ–∫—É—â–∏–µ —Ä—ã–Ω–æ—á–Ω—ã–µ –≤–µ—Å–∞" ratio />
             </div>
+          </section>
+          <section className="card correlation-explorer">
+            <div className="section-heading"><div><h2>Correlation Explorer</h2><p className="caption">–ö–æ—Ä—Ä–µ–ª—è—Ü–∏–∏ —Ç–µ–∫—É—â–µ–≥–æ risk window –∏ rolling pair correlations –∑–∞ –¥–æ—Å—Ç—É–ø–Ω—É—é –∏—Å—Ç–æ—Ä–∏—é.</p></div><label>–í—ã–±—Ä–∞–Ω–Ω—ã–π –∞–∫—Ç–∏–≤<select className="input" value={c.selectedCorrelationAsset} onChange={event => { c.setSelectedCorrelationAsset(event.target.value); setSelectedCorrelationPeer(''); }}>{snapshot.positions.map(position => <option key={position.symbol} value={position.symbol}>{position.symbol}</option>)}</select></label></div>
+            {!a.matrix && <p className="notice">{matrixReason}</p>}
+            {a.matrix && <>
+              <div className="risk-budget-summary"><div><span>Highest Correlation</span><b>{c.correlationExplorer.highest ? `${c.correlationExplorer.highest.symbol} ¬∑ ${numeric(c.correlationExplorer.highest.value)}` : '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö'}</b></div><div><span>Lowest Correlation</span><b>{c.correlationExplorer.lowest ? `${c.correlationExplorer.lowest.symbol} ¬∑ ${numeric(c.correlationExplorer.lowest.value)}` : '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö'}</b></div><div><span>Benchmark ¬∑ {c.benchmark}</span><b>{c.correlationExplorer.benchmark?.value == null ? '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö' : numeric(c.correlationExplorer.benchmark.value)}</b></div></div>
+              <div className="table-scroll"><table><thead><tr><th>–ü–∞—Ä–∞</th><th>Correlation</th><th>Observations</th><th>Rolling detail</th></tr></thead><tbody>{c.correlationExplorer.rows.map(row => <tr key={row.symbol}><td>{c.selectedCorrelationAsset} / {row.symbol}</td><td>{row.value == null ? '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö' : numeric(row.value)}</td><td>{row.observations}</td><td><button className="btn btn-ghost" aria-pressed={activeCorrelationPeer === row.symbol || (!activeCorrelationPeer && selectedCorrelationRow?.symbol === row.symbol)} onClick={() => setSelectedCorrelationPeer(row.symbol)}>–û—Ç–∫—Ä—ã—Ç—å</button></td></tr>)}{c.correlationExplorer.benchmark && <tr><td>{c.selectedCorrelationAsset} / {c.benchmark}</td><td>{c.correlationExplorer.benchmark.value == null ? '–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –¥–∞–Ω–Ω—ã—Ö' : numeric(c.correlationExplorer.benchmark.value)}</td><td>{c.correlationExplorer.benchmark.observations}</td><td><button className="btn btn-ghost" aria-pressed={activeCorrelationPeer === c.benchmark} onClick={() => setSelectedCorrelationPeer(c.benchmark)}>–û—Ç–∫—Ä—ã—Ç—å</button></td></tr>}</tbody></table></div>
+              <div className="chart-periods" aria-label="Rolling correlation window">{([20, 60, 252] as const).map(n => <button key={n} aria-pressed={correlationWindow === n} onClick={() => setCorrelationWindow(n)}>{n}D</button>)}</div>
+              <AnalyticsChart points={(activeCorrelationPeer === c.benchmark ? c.correlationExplorer.benchmark?.rolling[correlationWindow] ?? [] : selectedCorrelationRow?.rolling[correlationWindow] ?? []).map(point => ({ ...point, caption: `${correlationWindow}D ¬∑ ${point.observations} observations` }))} label={`Rolling correlation ${c.selectedCorrelationAsset} / ${activeCorrelationPeer || selectedCorrelationRow?.symbol || 'asset'}`} format={numeric} loading={c.loading} reason={`–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ ${correlationWindow} –æ–±—â–∏—Ö –ø–æ—Å–ª–µ–¥–æ–≤–∞—Ç–µ–ª—å–Ω—ã—Ö –Ω–∞–±–ª—é–¥–µ–Ω–∏–π –¥–ª—è rolling correlation.`} />
+              <Formula name="Correlation Explorer" formula="œÅ(A,B)=Cov(RA,RB)/(œÉAœÉB)">Current correlation –∏—Å–ø–æ–ª—å–∑—É–µ—Ç –æ–±—â—É—é –≤—ã–±–æ—Ä–∫—É —Ç–µ–∫—É—â–µ–≥–æ risk window {c.riskHorizon} ({a.riskMatrix.commonObservations} observations). Rolling correlation –∏—Å–ø–æ–ª—å–∑—É–µ—Ç {correlationWindow} —Ç–æ—á–Ω—ã—Ö –æ–±—â–∏—Ö –ø–æ—Å–ª–µ–¥–æ–≤–∞—Ç–µ–ª—å–Ω—ã—Ö –¥–Ω–µ–≤–Ω—ã—Ö –∏–Ω—Ç–µ—Ä–≤–∞–ª–æ–≤; –ø—Ä–æ–ø—É—Å–∫–∏ –Ω–µ –∑–∞–ø–æ–ª–Ω—è—é—Ç—Å—è.</Formula>
+            </>}
           </section>
           <CorrelationMatrix matrix={a.matrix} loading={c.loading} reason={matrixReason} />
           <section className="card">

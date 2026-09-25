@@ -7,7 +7,8 @@ import { enrichPositionsWithQuotes } from "../../src/math/pnl";
 import "../../src/index.css";
 import "../../src/auth/auth-integration.css";
 const mode = new URLSearchParams(location.search).get("mode");
-const symbols = ["AAPL", "MSFT", "NVDA", "AMD", "GOOG", "META", "TSLA"];
+const allSymbols = ["AAPL", "MSFT", "NVDA", "AMD", "GOOG", "META", "TSLA"];
+const symbols = mode === "single" ? ["AAPL"] : allSymbols;
 const transactions =
   mode === "empty"
     ? []
@@ -16,8 +17,8 @@ const transactions =
         portfolio_id: "fixture",
         symbol,
         type: "BUY",
-        quantity: [20, 15, 30, 10, 8, 4, 3][i],
-        price: [100, 150, 80, 90, 100, 180, 130][i],
+        quantity: [20, 15, 30, 10, 8, 4, 3][allSymbols.indexOf(symbol)],
+        price: [100, 150, 80, 90, 100, 180, 130][allSymbols.indexOf(symbol)],
         currency: "USD",
         timestamp: "2024-01-02T15:00:00Z",
         created_at: "2024-01-02T16:00:00Z",
@@ -30,11 +31,11 @@ if (mode === "trades")
     created_at: "2026-08-10T16:00:00Z",
   });
 const quotes = new Map(
-  symbols.map((symbol, i) => [
+  symbols.map((symbol) => [
     symbol,
     {
       symbol,
-      price: [235, 480, 190, 70, 90, 150, 100][i],
+      price: [235, 480, 190, 70, 90, 150, 100][allSymbols.indexOf(symbol)],
       change: 0,
       changePercent: 0,
       timestamp: Date.now(),

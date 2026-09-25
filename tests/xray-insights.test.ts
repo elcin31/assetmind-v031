@@ -30,6 +30,13 @@ describe('portfolio concentration', () => {
     expect(results.some(item => item.id === 'low-effective-diversification')).toBe(true);
     expect(results.some(item => item.id === 'high-correlation')).toBe(true);
   });
+  it('flags low diversification ratio, high beta, and relative active drawdown factually', () => {
+    const base = { positions: [], averagePairwiseCorrelation: null, currentDrawdown: null, maxDrawdown: null, commonObservations: 60, requiredObservations: 60 };
+    expect(buildXRayInsights({ ...base, diversificationRatio: 1.05 }).some(item => item.id === 'low-diversification-ratio')).toBe(true);
+    expect(buildXRayInsights({ ...base, portfolioBeta: 1.4 }).some(item => item.id === 'high-benchmark-beta')).toBe(true);
+    expect(buildXRayInsights({ ...base, activeDrawdown: -.08 }).some(item => item.id === 'large-active-drawdown')).toBe(true);
+    expect(buildXRayInsights({ ...base, currentDrawdown: -.12 }).some(item => item.id === 'large-current-drawdown')).toBe(true);
+  });
   it('handles missing and zero denominators without non-finite observations', () => {
     const results = buildXRayInsights({ positions: [{ symbol: 'AAA', weight: 0, riskContribution: 1 }, { symbol: 'BBB', weight: NaN, riskContribution: Infinity }], averagePairwiseCorrelation: Infinity, currentDrawdown: -Infinity, maxDrawdown: 0, commonObservations: 0, requiredObservations: 20 });
     expect(results.every(item => item.metric == null || Number.isFinite(item.metric))).toBe(true);

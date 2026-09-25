@@ -9,6 +9,7 @@ import {
   historyReadouts,
 } from './performance';
 import { drawdowns } from './drawdown';
+import { rollingMetric, rollingPairMetric } from './rolling';
 import { downsideDeviation } from './downside';
 import {
   calmarRatio,
@@ -197,6 +198,21 @@ export function calculatePortfolioAnalytics(
     benchmarkReturns,
     rf,
   );
+  const relativeDrawdown = benchmarkResult.comparison.length > 0 && benchmarkResult.comparison.every(point => Number.isFinite(point.portfolio) && Number.isFinite(point.benchmark) && point.benchmark > EPSILON)
+    ? drawdowns(benchmarkResult.comparison.map(point => ({ date: point.date, value: point.portfolio / point.benchmark })))
+    : null;
+  const benchmarkRiskWindow = selectRiskWindow(datedReturns(clean.get(benchmark) ?? []), riskHorizon);
+  const currentBenchmarkRisk = benchmarkMetrics(
+    actualRiskWindow.available ? actualRiskWindow.returns : [],
+    benchmarkRiskWindow.available ? benchmarkRiskWindow.returns : [],
+    rf,
+  );
+  const rolling = {
+    volatility: Object.fromEntries([20, 60, 252].map(window => [window, rollingMetric(performance.riskReturns, window, 'volatility')])),
+    sharpe: Object.fromEntries([20, 60, 252].map(window => [window, rollingMetric(performance.riskReturns, window, 'sharpe', rf)])),
+    beta: Object.fromEntries([20, 60, 252].map(window => [window, rollingPairMetric(performance.riskReturns, benchmarkReturns, window, 'beta')])),
+    correlation: Object.fromEntries([20, 60, 252].map(window => [window, rollingPairMetric(performance.riskReturns, benchmarkReturns, window, 'correlation')])),
+  };
 
   // P&L is lifetime. Return attribution remains deliberately narrower than the
   // new account-level TWR: it is only valid while holdings stay unchanged and
@@ -329,6 +345,9 @@ export function calculatePortfolioAnalytics(
     concentration: complete ? concentration(weights) : null,
     concentrationSummary: currentConcentration,
     benchmark: benchmarkResult,
+    relativeDrawdown,
+    currentBenchmarkRisk,
+    rolling,
     pnl,
     contributions,
     details,

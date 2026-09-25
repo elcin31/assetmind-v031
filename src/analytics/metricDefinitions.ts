@@ -109,6 +109,26 @@ export const definitions = {
     'Π(1 + Rm) − 1',
     'Adjusted-close return benchmark на той же непрерывной цепочке интервалов.',
   ],
+  activeReturn: [
+    'Active Return',
+    'Rₚ − Rᵦ',
+    'Разница между доходностью портфеля и benchmark за один общий непрерывный период. Не annualized; не является прогнозом будущего результата.',
+  ],
+  benchmarkCorrelation: [
+    'Correlation with Benchmark',
+    'Corr(Rₚ, Rᵦ)',
+    'Pearson correlation на строго общих интервалах доходности портфеля и выбранного benchmark.',
+  ],
+  upsideCapture: [
+    'Upside Capture',
+    'Rₚ | Rᵦ > 0 / Rᵦ | Rᵦ > 0',
+    'Накопленная доходность портфеля относительно benchmark только на общих интервалах с положительной benchmark доходностью. Требуются минимум 20 таких интервалов.',
+  ],
+  downsideCapture: [
+    'Downside Capture',
+    'Rₚ | Rᵦ < 0 / Rᵦ | Rᵦ < 0',
+    'Накопленная доходность портфеля относительно benchmark только на общих интервалах с отрицательной benchmark доходностью. Требуются минимум 20 таких интервалов.',
+  ],
   diversificationRatio: [
     'Коэффициент диверсификации',
     'Σ(wᵢσᵢ) / √(wᵀΣw)',

@@ -1,11 +1,35 @@
 import type { DatedReturn } from '../types/analytics';
 import { sharpeRatio } from './ratios';
-import { MIN_OBSERVATIONS, validDate, volatility } from './statistics';
+import { MIN_OBSERVATIONS, validDate, volatility, covariance, safeRatio, EPSILON } from './statistics';
+import { alignReturns } from './returnAlignment';
+import { correlation } from './correlation';
 
 function contiguousWindow(returns: DatedReturn[]): boolean {
   return returns.every(
     (r, i) => i === 0 || r.startDate === returns[i - 1].date,
   );
+}
+
+/** Rolling benchmark analytics on strictly aligned return intervals. */
+export function rollingPairMetric(
+  portfolio: DatedReturn[],
+  benchmark: DatedReturn[],
+  window: number,
+  metric: 'beta' | 'correlation',
+): { date: string; value: number | null; observations: number }[] {
+  if (!Number.isInteger(window) || window < MIN_OBSERVATIONS) return [];
+  const aligned = alignReturns(portfolio, benchmark);
+  return aligned.map((row, index) => {
+    if (index < window - 1) return { date: row.date, value: null, observations: 0 };
+    const sample = aligned.slice(index - window + 1, index + 1);
+    if (!contiguousWindow(sample.map(r => ({ date: r.date, startDate: r.startDate, value: r.portfolio })))) return { date: row.date, value: null, observations: 0 };
+    const p = sample.map(r => r.portfolio);
+    const b = sample.map(r => r.benchmark);
+    const value = metric === 'beta'
+      ? safeRatio(covariance(p, b), (() => { const v = covariance(b, b); return v !== null && v > EPSILON ? v : null; })())
+      : correlation(p, b);
+    return { date: row.date, value: value !== null && Number.isFinite(value) ? value : null, observations: window };
+  });
 }
 
 export function rollingMetric(

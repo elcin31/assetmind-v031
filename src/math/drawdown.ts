@@ -52,6 +52,7 @@ export function drawdowns(series: DrawdownPoint[]) {
   return {
     points,
     episodes,
+    worstEpisodes: [...episodes].sort((a, b) => a.depth - b.depth).slice(0, 5),
     max: Math.min(...points.map((p) => p.value)),
     current: points.at(-1)!.value,
     longest: episodes.length ? Math.max(...episodes.map((e) => e.duration)) : 0,

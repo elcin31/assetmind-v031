@@ -4,6 +4,7 @@ import { AnalyticsChart } from './AnalyticsChart';
 import { AnalyticsMetric, Formula } from './AnalyticsMetric';
 import { PortfolioIntelligencePanel } from './PortfolioIntelligencePanel';
 import { numeric } from '../utils/analyticsFormat';
+import { useState } from 'react';
 
 export function BenchmarkPanel({
   controller: c,
@@ -12,6 +13,7 @@ export function BenchmarkPanel({
   controller: AnalyticsController;
   detailed?: boolean;
 }) {
+  const [window, setWindow] = useState<20 | 60 | 252>(20);
   const b = c.analytics.benchmark;
   const sample = `${b.observations} строго общих интервалов · ${c.analytics.sample} · Rf ${c.rf}%`;
   const providerReason = c.errors.find((message) =>
@@ -73,6 +75,7 @@ export function BenchmarkPanel({
           )}
           {detailed && (
             <>
+              <AnalyticsMetric metric="activeReturn" value={b.activeReturn} sample={sample} reason={chartReason} />
               <AnalyticsMetric
                 metric="trackingError"
                 value={b.trackingError}
@@ -86,6 +89,9 @@ export function BenchmarkPanel({
                 ratio
                 reason={providerReason ?? observationReason}
               />
+              <AnalyticsMetric metric="benchmarkCorrelation" value={b.correlation} sample={sample} ratio reason={providerReason ?? observationReason} />
+              <AnalyticsMetric metric="upsideCapture" value={b.upsideCapture} sample={sample} ratio reason={providerReason ?? 'Нужно минимум 20 общих положительных benchmark интервалов.'} />
+              <AnalyticsMetric metric="downsideCapture" value={b.downsideCapture} sample={sample} ratio reason={providerReason ?? 'Нужно минимум 20 общих отрицательных benchmark интервалов.'} />
             </>
           )}
         </div>
@@ -95,6 +101,12 @@ export function BenchmarkPanel({
           История акций и ETF нормализована по adjusted close, поэтому split и
           дивидендные корректировки применяются последовательно ко всем активам.
         </Formula>
+        {detailed && <section className="benchmark-rolling">
+          <div className="section-heading"><div><h3>Rolling market sensitivity</h3><p className="caption">Одинаковые последовательные дневные окна, {c.period}.</p></div><div className="chart-periods" aria-label="Benchmark rolling window">{([20, 60, 252] as const).map(n => <button key={n} aria-pressed={window === n} onClick={() => setWindow(n)}>{n}D</button>)}</div></div>
+          <h4>Rolling Beta · {c.benchmark}</h4><AnalyticsChart points={c.analytics.rolling.beta[window].map(point => ({ ...point, caption: `${window}D · ${point.observations} observations` }))} label={`Rolling Beta vs ${c.benchmark}`} format={numeric} loading={c.loading} reason={providerReason ?? `Недостаточно ${window} общих последовательных интервалов.`} />
+          <h4>Rolling Correlation · {c.benchmark}</h4><AnalyticsChart points={c.analytics.rolling.correlation[window].map(point => ({ ...point, caption: `${window}D · ${point.observations} observations` }))} label={`Rolling correlation vs ${c.benchmark}`} format={numeric} loading={c.loading} reason={providerReason ?? `Недостаточно ${window} общих последовательных интервалов.`} />
+          <Formula name="Rolling market sensitivity" formula="β=Cov(Rₚ,Rᵦ)/Var(Rᵦ); ρ=Corr(Rₚ,Rᵦ)">В каждом окне используются {window} строго общих последовательных доходностей. Для расчёта Beta variance benchmark должна быть ненулевой.</Formula>
+        </section>}
       </section>
       {detailed && <PortfolioIntelligencePanel analytics={c.analytics} />}
     </>

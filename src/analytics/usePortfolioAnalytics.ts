@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { HistoryBar, PortfolioSnapshot, StockSplit } from '../types';
 import type { BenchmarkSymbol, Period, RiskHorizon } from '../types/analytics';
 import { calculatePortfolioAnalytics } from '../math/analytics';
+import { buildCorrelationExplorer } from '../math/correlationExplorer';
 import {
   clearHistoryCache,
   HistoryRequestError,
@@ -35,6 +36,7 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: stri
   const [benchmark, setBenchmark] = useState<BenchmarkSymbol>(initial.benchmark);
   const [rf, setRf] = useState(initial.rf);
   const [mar, setMar] = useState(initial.mar);
+  const [selectedCorrelationAsset, setSelectedCorrelationAsset] = useState(snapshot.positions[0]?.symbol ?? '');
   const [preferencesReady, setPreferencesReady] = useState(!userId);
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<HistoryResult | null>(null);
@@ -61,6 +63,10 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: stri
     }, 250);
     return () => window.clearTimeout(timer);
   }, [userId, preferencesReady, period, riskHorizon, benchmark, rf, mar]);
+
+  const activeCorrelationAsset = snapshot.positions.some(position => position.symbol === selectedCorrelationAsset)
+    ? selectedCorrelationAsset
+    : snapshot.positions[0]?.symbol ?? '';
 
   const symbolsKey = [
     ...new Set([
@@ -133,6 +139,11 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: stri
     [snapshot, current, benchmark, period, riskHorizon, asOf, rf, mar],
   );
 
+  const correlationExplorer = useMemo(
+    () => buildCorrelationExplorer(activeCorrelationAsset, analytics.matrix, current?.histories ?? new Map(), benchmark, riskHorizon),
+    [activeCorrelationAsset, analytics.matrix, current, benchmark, riskHorizon],
+  );
+
   const benchmarkRiskReturns = useMemo(
     () =>
       datedReturns(
@@ -156,6 +167,9 @@ export function usePortfolioAnalytics(snapshot: PortfolioSnapshot, userId?: stri
     setRf,
     mar,
     setMar,
+    selectedCorrelationAsset: activeCorrelationAsset,
+    setSelectedCorrelationAsset,
+    correlationExplorer,
     loading: !current,
     errors: current?.errors ?? [],
     issues: current?.issues ?? [],

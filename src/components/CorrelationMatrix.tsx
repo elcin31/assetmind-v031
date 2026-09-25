@@ -43,6 +43,7 @@ export function CorrelationMatrix({
                     {matrix.correlation[i].map((v, j) => (
                       <td
                         key={j}
+                        title={`${s} / ${matrix.symbols[j]} · ρ ${numeric(v)} · ${matrix.observations} observations`}
                         style={{
                           background: `color-mix(in srgb, var(--${v >= 0 ? "accent" : "negative"}) ${10 + Math.abs(v) * 40}%, transparent)`,
                         }}

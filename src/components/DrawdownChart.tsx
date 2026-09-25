@@ -11,7 +11,7 @@ export function DrawdownChart({
 }) {
   return (
     <section className="card">
-      <h2>Просадка доходности</h2>
+      <div className="section-heading"><div><h2>Drawdown Lab</h2><p className="caption">Underwater series построена из фактической transaction-aware performance history.</p></div><span className="tag">{a.drawdown ? (a.drawdown.current === 0 ? 'Восстановлен' : 'Не восстановлен') : 'Недостаточно данных'}</span></div>
       <AnalyticsChart
         points={a.drawdown?.points ?? []}
         label="Просадка доходности"
@@ -45,16 +45,18 @@ export function DrawdownChart({
               <th>Восстановление</th>
               <th>Глубина</th>
               <th>Дней</th>
+              <th>Восстановление, дней</th>
             </tr>
           </thead>
           <tbody>
-            {a.drawdown?.episodes.map((e) => (
+            {a.drawdown?.worstEpisodes.map((e) => (
               <tr key={e.startDate}>
                 <td>{e.startDate}</td>
                 <td>{e.bottomDate}</td>
                 <td>{e.recoveryDate ?? "Не восстановлено"}</td>
                 <td>{pct(e.depth)}</td>
                 <td>{e.duration}</td>
+                <td>{e.recoveryDuration ?? "—"}</td>
               </tr>
             ))}
           </tbody>
