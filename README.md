@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="docs/assetmind-social-cover.svg" width="100%" alt="AssetMind — аналитика инвестиционного портфеля: доходность, риск и диверсификация">
+</div>
+
 # AssetMind
 
 AssetMind is a personal investment portfolio tracker and quantitative analytics workspace built with React, TypeScript and Vite.
