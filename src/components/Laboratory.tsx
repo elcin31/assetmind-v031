@@ -15,6 +15,9 @@ import { AnalyticsChart } from './AnalyticsChart';
 import { RiskHorizonSelector } from './RiskHorizonSelector';
 import { buildXRayInsights } from '../math/xrayInsights';
 import { numeric, pct } from '../utils/analyticsFormat';
+import { XRayShareModal } from './growth/XRayShareModal';
+import type { ShareMetric } from './growth/shareData';
+import { trackEvent } from '../analytics/events';
 
 const tabs = [
   { id: 'xray', label: 'X-Ray' },
@@ -29,11 +32,16 @@ const tabs = [
 export function Laboratory({
   snapshot,
   controller: c,
+  userId = '',
+  isDemo = false,
 }: {
   snapshot: PortfolioSnapshot;
   controller: AnalyticsController;
+  userId?: string;
+  isDemo?: boolean;
 }) {
   const [tab, setTab] = useState('xray');
+  const [shareOpen, setShareOpen] = useState(false);
   const [volWindow, setVolWindow] = useState<20 | 60 | 252>(20);
   const [sharpeWindow, setSharpeWindow] = useState<20 | 60 | 252>(20);
   const [selectedCorrelationPeer, setSelectedCorrelationPeer] = useState('');
@@ -73,6 +81,14 @@ export function Laboratory({
     pnlContributions: a.pnl.map(item => ({ symbol: item.symbol, unrealizedPnL: item.unrealizedPnL })),
   });
   const money = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? 'Недостаточно данных' : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: snapshot.portfolio.base_currency, maximumFractionDigits: 0 }).format(value);
+  const shareMetrics: ShareMetric[] = [
+    { label: 'Portfolio Return · Actual', value: pct(a.performance.twr) },
+    { label: 'Volatility · Holdings Proxy', value: pct(a.proxy.volatility) },
+    { label: 'Max Drawdown · Actual', value: pct(a.drawdown?.max) },
+    { label: `Beta · ${c.benchmark}`, value: numeric(a.currentBenchmarkRisk.beta) },
+    { label: 'Largest Position', value: pct(concentrationStats?.largestPositionWeight) },
+    { label: 'Diversification Ratio', value: numeric(a.currentRisk?.diversificationRatio) },
+  ];
 
   return (
     <>
@@ -138,7 +154,7 @@ export function Laboratory({
 
       {tab === 'xray' && <>
         <section className="xray-summary">
-          <div className="xray-summary-main"><span className="eyebrow">PORTFOLIO X-RAY</span><h2>Портфель под микроскопом</h2><p>{snapshot.positions.length} открытых позиций · данные на {new Date().toLocaleDateString('ru-RU')}</p><strong>{snapshot.valuation.complete ? money(snapshot.accountValue ?? snapshot.portfolioValue) : 'Недостаточно данных'}</strong><small>Стоимость портфеля</small></div>
+          <div className="xray-summary-main"><span className="eyebrow">PORTFOLIO X-RAY</span><h2>Портфель под микроскопом</h2><p>{snapshot.positions.length} открытых позиций · данные на {new Date().toLocaleDateString('ru-RU')}</p>{!isDemo && <><strong>{snapshot.valuation.complete ? money(snapshot.accountValue ?? snapshot.portfolioValue) : 'Недостаточно данных'}</strong><small>Стоимость портфеля</small></>}</div>
           <div className="xray-summary-metrics">
             <XRayMetric label="Total Return / TWR · Actual" value={a.performance.twr} percent reason={a.performance.reason ?? 'Требуется фактическая transaction-aware история.'} formula="TWR = ∏(1 + rₜ) − 1" sample={sample} />
             <XRayMetric label="Volatility · Current Holdings" value={a.proxy.volatility} percent reason={a.proxy.riskWindow.reason ?? (!a.proxy.volatility ? 'Риск текущего состава математически не определён.' : null)} formula="σₚ = √(wᵀΣw) × √252" sample={`${c.riskHorizon} · Current Holdings Risk`} />
@@ -150,11 +166,12 @@ export function Laboratory({
             <XRayMetric label="Effective Holdings" value={a.concentration?.effectivePositions} reason={!a.concentration ? 'Нужны полные текущие рыночные веса.' : null} formula="1 / Σ(wᵢ²)" sample="Текущие рыночные веса" />
           </div>
         </section>
+        <section className="xray-executive-actions"><button className="btn btn-primary" type="button" onClick={() => { trackEvent('share_xray_clicked', { metricCount: 6 }, userId); setShareOpen(true); }}>Поделиться X-Ray</button><span className="caption">Карточка содержит только проценты и обезличенные наблюдения.</span></section>
         <section className="xray-grid">
           <article className="card xray-concentration"><div className="section-heading"><div><h2>Концентрация портфеля</h2><p className="caption">Текущие позиции, отсортированные по рыночному весу.</p></div><span className="tag">{weights.length} позиций</span></div>
             {!snapshot.valuation.complete && <p className="notice">Для точных весов нужны текущие котировки всех открытых позиций.</p>}
             <div className="xray-highlights"><div><span>Largest Position</span><b>{concentrationStats?.largestPositionWeight == null ? 'Недостаточно данных' : pct(concentrationStats.largestPositionWeight)}</b></div><div><span>Top 3 Weight</span><b>{concentrationStats ? pct(concentrationStats.top3Weight) : 'Недостаточно данных'}</b></div><div><span>Top 5 Weight</span><b>{concentrationStats ? pct(concentrationStats.top5Weight) : 'Недостаточно данных'}</b></div><div><span>HHI</span><b>{concentrationStats?.hhi == null ? 'Недостаточно данных' : concentrationStats.hhi.toFixed(3)}</b></div></div>
-            <div className="xray-bars">{weights.map(p => <div className="xray-bar-row" key={p.symbol}><b>{p.symbol}</b><div className="xray-bar-track"><i style={{ width: `${Math.max(0, Math.min(100, (p.weight ?? 0) * 100))}%` }} /></div><span>{p.weight == null ? '—' : `${(p.weight * 100).toFixed(1)}%`}</span><small>{money(p.marketValue)}</small></div>)}</div>
+            <div className="xray-bars">{weights.map(p => <div className="xray-bar-row" key={p.symbol}><b>{p.symbol}</b><div className="xray-bar-track"><i style={{ width: `${Math.max(0, Math.min(100, (p.weight ?? 0) * 100))}%` }} /></div><span>{p.weight == null ? '—' : `${(p.weight * 100).toFixed(1)}%`}</span>{!isDemo && <small>{money(p.marketValue)}</small>}</div>)}</div>
             <Formula name="HHI и эффективное число позиций" formula="HHI = Σ(wᵢ²) · Effective Holdings = 1 / HHI">Рассчитано по нормированным текущим рыночным весам. HHI близкий к 1 означает большую концентрацию.</Formula>
           </article>
           <article className="card"><div className="section-heading"><div><h2>Структура риска</h2><p className="caption">Вес капитала сравнивается с долей портфельной variance.</p></div><span className="tag">{c.riskHorizon}</span></div>
@@ -353,6 +370,7 @@ export function Laboratory({
       {tab === 'scenarios' && <ScenariosPanel snapshot={snapshot} controller={c} weights={scenarioWeights} onWeightsChange={setScenarioWeights} />}
       {tab === 'benchmark' && <BenchmarkPanel controller={c} detailed />}
       {tab !== 'xray' && <LaboratoryDataContext snapshot={snapshot} controller={c} />}
+      {shareOpen && <XRayShareModal metrics={shareMetrics} insights={observations.slice(0, 3).map(item => item.message)} onClose={() => setShareOpen(false)} userId={userId} />}
     </>
   );
 }
