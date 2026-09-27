@@ -13,6 +13,9 @@ import { moneyWeightedReturn } from './math/xirr';
 import { getPortfolioStorageKey, readPortfolioSyncedWithStatus } from './storage/portfolio';
 import { readPlanningState } from './storage/planning';
 import { exportAccountBackup, importAccountBackup } from './storage/accountBackup';
+import { buildDemoPortfolio, demoPresets } from './data/demoPortfolios';
+import { trackEvent } from './analytics/events';
+import { activePortfolioSnapshot } from './data/demoPortfolioState';
 
 export default function App() {
   const { user, session, loading, recoveryMode, signOut } = useAuth();
@@ -57,8 +60,11 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
   const [loading, setLoading] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
+  const [demoSnapshot, setDemoSnapshot] = useState<PortfolioSnapshot | null>(null);
   const generation = useRef(0);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { trackEvent('app_open', {}, userId); }, [userId]);
 
   const loadPortfolio = useCallback(async () => {
     const run = ++generation.current;
@@ -139,7 +145,20 @@ function AuthenticatedAssetMind({ userId, onSignOut }: { userId: string; onSignO
       }} />
     </details>
     {syncWarning && <p className="warning-banner" role="status" aria-live="polite">{syncWarning}</p>}
-    {snapshot ? <PortfolioScreen snapshot={snapshot} userId={userId} onRefresh={() => { void loadPortfolio(); }} onSignOut={onSignOut} loading={loading} setError={setError} error={error} /> :
+    {snapshot ? <PortfolioScreen snapshot={activePortfolioSnapshot(snapshot, demoSnapshot)} userId={userId} isDemo={demoSnapshot !== null} onDemo={async preset => {
+      const definition = demoPresets.find(item => item.id === preset) ?? demoPresets[0];
+      const quotes = new Map<string, Quote>();
+      await Promise.all(Object.keys(definition.weights).map(async symbol => {
+        try {
+          const response = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { signal: AbortSignal.timeout(6000) });
+          if (!response.ok) return;
+          const quote = await response.json();
+          if (quote.symbol === symbol && Number.isFinite(quote.price) && quote.price > 0) quotes.set(symbol, quote as Quote);
+        } catch { /* Missing market data stays unavailable in this sample. */ }
+      }));
+      setDemoSnapshot(buildDemoPortfolio(preset, quotes));
+      trackEvent('demo_portfolio_started', { preset }, userId);
+    }} onExitDemo={() => { setDemoSnapshot(null); trackEvent('demo_portfolio_exited', {}, userId); }} onRefresh={() => { void loadPortfolio(); }} onSignOut={onSignOut} loading={loading} setError={setError} error={error} /> :
       <main className="card"><h1>AssetMind</h1>{error ? <p role="alert">{error}</p> : <p>Loading portfolio…</p>}<button className="btn btn-primary" onClick={() => void loadPortfolio()}>Retry</button></main>}
   </div>;
 }

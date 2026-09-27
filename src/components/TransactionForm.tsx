@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { addTransaction } from '../storage/portfolio';
+import { trackEvent } from '../analytics/events';
 import { toLocalDateTimeInputValue } from '../utils/format';
 
 interface Props {
@@ -9,6 +10,8 @@ interface Props {
   initialSymbol: string | null;
   onSuccess: () => void;
   onError: (msg: string) => void;
+  existingSymbols: string[];
+  isPortfolioEmpty: boolean;
 }
 
 export function TransactionForm({
@@ -17,6 +20,8 @@ export function TransactionForm({
   initialSymbol,
   onSuccess,
   onError,
+  existingSymbols,
+  isPortfolioEmpty,
 }: Props) {
   const [symbolState, setSymbolState] = useState(() => ({
     source: initialSymbol,
@@ -99,6 +104,14 @@ export function TransactionForm({
     try {
       await addTransaction({ symbol: normalizedSymbol, type, quantity: qty, price: px,
         currency, timestamp: timestamp.toISOString() }, idempotencyKey.current, userId);
+
+      trackEvent('transaction_created', { type }, userId);
+      const isNewPosition = type === 'BUY' && !existingSymbols.includes(normalizedSymbol);
+      if (isPortfolioEmpty) trackEvent('portfolio_created', {}, userId);
+      if (isNewPosition) trackEvent('position_added', {}, userId);
+      if (isNewPosition && existingSymbols.length === 0) {
+        trackEvent('first_position_added', {}, userId);
+      }
 
       setQuantity('');
       idempotencyKey.current = null;
