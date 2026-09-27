@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { PortfolioSnapshot } from "../types";
 import type { AnalyticsController } from "../analytics/usePortfolioAnalytics";
 import {
@@ -20,6 +20,7 @@ interface Props {
   onHoldings: () => void;
   onTrade: () => void;
   onAnalytics: () => void;
+  growthEntry?: ReactNode;
 }
 
 function Metric({
@@ -54,6 +55,7 @@ export function OverviewPage({
   onHoldings,
   onTrade,
   onAnalytics,
+  growthEntry,
 }: Props) {
   const a = c.analytics;
   const [detractors, setDetractors] = useState(false);
@@ -126,9 +128,10 @@ export function OverviewPage({
         </div>
         <div className="overview-hero-actions">
           <div><span>Total P&amp;L · всё время</span><b className={s.valuation.complete ? tone(s.totalPnL) : ""}>{signedMoney(s.valuation.complete ? s.totalPnL : null)}</b></div>
-          <button className="btn btn-secondary" onClick={onAnalytics}>Portfolio X-Ray <span aria-hidden="true">↗</span></button>
         </div>
       </section>
+
+      {growthEntry && <div className="overview-growth-entry">{growthEntry}</div>}
 
       {empty && (
         <section className="card overview-empty">
