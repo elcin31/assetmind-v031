@@ -107,12 +107,10 @@ export function TransactionForm({
 
       trackEvent('transaction_created', { type }, userId);
       const isNewPosition = type === 'BUY' && !existingSymbols.includes(normalizedSymbol);
+      if (isPortfolioEmpty) trackEvent('portfolio_created', {}, userId);
       if (isNewPosition) trackEvent('position_added', {}, userId);
       if (isNewPosition && existingSymbols.length === 0) {
         trackEvent('first_position_added', {}, userId);
-      }
-      if (isPortfolioEmpty) {
-        trackEvent('portfolio_created', {}, userId);
       }
 
       setQuantity('');
