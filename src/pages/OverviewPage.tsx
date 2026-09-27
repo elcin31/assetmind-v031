@@ -7,9 +7,7 @@ import {
   overviewReadouts,
   topPnlRows,
 } from "../analytics/overview";
-import { AnalyticsChart } from "../components/AnalyticsChart";
-import { BenchmarkSelector } from "../components/BenchmarkSelector";
-import { PeriodSelector } from "../components/PortfolioHistoryChart";
+import { PortfolioHistoryChart } from "../components/PortfolioHistoryChart";
 import { RiskHorizonSelector } from "../components/RiskHorizonSelector";
 import { AllocationCard } from "../components/AllocationCard";
 import { formatCurrency } from "../utils/format";
@@ -76,12 +74,6 @@ export function OverviewPage({
         : "negative";
   const empty =
     !s.positions.length && !s.transactions.length && !s.cashEvents?.length;
-  const benchmarkReason = c.errors.find((e) => e.startsWith(`${c.benchmark}:`))
-    ? `История ${c.benchmark} временно недоступна. Повторите загрузку.`
-    : (a.history.reason ??
-      (a.performance.reason
-        ? "Для сравнения нужна непрерывная история портфеля без неизвестных денежных потоков и пропущенных оценок."
-        : `У портфеля и ${c.benchmark} нет полной общей истории за выбранный период.`));
   const historyReason =
     a.history.reason ??
     a.performance.reason ??
@@ -105,11 +97,7 @@ export function OverviewPage({
     <div className="overview-page" aria-label="Обзор портфеля">
       <section className="overview-hero" aria-label="Стоимость портфеля">
         <div className="overview-hero-top">
-          <span className="eyebrow">
-            {s.valuation.complete && isFiniteValue(s.accountValue)
-              ? "СТОИМОСТЬ СЧЁТА"
-              : "СТОИМОСТЬ АКТИВОВ"}
-          </span>
+          <span className="eyebrow">ПОРТФЕЛЬ</span>
           <button className="text-button" onClick={onTrade}>
             ＋ Операция
           </button>
@@ -136,27 +124,9 @@ export function OverviewPage({
             </b>
           </div>
         </div>
-        <p className="caption">
-          Изменение стоимости включает пополнения и снятия.
-        </p>
-        <PeriodSelector controller={c} />
-        <div className="overview-hero-bottom">
-          <div>
-            <span>Total P&amp;L · всё время</span>
-            <b className={s.valuation.complete ? tone(s.totalPnL) : ""}>
-              {signedMoney(s.valuation.complete ? s.totalPnL : null)}
-            </b>
-          </div>
-          <div>
-            <span>
-              Сверх {c.benchmark} · {c.period}
-            </span>
-            <b className={tone(readouts.excessReturn)}>
-              {!c.loading && isFiniteValue(readouts.excessReturn)
-                ? `${readouts.excessReturn > 0 ? "+" : ""}${numeric(readouts.excessReturn * 100)} п.п.`
-                : "—"}
-            </b>
-          </div>
+        <div className="overview-hero-actions">
+          <div><span>Total P&amp;L · всё время</span><b className={s.valuation.complete ? tone(s.totalPnL) : ""}>{signedMoney(s.valuation.complete ? s.totalPnL : null)}</b></div>
+          <button className="btn btn-secondary" onClick={onAnalytics}>Portfolio X-Ray <span aria-hidden="true">↗</span></button>
         </div>
       </section>
 
@@ -173,42 +143,7 @@ export function OverviewPage({
         </section>
       )}
 
-      <section
-        className="card overview-performance"
-        aria-label="Сравнение с benchmark"
-      >
-        <div className="section-heading">
-          <h2>Портфель и рынок</h2>
-          <BenchmarkSelector value={c.benchmark} onChange={c.setBenchmark} />
-        </div>
-        <p className="overview-chart-legend">
-          <span>Портфель</span>
-          <span>{c.benchmark}</span>
-          <small>Индекс · старт = 100</small>
-        </p>
-        <AnalyticsChart
-          key={`${c.period}-${c.benchmark}`}
-          points={readouts.comparison.map((p) => ({
-            date: p.date,
-            value: p.portfolio,
-            secondary: p.benchmark,
-          }))}
-          label="Портфель и рынок"
-          secondaryLabel={c.benchmark}
-          format={numeric}
-          loading={c.loading}
-          reason={
-            empty
-              ? "После первых операций здесь появится сравнение с рынком."
-              : benchmarkReason
-          }
-        />
-        {!c.loading && !readouts.comparison.length && !empty && (
-          <button className="text-button" onClick={c.retry}>
-            Повторить загрузку
-          </button>
-        )}
-      </section>
+      <PortfolioHistoryChart controller={c} currency={s.portfolio.base_currency} />
 
       <section
         className="card overview-key-metrics"

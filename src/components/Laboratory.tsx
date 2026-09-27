@@ -34,13 +34,15 @@ export function Laboratory({
   controller: c,
   userId = '',
   isDemo = false,
+  initialTab = 'performance',
 }: {
   snapshot: PortfolioSnapshot;
   controller: AnalyticsController;
   userId?: string;
   isDemo?: boolean;
+  initialTab?: string;
 }) {
-  const [tab, setTab] = useState('xray');
+  const [tab, setTab] = useState(initialTab);
   const [shareOpen, setShareOpen] = useState(false);
   const [volWindow, setVolWindow] = useState<20 | 60 | 252>(20);
   const [sharpeWindow, setSharpeWindow] = useState<20 | 60 | 252>(20);
@@ -95,8 +97,8 @@ export function Laboratory({
       <section className="lab-intro">
         <div>
           <span className="eyebrow">АНАЛИТИКА ПОРТФЕЛЯ</span>
-          <h2>Laboratory</h2>
-          <p>Исследовательский центр структуры, доходности и риска портфеля.</p>
+          <h2>{tab === 'xray' ? 'Portfolio X-Ray' : 'Laboratory'}</h2>
+          <p>{tab === 'xray' ? 'Что происходит внутри вашего портфеля: концентрация, риск, диверсификация и источники результата.' : 'Исследовательский центр структуры, доходности и риска портфеля.'}</p>
         </div>
       </section>
       <div className="lab-tabs" role="group" aria-label="Раздел аналитики">
