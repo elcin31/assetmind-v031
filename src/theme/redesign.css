@@ -93,6 +93,13 @@ td:not(:first-child), th:not(:first-child) { text-align: right; }
 .overview-hero-actions>div { display: grid; gap: 3px; }
 .overview-hero-actions>div span { color: var(--text-muted); }
 .overview-hero-actions>div b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.overview-growth-entry .growth-hero { grid-template-columns: minmax(0,1fr) minmax(230px,290px); gap: 18px; margin: 0; padding: 16px 18px; border-radius: 14px; }
+.overview-growth-entry .growth-hero h2 { margin: 4px 0; font-size: 19px; line-height: 1.25; font-weight: 550; }
+.overview-growth-entry .growth-hero p { font-size: 12px; line-height: 1.5; }
+.overview-growth-entry .growth-hero .eyebrow { font-size: 10px; }
+.overview-growth-entry .growth-hero-actions { gap: 7px; }
+.overview-growth-entry .growth-demo-action { gap: 4px; font-size: 11px; }
+.overview-growth-entry .growth-hero .btn { min-height: 42px; }
 .portfolio-history .price-plot, .overview-performance .price-plot { max-height: 340px; }
 .overview-metrics { gap: 12px; }
 .overview-metric { padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
@@ -147,6 +154,9 @@ td:not(:first-child), th:not(:first-child) { text-align: right; }
   .site-nav svg { width: 19px; height: 19px; }
   .card { padding: 18px; border-radius: 14px; }
   .overview-hero { padding: 20px; }
+  .overview-growth-entry .growth-hero { grid-template-columns: 1fr; gap: 10px; padding: 15px; }
+  .overview-growth-entry .growth-hero h2 { font-size: 17px; }
+  .overview-growth-entry .growth-hero-actions { grid-template-columns: 1fr; }
   .overview-value { font-size: clamp(30px,9vw,40px); }
   .overview-hero-actions { align-items: flex-start; flex-direction: column; }
   .overview-hero-actions .btn { width: 100%; }
