@@ -10,20 +10,23 @@ export function HoldingsList({
   currency,
   analytics,
   benchmark = "SPY",
+  onTrade,
 }: {
   positions: Position[];
   currency: string;
   analytics?: PortfolioAnalytics;
   benchmark?: string;
+  onTrade?: () => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   return (
     <section className="card">
       <h2>Открытые позиции</h2>
       {!positions.length && (
-        <p className="empty">
-          Пока нет открытых позиций. Добавьте первую покупку в разделе «Операции».
-        </p>
+        <div className="holdings-empty">
+          <p className="empty">Портфель пока пуст. Добавьте первую позицию, чтобы начать анализ.</p>
+          {onTrade && <button className="btn btn-primary" type="button" onClick={onTrade}>Добавить позицию</button>}
+        </div>
       )}
       {positions.map((p) => {
         const d = analytics?.details[p.symbol];
@@ -38,13 +41,10 @@ export function HoldingsList({
             >
               <div>
                 <div className="holding-symbol">
-                  {p.symbol} <span aria-hidden="true">{open ? "−" : "+"}</span>
+                  {p.symbol} <span className="holding-price">{money(p.marketPrice)}</span><span aria-hidden="true">{open ? "−" : "+"}</span>
                 </div>
                 <div className="holding-meta">
-                  {p.quantity.toLocaleString("ru-RU", {
-                    maximumFractionDigits: 8,
-                  })}{" "}
-                  × {money(p.marketPrice)} · средняя {money(p.averageCost)}
+                  Вес портфеля · {pct(d?.weight)}
                 </div>
               </div>
               <div className="holding-right">
